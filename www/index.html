@@ -1,0 +1,2312 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2b241b">
+<title>Locked</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.27.0/lib/msal-browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #2b241b; --panel: #3a3024; --panel-2: #463b2d; --line: #5a4b39;
+    --text: #f3ead9; --muted: #b9a98e;
+    --accent: #84cc16; --accent-strong: #65a30d; --accent-dim: #3f5212;
+    --bad: #c2553f; --danger: #dc2626; --danger-dim: #4a1414;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    -webkit-tap-highlight-color: transparent; }
+  body { padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+  .app { max-width: 520px; margin: 0 auto; padding: 16px 14px 130px; }
+
+  /* Tablet / Desktop: breiter + 2-Spalten-Karten */
+  @media (min-width: 820px) {
+    .app { max-width: 1080px; padding: 20px 24px 140px; }
+    #page-eintrag, #page-dashboard {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      grid-auto-flow: dense;
+      align-items: start;
+    }
+    /* Eintrag: Hero und Einträge-Karte (letzte) volle Breite */
+    #page-eintrag > .card.hero,
+    #page-eintrag > .card:last-of-type { grid-column: 1 / -1; }
+    /* Dashboard: Zeitraum + Hauptcharts + Details volle Breite */
+    #page-dashboard > .card:nth-child(1),  /* Zeitraum */
+    #page-dashboard > .card:nth-child(3),  /* Punkte-Verlauf */
+    #page-dashboard > .card:nth-child(5),  /* Streak-Verlauf */
+    #page-dashboard > .card:nth-child(6),  /* Kalender */
+    #page-dashboard > .collapse-toggle,
+    #page-dashboard > #detailsSection { grid-column: 1 / -1; }
+    #detailsSection { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+    /* Daten-Tab kompakt mittig */
+    #page-daten { max-width: 600px; margin: 0 auto; }
+    /* Savebar mit App breit halten */
+    .savebar .inner { max-width: 1080px; }
+    /* Hero etwas größer */
+    .hero { padding: 22px 24px 18px; }
+    .hero-num { font-size: 64px; }
+    /* Schnelleintrag: Buttons größer auf Desktop */
+    .qb { padding: 22px 8px; font-size: 17px; }
+  }
+  @media (min-width: 1200px) {
+    .app { max-width: 1280px; }
+    .savebar .inner { max-width: 1280px; }
+  }
+  header { display:flex; align-items:center; justify-content:space-between; padding: 6px 4px 14px; gap: 8px; }
+  header h1 { font-size: 18px; font-weight: 600; margin: 0; }
+  header .meta { font-size: 11px; color: var(--muted); }
+
+  .tabs { display:flex; gap: 4px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 4px; margin-bottom: 14px; }
+  .tab { flex: 1; padding: 10px; border-radius: 9px; text-align: center; cursor: pointer;
+    color: var(--muted); font-weight: 600; font-size: 14px; user-select: none; }
+  .tab.active { background: var(--accent-dim); color: var(--accent); }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px; margin-bottom: 12px; }
+  .card h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); margin: 0 0 12px; display:flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .card h2 .sub { font-size: 11px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--muted); }
+
+  .day { display:flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .day .wd { color: var(--muted); font-size: 14px; }
+  .day input[type=date] { background: transparent; color: var(--text); border: none; font: inherit; font-size: 20px;
+    font-weight: 700; padding: 0; outline: none; }
+
+  /* Hero-Card */
+  .hero { padding: 18px 16px 16px; }
+  .hero-top { display:flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .hero-top .wd { color: var(--muted); font-size: 14px; }
+  .hero-top input[type=date] { background: transparent; color: var(--text); border: none; font: inherit; font-size: 20px;
+    font-weight: 700; padding: 0; outline: none; }
+  .hero-today { text-align: center; margin: 18px 0 14px; }
+  .hero-num { font-size: 52px; font-weight: 800; color: var(--accent); line-height: 1;
+    font-variant-numeric: tabular-nums; letter-spacing: -1px; }
+  .hero-num.neg { color: var(--bad); }
+  .hero-num.zero { color: var(--muted); }
+  .hero-label { font-size: 10px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 1.2px; margin-top: 4px; font-weight: 600; }
+  .hero-breakdown { font-size: 11px; color: var(--muted); margin-top: 8px;
+    font-variant-numeric: tabular-nums; }
+  .hero-breakdown b { color: var(--text); font-weight: 600; }
+
+  .hero-footer { display: flex; justify-content: space-around; gap: 8px;
+    padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hero-footer .item { text-align: center; }
+  .hero-footer .v { font-weight: 700; color: var(--text); font-size: 14px; }
+  .hero-footer .l { font-size: 9px; text-transform: uppercase; letter-spacing: .6px;
+    margin-top: 2px; }
+
+  /* Streak-Row in Hero */
+  .streak-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding-top: 14px; }
+  .streak-item { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 4px; text-align: center; }
+  .streak-item .days { font-size: 20px; font-weight: 700; color: var(--text);
+    font-variant-numeric: tabular-nums; line-height: 1; }
+  .streak-item .label { font-size: 10px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .5px; margin-top: 4px; font-weight: 600; }
+  .streak-item .since { font-size: 10px; color: var(--muted); margin-top: 4px;
+    font-variant-numeric: tabular-nums; }
+
+  /* Flag-Pillen (kompakt) */
+  .flag-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .flag-pill { padding: 7px 13px; border-radius: 999px; font: inherit;
+    background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
+    font-size: 13px; font-weight: 600; cursor: pointer; user-select: none;
+    transition: background .15s, color .15s, border-color .15s; }
+  .flag-pill:active { transform: scale(.96); }
+  .flag-pill.on { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-strong); }
+  .flag-pill.explicit::after { content: ' ●'; font-size: 8px; opacity: 0.7; vertical-align: middle; }
+
+  /* Hours-Override collapsible */
+  .ho-details { margin-top: 10px; padding: 10px 12px; background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 10px; }
+  .ho-details summary { color: var(--muted); font-size: 12px; cursor: pointer;
+    list-style: none; font-weight: 600; }
+  .ho-details summary::-webkit-details-marker { display: none; }
+  .ho-details summary::before { content: '▸ '; transition: transform .2s; display: inline-block; }
+  .ho-details[open] summary::before { transform: rotate(90deg); }
+  .ho-details .ho-input { margin-top: 10px; }
+
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .kpi { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 8px; text-align: center; }
+  .kpi .v { font-size: 18px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .kpi .v.neg { color: var(--bad); }
+  .kpi .l { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-top: 2px; }
+
+  .quick { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .qb { padding: 18px 8px; border-radius: 14px; border: 1px solid var(--line);
+    background: var(--panel-2); color: var(--text); font: inherit; font-weight: 700;
+    font-size: 16px; cursor: pointer; transition: transform .08s ease, background .15s ease;
+    position: relative; overflow: hidden; user-select: none; -webkit-user-select: none;
+    touch-action: manipulation; }
+  .qb:active { transform: scale(.96); }
+  .qb .hold-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%;
+    background: rgba(255,255,255,0.18); transform: scaleX(0); transform-origin: left;
+    transition: transform 900ms linear; pointer-events: none; }
+  .qb.holding .hold-fill { transform: scaleX(1); }
+  .qb.danger .hold-fill { background: rgba(255,255,255,0.22); }
+  .qb.go { background: var(--accent-dim); border-color: var(--accent-strong); }
+  .qb.go:hover { background: var(--accent-strong); color: #1a1a0e; }
+  .qb.danger { border-color: var(--danger); background: var(--danger-dim); color: #fecaca; }
+  .qb.danger:hover { background: var(--danger); color: #1a0808; }
+  .qb.regen { border-color: var(--warm); background: rgba(200,144,96,0.12); color: var(--warm); }
+  .qb.regen.regen-available:hover { background: var(--warm); color: #2b241b; }
+  .qb.regen.regen-active { background: rgba(200,144,96,0.25); color: var(--warm); cursor: not-allowed; }
+  .qb.regen.regen-cooldown { opacity: 0.45; cursor: not-allowed; background: var(--panel-2);
+    border-color: var(--line); color: var(--muted); }
+  .qb.regen:disabled .hold-fill { display: none; }
+  .qb .qb-main { font-size: 16px; font-weight: 700; line-height: 1.1; }
+  .qb .qb-sub { font-size: 11px; font-weight: 500; opacity: 0.85; margin-top: 4px;
+    font-variant-numeric: tabular-nums; }
+  .qb.span2 { grid-column: span 2; }
+  .qb.span-all { grid-column: 1 / -1; }
+
+  .events { display: flex; flex-direction: column; gap: 6px; }
+  .ev { display: grid; grid-template-columns: auto 1fr auto auto; gap: 10px; align-items: center;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .ev .tag { font-weight: 700; font-size: 14px; padding: 4px 8px; border-radius: 8px;
+    background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-strong);
+    min-width: 44px; text-align: center; }
+  .ev .tag.danger { background: var(--danger-dim); color: #fecaca; border-color: var(--danger); }
+  .ev .tag-select { appearance: none; -webkit-appearance: none; background: var(--accent-dim);
+    color: var(--accent); border: 1px solid var(--accent-strong); border-radius: 8px;
+    padding: 4px 8px; font: inherit; font-weight: 700; font-size: 14px; min-width: 44px;
+    text-align: center; text-align-last: center; cursor: pointer; outline: none; }
+  .ev .tag-select.danger { background: var(--danger-dim); color: #fecaca; border-color: var(--danger); }
+  .ev .tag-select.warm   { background: rgba(200,144,96,0.15); color: var(--warm); border-color: var(--warm); }
+  .ev input[type=time] { background: transparent; color: var(--text); border: none;
+    font: inherit; font-size: 15px; padding: 4px 0; outline: none; width: 90px; }
+  .ev .del { background: transparent; color: var(--muted); border: none; font-size: 20px;
+    padding: 4px 6px; cursor: pointer; line-height: 1; }
+  .ev .del:hover { color: var(--bad); }
+  .ev.estimated .tag { opacity: .7; }
+  .ev.carry { opacity: 0.92; background: var(--panel); }
+  .empty { color: var(--muted); font-style: italic; text-align: center; padding: 14px 0; font-size: 14px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.neg { color: var(--bad); } td.pos { color: var(--accent); }
+  tr:last-child td { border-bottom: none; }
+  tr.total td { font-weight: 700; border-top: 1px solid var(--line); padding-top: 10px; }
+
+  .bar { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+  .bar > span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+  .bar > span.dim { background: var(--accent-strong); }
+  .bar > span.warm { background: var(--bad); }
+  .modell-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .modell-row:last-child { border-bottom: none; }
+  .modell-row .name { font-weight: 600; font-size: 14px; }
+  .modell-row .val { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .modell-row .full { grid-column: 1 / -1; }
+
+  .savebar { position: fixed; left: 0; right: 0; bottom: 0;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(43,36,27,0) 0%, var(--bg) 50%); }
+  .savebar .inner { max-width: 520px; margin: 0 auto; display:flex; gap: 8px; }
+  .btn { padding: 14px; border-radius: 12px; border: none; font: inherit; font-weight: 700; cursor: pointer; }
+  .btn.primary { background: var(--accent); color: #1a1a0e; flex: 1; }
+  .btn.primary:active { background: var(--accent-strong); }
+  .btn.ghost { background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 14px 18px; }
+  .btn.full { width: 100%; }
+  .collapse-toggle { margin-bottom: 12px; }
+
+  .toast { position: fixed; top: 18px; left: 50%; transform: translateX(-50%) translateY(-20px);
+    background: var(--accent); color: #1a1a0e; padding: 10px 16px; border-radius: 999px; font-weight: 700;
+    opacity: 0; transition: all .25s ease; pointer-events: none; z-index: 10; font-size: 14px; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.bad { background: var(--bad); color: #fff; }
+
+  .update-banner { position: fixed; top: env(safe-area-inset-top); left: 50%;
+    transform: translateX(-50%); background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--accent-strong); border-radius: 12px;
+    padding: 10px 14px; display: flex; align-items: center; gap: 12px;
+    z-index: 20; box-shadow: 0 6px 24px rgba(0,0,0,.4); margin-top: 10px;
+    max-width: 90%; }
+  .update-banner button { padding: 8px 14px; font-size: 14px; }
+
+  .legend { font-size: 11px; color: var(--muted); margin-top: 10px; text-align: center; }
+  .hide { display: none !important; }
+
+  .file-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .file-actions .btn.ghost { flex: 1; }
+
+  .flag-row { display:flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .flag { font-size: 11px; padding: 4px 8px; border-radius: 999px;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); }
+  .flag.on { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-strong); }
+  .flag.bad { background: var(--danger-dim); color: #fecaca; border-color: var(--danger); }
+
+  .current-model { margin-top: 10px; font-size: 13px; color: var(--muted);
+    display: flex; align-items: center; gap: 8px; }
+  .current-model .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .current-model b { color: var(--text); font-weight: 700; }
+  .date-pills { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .pill { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
+    border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 600;
+    cursor: pointer; user-select: none; }
+  .pill.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-strong); }
+  .pill:active { transform: scale(.96); }
+
+  .hours-override-row { margin-top: 10px; }
+  .hours-override-row label { display: block; font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .6px; margin-bottom: 4px; }
+  .ho-input { display: flex; gap: 6px; align-items: center; }
+  .ho-input input { flex: 1; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; outline: none; }
+  .ho-input input:focus { border-color: var(--accent); }
+  .ho-clear { background: transparent; color: var(--muted); border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px 12px; font-size: 16px; cursor: pointer; }
+
+  .toggle-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .toggle { background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
+    border-radius: 10px; padding: 10px 6px; font: inherit; font-size: 12px; font-weight: 600;
+    cursor: pointer; user-select: none; text-align: center; line-height: 1.3;
+    transition: background .15s, border-color .15s, color .15s; }
+  .toggle:active { transform: scale(.97); }
+  .toggle.on { background: var(--accent-dim); border-color: var(--accent-strong); color: var(--accent); }
+  .toggle .sub { display: block; font-size: 10px; font-weight: 500; opacity: .7; margin-top: 2px; }
+
+  .small { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+
+  details { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 600; }
+  details[open] summary { margin-bottom: 8px; }
+
+  .seg { display:flex; gap: 4px; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 3px; }
+  .seg-opt { flex: 1; padding: 6px 8px; text-align: center; border-radius: 7px; cursor: pointer;
+    color: var(--muted); font-size: 13px; font-weight: 600; user-select: none; }
+  .seg-opt.active { background: var(--panel); color: var(--text); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Locked</h1>
+    <span class="meta" id="meta">keine Datei</span>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="eintrag">Eintrag</div>
+    <div class="tab" data-tab="dashboard">Dashboard</div>
+    <div class="tab" data-tab="daten">Daten</div>
+  </div>
+
+  <!-- ============ EINTRAG ============ -->
+  <div id="page-eintrag">
+
+    <!-- Hero: Datum + Status-Snapshot -->
+    <div class="card hero">
+      <div class="hero-top">
+        <input type="date" id="datum">
+        <span class="wd" id="wochentag"></span>
+      </div>
+      <div class="date-pills" id="datePills">
+        <button class="pill" data-offset="0" type="button">Heute</button>
+        <button class="pill" data-offset="-1" type="button">Gestern</button>
+        <button class="pill" data-offset="-2" type="button">Vorgestern</button>
+        <button class="pill" data-offset="-7" type="button">−7T</button>
+      </div>
+      <div class="current-model" id="currentModel"></div>
+      <div class="hero-today">
+        <div class="hero-num" id="heroNum">—</div>
+        <div class="hero-label">Punkte heute</div>
+        <div class="hero-breakdown" id="heroBreakdown"></div>
+      </div>
+      <div class="streak-row" id="streakRow"></div>
+      <div class="hero-footer" id="heroFooter"></div>
+    </div>
+
+    <!-- Schnelleintrag (jetzt oben für schnelleren Zugriff) -->
+    <div class="card">
+      <h2>Schnelleintrag — jetzt</h2>
+      <div class="quick">
+        <button class="qb go" data-model="HT" type="button"><span class="hold-fill"></span>Holy Trainer</button>
+        <button class="qb go" data-model="NS" type="button"><span class="hold-fill"></span>Neosteel</button>
+        <button class="qb go" data-model="KK" type="button"><span class="hold-fill"></span>Nicht Verschlossen</button>
+        <button class="qb go" data-model="PC" type="button"><span class="hold-fill"></span>Penicap</button>
+        <button class="qb regen span-all" data-model="REG" type="button">
+          <span class="hold-fill"></span>
+          <div class="qb-main">Regeneration</div>
+          <div class="qb-sub" id="regenSub">verfügbar</div>
+        </button>
+        <button class="qb danger span-all" data-model="OR" type="button"><span class="hold-fill"></span>Orgasmus</button>
+      </div>
+      <div class="legend">Button <b style="color:var(--accent)">gedrückt halten</b> zum Speichern (~1s)</div>
+    </div>
+
+    <!-- Tag-Markierungen (kompakte Pillen + collapsible Override) -->
+    <div class="card">
+      <h2>Tag-Markierungen <span class="sub">Auto · ● = manuell</span></h2>
+      <div class="flag-pills" id="flagPills">
+        <button class="flag-pill" data-flag="orgasmusfrei" type="button">Orgasmusfrei</button>
+        <button class="flag-pill" data-flag="ungeoeffnet"  type="button">Ungeöffnet</button>
+        <button class="flag-pill" data-flag="keinKG"       type="button">Nicht Verschlossen</button>
+      </div>
+      <details class="ho-details">
+        <summary>Stunden verschlossen manuell setzen</summary>
+        <div class="ho-input">
+          <input type="number" id="hoursOverride" step="0.25" min="0" max="24" placeholder="auto">
+          <button class="ho-clear hide" id="hoursOverrideClear" type="button" title="Override entfernen">×</button>
+        </div>
+      </details>
+    </div>
+
+    <!-- Einträge -->
+    <div class="card">
+      <h2>Einträge am <span class="sub" id="evDateLabel"></span></h2>
+      <div id="dayTimeline" style="margin-bottom: 10px"></div>
+      <div class="events" id="events"></div>
+    </div>
+
+  </div>
+
+  <!-- ============ DASHBOARD ============ -->
+  <div id="page-dashboard" class="hide">
+    <div class="card">
+      <h2>Zeitraum</h2>
+      <div class="seg" id="yearFilter"></div>
+    </div>
+    <div class="card">
+      <h2>Übersicht</h2>
+      <div class="kpis" id="dashKpis"></div>
+    </div>
+    <div class="card">
+      <h2>Punkte-Verlauf</h2>
+      <div class="seg" id="chartScale" style="margin-bottom: 12px">
+        <div class="seg-opt active" data-scale="month">Monat</div>
+        <div class="seg-opt" data-scale="week">Woche</div>
+        <div class="seg-opt" data-scale="day">Tag</div>
+      </div>
+      <div id="punkteChart"></div>
+    </div>
+    <div class="card">
+      <h2>Tragezeit pro Modell</h2>
+      <div id="modellDonut" style="display:flex; justify-content:center; margin-bottom: 8px"></div>
+      <div id="modellList"></div>
+    </div>
+    <div class="card">
+      <h2>Streak-Verlauf <span class="sub">Tage in Folge</span></h2>
+      <div id="streakChart"></div>
+      <div class="legend" style="text-align:left">
+        <span style="display:inline-block;width:10px;height:10px;background:var(--accent);border-radius:50%"></span> Orgasmusfrei
+        &nbsp;&nbsp;
+        <span style="display:inline-block;width:10px;height:10px;background:var(--accent-strong);border-radius:50%"></span> Ungeöffnet
+      </div>
+    </div>
+    <div class="card">
+      <h2>Kalender</h2>
+      <div id="heatmap"></div>
+      <div class="legend" style="text-align:left; margin-top:6px">
+        Tagespunkte: <span style="background:var(--bad);padding:1px 5px;border-radius:3px;color:#fff">−</span>
+        <span style="background:#5a4b39;padding:1px 5px;border-radius:3px">0</span>
+        <span style="background:var(--accent-dim);padding:1px 5px;border-radius:3px;color:var(--accent)">+</span>
+        <span style="background:var(--accent);padding:1px 5px;border-radius:3px;color:#1a1a0e">++</span>
+        <span style="background:var(--accent-strong);padding:1px 5px;border-radius:3px;color:#fff">+++</span>
+      </div>
+    </div>
+
+    <button class="btn ghost full collapse-toggle" id="detailsToggle" type="button">
+      Details anzeigen ▾
+    </button>
+    <div id="detailsSection" class="hide">
+      <div class="card">
+        <h2>Monate</h2>
+        <div id="monthTable"></div>
+      </div>
+      <div class="card">
+        <h2>Rekorde</h2>
+        <div id="records"></div>
+      </div>
+      <div class="card">
+        <h2>Punkte nach Wochentag</h2>
+        <div id="weekdayChart"></div>
+      </div>
+      <div class="card">
+        <h2>Zähler</h2>
+        <div id="counters"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DATEN ============ -->
+  <div id="page-daten" class="hide">
+    <div class="card">
+      <h2>OneDrive-Sync</h2>
+      <div class="small" id="authStatus">Nicht angemeldet</div>
+      <div style="height: 10px"></div>
+      <div class="file-actions">
+        <button class="btn ghost" id="btnLogin" type="button">Mit Microsoft anmelden</button>
+        <button class="btn ghost hide" id="btnLogout" type="button">Abmelden</button>
+      </div>
+      <div class="small">Bei Anmeldung lädt die App <code>locked.json</code> automatisch aus deinem OneDrive und speichert Änderungen dort.</div>
+    </div>
+
+    <div class="card">
+      <h2>Datei (manuell)</h2>
+      <div class="small" id="fileStatus">Falls OneDrive nicht funktioniert: <code>locked.json</code> manuell laden/speichern.</div>
+      <div style="height: 10px"></div>
+      <div class="file-actions">
+        <button class="btn ghost" id="btnLoad" type="button">Laden…</button>
+        <button class="btn ghost" id="btnSave" type="button">Speichern</button>
+      </div>
+      <div class="small" id="fsaHint"></div>
+    </div>
+
+    <div class="card">
+      <h2>Export</h2>
+      <div class="small">Backup als JSON, Excel (Events + Days) oder Roh-Events als CSV. <i>Volles Dashboard mit Formeln nur über <code>scripts/export.py</code>.</i></div>
+      <div style="height: 10px"></div>
+      <div class="file-actions">
+        <button class="btn ghost" id="btnBackup" type="button">JSON-Backup</button>
+        <button class="btn ghost" id="btnExportXlsx" type="button">Excel-Export</button>
+      </div>
+      <div style="height: 8px"></div>
+      <div class="file-actions">
+        <button class="btn ghost" id="btnExportCsv" type="button">CSV-Export</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Berechnung</h2>
+      <details>
+        <summary>Was die App berechnet</summary>
+        <div class="small" style="margin-top: 8px">
+          • <b>Stunden pro Modell</b>: Zeitintervalle zwischen Events, Startmodell = Endmodell des Vortags<br>
+          • <b>Orgasmusfrei</b>: kein OR-Event an dem Tag<br>
+          • <b>Ungeöffnet</b>: kein KK-Event an dem Tag<br>
+          • <b>Nicht Verschlossen</b>: ganzer Tag ohne Käfig<br>
+          • <b>Punkte/Tag</b>: OF-Streak + UÖ-Streak + (Stunden verschlossen × 0,5) − 10 (Orgasmus) − 5 (Nicht Verschlossen)<br>
+          • <b>Streaks</b>: bei orgasmusfreiem/ungeöffnetem Tag: <code>vortag × 1,07 + basis</code> (Basis 3 bzw. 5)<br>
+          • <b>Stunden verschlossen</b>: HT + NS + PC (ohne KK)
+        </div>
+      </details>
+    </div>
+  </div>
+
+</div>
+
+<div class="savebar hide" id="savebar">
+  <div class="inner">
+    <button class="btn ghost" id="resetDay" type="button">Reset Tag</button>
+    <button class="btn primary" id="quickSave" type="button">Speichern</button>
+  </div>
+</div>
+
+<div class="toast" id="toast">Eingetragen</div>
+
+<script>
+'use strict';
+
+// =========================== CONFIG ===========================
+const CFG = {
+  clientId: 'ae218dcc-feae-4d39-8190-dd12b272d517',
+  // Pfad relativ zum OneDrive-Root. Anpassen falls die Datei woanders liegt.
+  oneDrivePath: '/Documents/sonstiges/Keuschhaltung/locked.json',
+};
+
+// =========================== AUTH (MSAL) ===========================
+let msalInstance = null;
+const AUTH = {
+  account: null,
+  ready: false,
+};
+
+const msalConfig = {
+  auth: {
+    clientId: CFG.clientId,
+    authority: 'https://login.microsoftonline.com/common',
+    redirectUri: window.location.origin + window.location.pathname,
+  },
+  cache: { cacheLocation: 'localStorage' },
+};
+
+async function initAuth() {
+  if (typeof msal === 'undefined') return;
+  msalInstance = new msal.PublicClientApplication(msalConfig);
+  await msalInstance.initialize();
+  try { await msalInstance.handleRedirectPromise(); } catch (e) { console.error(e); }
+  const accs = msalInstance.getAllAccounts();
+  if (accs.length) {
+    msalInstance.setActiveAccount(accs[0]);
+    AUTH.account = accs[0];
+  }
+  AUTH.ready = true;
+  updateAuthUI();
+}
+
+async function login() {
+  if (!msalInstance) return;
+  try {
+    const r = await msalInstance.loginPopup({ scopes: ['Files.ReadWrite'] });
+    msalInstance.setActiveAccount(r.account);
+    AUTH.account = r.account;
+    updateAuthUI();
+    showToast('Angemeldet als ' + (r.account.username || r.account.name));
+    await loadFromOneDrive(true);
+  } catch (e) {
+    console.error(e); showToast('Anmeldung fehlgeschlagen', true);
+  }
+}
+async function logout() {
+  if (!msalInstance) return;
+  try {
+    await msalInstance.logoutPopup({ account: AUTH.account });
+  } catch {}
+  AUTH.account = null;
+  updateAuthUI();
+}
+
+async function getToken() {
+  if (!msalInstance || !AUTH.account) throw new Error('Nicht angemeldet');
+  try {
+    const r = await msalInstance.acquireTokenSilent({
+      scopes: ['Files.ReadWrite'], account: AUTH.account,
+    });
+    return r.accessToken;
+  } catch (e) {
+    if (e instanceof msal.InteractionRequiredAuthError) {
+      const r = await msalInstance.acquireTokenPopup({ scopes: ['Files.ReadWrite'] });
+      return r.accessToken;
+    }
+    throw e;
+  }
+}
+
+function graphUrl() {
+  const enc = CFG.oneDrivePath.split('/').map(encodeURIComponent).join('/');
+  return `https://graph.microsoft.com/v1.0/me/drive/root:${enc}:/content`;
+}
+
+async function loadFromOneDrive(silent=false) {
+  try {
+    const token = await getToken();
+    const res = await fetch(graphUrl(), { headers: { Authorization: `Bearer ${token}` } });
+    if (res.status === 404) {
+      if (!silent) showToast('Datei nicht gefunden — beim ersten Speichern wird sie angelegt');
+      return;
+    }
+    if (!res.ok) throw new Error(`Graph ${res.status}`);
+    const incoming = await res.json();
+    const issues = sanityCheck(incoming);
+    STATE.data = incoming;
+    STATE.etag = res.headers.get('ETag') || null;
+    persistLocal();
+    STATE.dirty = false;
+    renderAll();
+    if (issues.length) {
+      console.warn('Sanity issues:', issues);
+      showToast(`${issues.length} Daten-Auffälligkeit(en) — Konsole prüfen`, true);
+    } else if (!silent) {
+      showToast(`${STATE.data.events?.length || 0} Events geladen`);
+    }
+  } catch (e) { console.error(e); if (!silent) showToast('Laden fehlgeschlagen', true); }
+}
+
+// =========================== SANITY CHECK ===========================
+const VALID_EVENT_TYPES = new Set(['HT','PC','NS','KK','REG','OR']);
+const VALID_FLAG_KEYS   = new Set(['orgasmusfrei','ungeoeffnet','keinKG','hoursLocked']);
+function sanityCheck(data) {
+  const issues = [];
+  if (!data || typeof data !== 'object') { issues.push('Datei ist kein Objekt'); return issues; }
+  if (!Array.isArray(data.events)) { issues.push('events fehlt oder ist kein Array'); }
+  else {
+    data.events.forEach((e, i) => {
+      if (!e || typeof e !== 'object') return issues.push(`event[${i}] kein Objekt`);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date || '')) issues.push(`event[${i}] ungültiges date: ${e.date}`);
+      if (!/^\d{2}:\d{2}$/.test(e.time || ''))      issues.push(`event[${i}] ungültige time: ${e.time}`);
+      if (!VALID_EVENT_TYPES.has(e.type))           issues.push(`event[${i}] unbekannter type: ${e.type}`);
+    });
+  }
+  if (data.days && typeof data.days === 'object') {
+    for (const [iso, ov] of Object.entries(data.days)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) issues.push(`days key kein Datum: ${iso}`);
+      if (!ov || typeof ov !== 'object') { issues.push(`days[${iso}] kein Objekt`); continue; }
+      for (const k of Object.keys(ov)) {
+        if (!VALID_FLAG_KEYS.has(k)) issues.push(`days[${iso}] unbekannter key: ${k}`);
+      }
+      if ('hoursLocked' in ov) {
+        const h = ov.hoursLocked;
+        if (typeof h !== 'number' || h < 0 || h > 24) issues.push(`days[${iso}].hoursLocked außerhalb 0–24: ${h}`);
+      }
+    }
+  }
+  return issues;
+}
+
+async function saveToOneDrive() {
+  const token = await getToken();
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  if (STATE.etag) headers['If-Match'] = STATE.etag;
+  const res = await fetch(graphUrl(), {
+    method: 'PUT', headers,
+    body: JSON.stringify(STATE.data, null, 2),
+  });
+  if (res.status === 412) {
+    // Konflikt: Datei in OneDrive wurde seit Laden verändert
+    const reload = confirm(
+      'Konflikt: Datei wurde anderswo geändert (anderes Gerät?).\n\n' +
+      'OK = OneDrive-Version laden (deine ungespeicherten Änderungen gehen verloren)\n' +
+      'Abbrechen = lokale Version behalten (klick danach nochmal Speichern um zu überschreiben)'
+    );
+    if (reload) {
+      STATE.etag = null;
+      await loadFromOneDrive(true);
+    } else {
+      STATE.etag = null; // nächstes Save überschreibt ohne If-Match
+    }
+    throw new Error('Konflikt');
+  }
+  if (!res.ok) throw new Error(`Graph ${res.status}`);
+  const body = await res.json().catch(() => null);
+  STATE.etag = res.headers.get('ETag') || (body && body.eTag) || null;
+  STATE.dirty = false;
+  return true;
+}
+
+function updateAuthUI() {
+  const status = document.getElementById('authStatus');
+  const loginBtn = document.getElementById('btnLogin');
+  const logoutBtn = document.getElementById('btnLogout');
+  if (AUTH.account) {
+    status.textContent = `Angemeldet als ${AUTH.account.username || AUTH.account.name}`;
+    loginBtn.classList.add('hide');
+    logoutBtn.classList.remove('hide');
+  } else {
+    status.textContent = AUTH.ready ? 'Nicht angemeldet' : 'Lade…';
+    loginBtn.classList.remove('hide');
+    logoutBtn.classList.add('hide');
+  }
+}
+
+// =========================== DATA LAYER ===========================
+const STATE = {
+  data: { version: 2, events: [], notes: {}, days: {} },
+  fileHandle: null,
+  dirty: false,
+};
+const LS_KEY = 'locked_data_v1';
+const LS_HANDLE_HINT = 'locked_has_handle';
+
+function loadFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) { STATE.data = JSON.parse(raw); return true; }
+  } catch (e) { console.error(e); }
+  return false;
+}
+function persistLocal() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(STATE.data)); } catch {}
+}
+
+async function openFile() {
+  if (window.showOpenFilePicker) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+      });
+      STATE.fileHandle = handle;
+      const file = await handle.getFile();
+      const text = await file.text();
+      STATE.data = JSON.parse(text);
+      persistLocal();
+      STATE.dirty = false;
+      return { name: file.name };
+    } catch (e) {
+      if (e.name === 'AbortError') return null;
+      throw e;
+    }
+  } else {
+    return new Promise((resolve, reject) => {
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = '.json,application/json';
+      inp.onchange = async () => {
+        const f = inp.files[0];
+        if (!f) return resolve(null);
+        const text = await f.text();
+        try {
+          STATE.data = JSON.parse(text);
+          persistLocal();
+          STATE.dirty = false;
+          resolve({ name: f.name });
+        } catch (e) { reject(e); }
+      };
+      inp.click();
+    });
+  }
+}
+
+async function saveFile() {
+  const blob = new Blob([JSON.stringify(STATE.data, null, 2)], { type: 'application/json' });
+  if (STATE.fileHandle && STATE.fileHandle.createWritable) {
+    try {
+      const w = await STATE.fileHandle.createWritable();
+      await w.write(blob); await w.close();
+      STATE.dirty = false;
+      return { method: 'fsa' };
+    } catch (e) { console.error('FSA write failed', e); }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'locked.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(a.href);
+  STATE.dirty = false;
+  return { method: 'download' };
+}
+
+function exportCsv() {
+  const rows = [['date','time','type']];
+  for (const e of STATE.data.events) rows.push([e.date, e.time, e.type]);
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'locked-events.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+// =========================== CALCULATIONS ===========================
+const MODELS  = ['HT','PC','NS','KK','REG'];
+const VERSCHL = ['HT','PC','NS','REG']; // counts as "verschlossen"
+const REGEN_WINDOW_MS   = 12 * 3600 * 1000;
+const REGEN_COOLDOWN_MS = 5 * 24 * 3600 * 1000;
+const POINTS = {
+  hourLocked: 0.5,
+  ofBase: 3, ofMul: 1.07,
+  uoBase: 5, uoMul: 1.07,
+  orgasm: -10,
+  keinKG: -5,
+};
+
+function timeToMin(hm) { const [h,m] = hm.split(':').map(Number); return h*60 + m; }
+function fmtNum(n, dp=2) { if (n == null || isNaN(n)) return '—';
+  return n.toLocaleString('de-DE', { minimumFractionDigits: dp, maximumFractionDigits: dp }); }
+function fmtInt(n) { if (n == null) return '—'; return Math.round(n).toLocaleString('de-DE'); }
+function isoDateAdd(iso, days) {
+  const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0,10);
+}
+
+/** Group events by date */
+function groupByDay() {
+  const by = {};
+  for (const e of STATE.data.events) {
+    (by[e.date] ||= []).push(e);
+  }
+  for (const k in by) by[k].sort((a,b) => a.time.localeCompare(b.time));
+  return by;
+}
+
+/** Compute hours per model for one day, given start model. Returns {hours:{HT,PC,NS,KK}, endModel} */
+function computeDayHours(dayEvents, startModel) {
+  const hours = Object.fromEntries(MODELS.map(m => [m, 0]));
+  let cur = startModel || 'KK';
+  let curMin = 0;
+  for (const ev of dayEvents) {
+    if (ev.type === 'OR') continue; // does not change model
+    if (!MODELS.includes(ev.type)) continue;
+    const t = timeToMin(ev.time);
+    if (t > curMin) hours[cur] += (t - curMin) / 60;
+    cur = ev.type;
+    curMin = t;
+  }
+  if (curMin < 24*60) hours[cur] += (24*60 - curMin) / 60;
+  return { hours, endModel: cur };
+}
+
+/** Compute all per-day metrics across the full event range. */
+function computeAll() {
+  const byDay = groupByDay();
+  const overrides = STATE.data.days || {};
+  // Union aus Event-Daten und Override-Daten — sonst gehen Tage mit reiner Flag-Markierung verloren
+  const allDates = [...new Set([...Object.keys(byDay), ...Object.keys(overrides)])].sort();
+  if (allDates.length === 0) return { days: [], byDate: {}, totals: emptyTotals() };
+
+  // Determine full date span: vom frühesten Tag (Event oder Override) bis heute (oder letzter Tag)
+  const start = allDates[0];
+  const todayIso = new Date().toISOString().slice(0,10);
+  const lastDate = allDates[allDates.length - 1];
+  const end = lastDate > todayIso ? lastDate : todayIso;
+
+  // Iterate every day in span
+  let cursor = start;
+  let prevEndModel = 'KK';
+  let ofStreak = 0, uoStreak = 0;
+  let cumPunkte = 0;
+  const days = [];
+  const byDate = {};
+
+  while (cursor <= end) {
+    const evs = byDay[cursor] || [];
+    const ov = overrides[cursor] || {};
+    const { hours, endModel } = computeDayHours(evs, prevEndModel);
+
+    const hadOrgasm = evs.some(e => e.type === 'OR');
+    const hadKK = evs.some(e => e.type === 'KK');
+    const derivedVerschl = VERSCHL.reduce((s,m) => s + hours[m], 0);
+    const stundenVerschlossen = (typeof ov.hoursLocked === 'number') ? ov.hoursLocked : derivedVerschl;
+
+    // Flags: explizite Overrides schlagen Auto-Ableitung.
+    //  - orgasmusfrei: kein OR-Event den Tag
+    //  - ungeoeffnet : kein Modell-Event (HT/NS/PC/KK) UND kein OR-Event — Tag völlig eintragslos
+    //  - keinKG      : hours.KK > 12 (mehr als halber Tag offen)
+    const hasModelEvent = evs.some(e => e.type === 'HT' || e.type === 'NS' || e.type === 'PC' || e.type === 'KK');
+    const orgasmusfrei = (ov.orgasmusfrei !== undefined) ? !!ov.orgasmusfrei : !hadOrgasm;
+    const ungeoeffnet  = (ov.ungeoeffnet  !== undefined) ? !!ov.ungeoeffnet  : (!hasModelEvent && !hadOrgasm);
+    const keinKG       = (ov.keinKG       !== undefined) ? !!ov.keinKG       : (hours.KK > 12);
+
+    // Streaks
+    if (orgasmusfrei) ofStreak = ofStreak * POINTS.ofMul + POINTS.ofBase;
+    else ofStreak = 0;
+    if (ungeoeffnet) uoStreak = uoStreak * POINTS.uoMul + POINTS.uoBase;
+    else uoStreak = 0;
+
+    // Tagespunkte
+    let punkte = ofStreak + uoStreak + stundenVerschlossen * POINTS.hourLocked;
+    if (hadOrgasm) punkte += POINTS.orgasm;
+    if (keinKG) punkte += POINTS.keinKG;
+    cumPunkte += punkte;
+
+    const hasOverride = Object.keys(ov).length > 0;
+    const tracked = evs.length > 0 || hasOverride;
+    const rec = {
+      date: cursor,
+      events: evs,
+      hours, endModel, prevEndModel,
+      stundenVerschlossen,
+      orgasmusfrei, ungeoeffnet, keinKG, hadOrgasm,
+      ofStreak, uoStreak,
+      punkte, cumPunkte,
+      tracked,
+    };
+    days.push(rec);
+    byDate[cursor] = rec;
+
+    prevEndModel = endModel;
+    cursor = isoDateAdd(cursor, 1);
+  }
+
+  return { days, byDate, totals: computeTotals(days) };
+}
+
+function emptyTotals() {
+  return { tage: 0, punkte: 0, avgPunkte: 0, avgStdTag: 0, stundenVerschlossen: 0,
+    hoursByModel: { HT:0, PC:0, NS:0, KK:0, REG:0 },
+    tageOrgasmusfrei: 0, tageUngeoeffnet: 0, tageKeinKG: 0, tageMitOrgasmus: 0,
+    bestePunkte: 0, schlechtestePunkte: 0, monatlich: [],
+    bestOfStreak: { days: 0, end: null }, bestUoStreak: { days: 0, end: null },
+    byWeekday: [0,0,0,0,0,0,0].map(() => ({ punkte: 0, tage: 0 })) };
+}
+function computeTotals(days) {
+  const t = emptyTotals();
+  const trackedDays = days.filter(d => d.tracked);
+  t.tage = trackedDays.length;
+  let lastCum = 0;
+  let curOf = 0, curUo = 0;
+  for (const d of days) {
+    if (d.tracked) lastCum = d.cumPunkte;
+    t.stundenVerschlossen += d.stundenVerschlossen;
+    for (const m of MODELS) t.hoursByModel[m] += d.hours[m];
+    if (d.orgasmusfrei) t.tageOrgasmusfrei++;
+    if (d.ungeoeffnet)  t.tageUngeoeffnet++;
+    if (d.keinKG)       t.tageKeinKG++;
+    if (d.hadOrgasm)    t.tageMitOrgasmus++;
+    if (d.tracked) {
+      if (d.punkte > t.bestePunkte) t.bestePunkte = d.punkte;
+      if (d.punkte < t.schlechtestePunkte) t.schlechtestePunkte = d.punkte;
+      // Wochentag-Aggregat (JS: 0=So .. 6=Sa)
+      const wd = new Date(d.date + 'T12:00:00').getDay();
+      t.byWeekday[wd].punkte += d.punkte;
+      t.byWeekday[wd].tage += 1;
+    }
+    // Best-Ever Streaks (laufende Zähler)
+    if (d.orgasmusfrei) { curOf++; if (curOf > t.bestOfStreak.days) t.bestOfStreak = { days: curOf, end: d.date }; }
+    else curOf = 0;
+    if (d.ungeoeffnet)  { curUo++; if (curUo > t.bestUoStreak.days) t.bestUoStreak = { days: curUo, end: d.date }; }
+    else curUo = 0;
+  }
+  t.punkte = lastCum;
+  t.avgPunkte = t.tage ? t.punkte / t.tage : 0;
+  t.avgStdTag = t.tage ? t.stundenVerschlossen / t.tage : 0;
+
+  const monthMap = {};
+  for (const d of days) {
+    if (!d.tracked) continue;
+    const m = d.date.slice(0,7);
+    (monthMap[m] ||= { month: m, tage: 0, punkte: 0, stunden: 0 });
+    monthMap[m].tage++;
+    monthMap[m].punkte += d.punkte;
+    monthMap[m].stunden += d.stundenVerschlossen;
+  }
+  t.monatlich = Object.values(monthMap).sort((a,b) => a.month.localeCompare(b.month));
+  return t;
+}
+
+// =========================== UI ===========================
+const DAYS_DE = ["So","Mo","Di","Mi","Do","Fr","Sa"];
+const MONTHS_DE = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+const MODEL_LABEL = { HT:'Holy Trainer', PC:'Penicap', NS:'Neosteel', KK:'Nicht Verschlossen', REG:'Regeneration', OR:'Orgasmus' };
+const MODEL_COLOR = { HT:'#84cc16', NS:'#65a30d', PC:'#bef264', KK:'#7a6a52', REG:'#c89060' };
+
+const datum = document.getElementById('datum');
+const wochentag = document.getElementById('wochentag');
+const eventsEl = document.getElementById('events');
+const toast = document.getElementById('toast');
+const meta = document.getElementById('meta');
+
+function todayIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function nowHM() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function showToast(msg, bad=false) {
+  toast.textContent = msg;
+  toast.classList.toggle('bad', bad);
+  toast.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => toast.classList.remove('show'), 1600);
+}
+
+function dayEvents(iso) {
+  return STATE.data.events.filter(e => e.date === iso)
+    .sort((a,b) => a.time.localeCompare(b.time));
+}
+
+function renderEvents() {
+  const iso = datum.value;
+  document.getElementById('evDateLabel').textContent = iso;
+  const evs = dayEvents(iso);
+  eventsEl.innerHTML = '';
+  if (evs.length === 0) {
+    const all = computeAll();
+    const d = all.byDate[iso];
+    if (!d) { eventsEl.innerHTML = '<div class="empty" style="text-align:center">Noch keine Einträge</div>'; return; }
+    const carry = d.prevEndModel || 'KK';
+    // "Läuft seit"-Zeit: letztes Event vor heute, dessen Typ NICHT carry war
+    const allEvs = STATE.data.events
+      .filter(e => e.type !== 'OR' && (e.date + 'T' + e.time) < (iso + 'T00:00'))
+      .sort((a,b) => (a.date + a.time).localeCompare(b.date + b.time));
+    let startEv = null;
+    for (let i = allEvs.length - 1; i >= 0; i--) {
+      if (allEvs[i].type !== carry) { startEv = allEvs[i + 1] || null; break; }
+    }
+    if (!startEv && allEvs.length) startEv = allEvs[0];
+    let sinceStr = 'vom Vortag';
+    if (startEv) {
+      const [y,m,dd] = startEv.date.split('-');
+      const isToday  = startEv.date === todayIso();
+      const daysAgo  = Math.round((new Date(iso) - new Date(startEv.date)) / 86400000);
+      if (daysAgo <= 1) sinceStr = `seit ${dd}.${m}. ${startEv.time}`;
+      else              sinceStr = `seit ${dd}.${m}.${y.slice(2)} (${daysAgo} T)`;
+    }
+    const isReg = carry === 'REG';
+    const isKK  = carry === 'KK';
+    const cls   = isReg ? 'warm' : (isKK ? '' : '');
+    const row = document.createElement('div');
+    row.className = 'ev carry';
+    row.innerHTML = `
+      <span class="tag ${cls}" style="${isKK ? 'background:var(--panel);color:var(--muted);border-color:var(--line);' : ''}">${carry}</span>
+      <span style="color:var(--muted); font-size:13px"><b style="color:var(--text)">${MODEL_LABEL[carry]}</b> · läuft ${sinceStr}</span>
+      <span style="color:var(--muted); font-size:12px">durchgehend</span>
+      <span></span>
+    `;
+    eventsEl.appendChild(row);
+    return;
+  }
+  evs.forEach((ev) => {
+    const idx = STATE.data.events.indexOf(ev);
+    const row = document.createElement('div');
+    const isOr  = ev.type === 'OR';
+    const isReg = ev.type === 'REG';
+    row.className = 'ev' + (ev.time_estimated ? ' estimated' : '');
+    const opts = [
+      ['HT','HT'], ['NS','NS'], ['PC','PC'], ['KK','KK'], ['REG','⟳'], ['OR','✦']
+    ].map(([v, lbl]) => `<option value="${v}" ${v===ev.type?'selected':''}>${lbl}</option>`).join('');
+    row.innerHTML = `
+      <select class="tag-select ${isOr ? 'danger' : (isReg ? 'warm' : '')}" title="Modell ändern">${opts}</select>
+      <span style="color:var(--muted); font-size:13px">${MODEL_LABEL[ev.type] || ev.type}${ev.time_estimated ? ' <span style="font-style:italic">(geschätzt)</span>' : ''}</span>
+      <input type="time" value="${ev.time}">
+      <button class="del" title="Entfernen">×</button>
+    `;
+    row.querySelector('select').addEventListener('change', (e) => {
+      ev.type = e.target.value;
+      STATE.dirty = true; persistLocal(); scheduleAutosave();
+      renderAll();
+    });
+    row.querySelector('input').addEventListener('change', (e) => {
+      ev.time = e.target.value;
+      delete ev.time_estimated;
+      STATE.dirty = true; persistLocal(); scheduleAutosave();
+      renderEvents(); renderDayTimeline(); renderDayFlags(); renderTopKpis();
+    });
+    row.querySelector('.del').addEventListener('click', () => {
+      STATE.data.events.splice(idx, 1);
+      STATE.dirty = true; persistLocal(); scheduleAutosave();
+      renderAll();
+    });
+    eventsEl.appendChild(row);
+  });
+}
+
+function renderFlagPills() {
+  const iso = datum.value;
+  const all = computeAll();
+  const d = all.byDate[iso];
+  const ov = (STATE.data.days || {})[iso] || {};
+  document.querySelectorAll('.flag-pill').forEach(btn => {
+    const flag = btn.dataset.flag;
+    const on = d ? d[flag] : false;
+    btn.classList.toggle('on', !!on);
+    btn.classList.toggle('explicit', ov[flag] !== undefined);
+  });
+}
+
+function renderCurrentModel() {
+  const wrap = document.getElementById('currentModel');
+  const iso = datum.value;
+  const all = computeAll();
+  const d = all.byDate[iso];
+  if (!d) { wrap.innerHTML = ''; return; }
+  // Aktuelles Modell am Ende des gewählten Tages: durchlaufe Events
+  const colors = MODEL_COLOR;
+  let cur = d.prevEndModel || 'KK';
+  let curTime = '00:00';
+  for (const ev of d.events) {
+    if (ev.type === 'OR') continue;
+    cur = ev.type;
+    curTime = ev.time;
+  }
+  const today = todayIso();
+  const label = iso === today ? 'jetzt' : `Ende ${iso}`;
+  wrap.innerHTML =
+    `<span class="dot" style="background:${colors[cur]}"></span>` +
+    `<span>Modell ${label}: <b>${MODEL_LABEL[cur]}</b>${cur !== 'KK' ? ` (seit ${curTime})` : ''}</span>`;
+}
+
+function renderDatePills() {
+  const today = todayIso();
+  const cur = datum.value;
+  document.querySelectorAll('#datePills .pill').forEach(p => {
+    const off = parseInt(p.dataset.offset, 10);
+    const iso = isoDateAdd(today, off);
+    p.classList.toggle('active', iso === cur);
+  });
+}
+
+function setDatumOffset(offset) {
+  datum.value = isoDateAdd(todayIso(), offset);
+  renderAll();
+}
+
+function renderHoursOverride() {
+  const iso = datum.value;
+  const ov = (STATE.data.days || {})[iso] || {};
+  const input = document.getElementById('hoursOverride');
+  const clearBtn = document.getElementById('hoursOverrideClear');
+
+  // Auto-Wert berechnen (Summe HT/NS/PC im Tag)
+  const all = computeAll();
+  const d = all.byDate[iso];
+  const autoVal = d ? VERSCHL.reduce((s,m) => s + d.hours[m], 0) : 0;
+  const autoFmt = autoVal.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+  input.placeholder = `${autoFmt} (auto)`;
+
+  if (typeof ov.hoursLocked === 'number') {
+    input.value = ov.hoursLocked;
+    clearBtn.classList.remove('hide');
+  } else {
+    input.value = '';
+    clearBtn.classList.add('hide');
+  }
+}
+
+function commitHoursOverride() {
+  const iso = datum.value;
+  const raw = document.getElementById('hoursOverride').value.trim();
+  STATE.data.days ||= {};
+  const day = (STATE.data.days[iso] ||= {});
+  if (raw === '') {
+    delete day.hoursLocked;
+  } else {
+    const n = parseFloat(raw.replace(',', '.'));
+    if (isNaN(n) || n < 0 || n > 24) { showToast('Ungültige Stunden (0–24)', true); renderHoursOverride(); return; }
+    day.hoursLocked = n;
+  }
+  if (Object.keys(day).length === 0) delete STATE.data.days[iso];
+  STATE.dirty = true; persistLocal(); scheduleAutosave();
+  renderAll();
+}
+
+// =========================== REGENERATION ===========================
+function eventDateTime(e) {
+  return new Date(`${e.date}T${e.time}:00`);
+}
+
+/** Latest REG event + computed end-of-phase and cooldown state */
+function regenState() {
+  const regs = STATE.data.events.filter(e => e.type === 'REG');
+  if (!regs.length) return { state: 'available' };
+  // Latest by date+time
+  regs.sort((a,b) => (b.date + b.time).localeCompare(a.date + a.time));
+  const latest = regs[0];
+  const regAt   = eventDateTime(latest);
+  const deadline = new Date(regAt.getTime() + REGEN_WINDOW_MS);
+  // Find first non-REG/non-OR event after the REG
+  const followUp = STATE.data.events
+    .filter(e => e.type !== 'REG' && e.type !== 'OR')
+    .map(e => ({ e, t: eventDateTime(e) }))
+    .filter(x => x.t > regAt)
+    .sort((a,b) => a.t - b.t)[0];
+
+  const now = new Date();
+  if (followUp) {
+    const cdEnd = new Date(followUp.t.getTime() + REGEN_COOLDOWN_MS);
+    if (now < cdEnd) return { state: 'cooldown', remainMs: cdEnd - now };
+    return { state: 'available' };
+  }
+  if (now < deadline) {
+    return { state: 'active', deadlineMs: deadline - now, regAt };
+  }
+  // Window expired without follow-up — KK should already be auto-inserted by processExpiredRegens.
+  const cdEnd = new Date(deadline.getTime() + REGEN_COOLDOWN_MS);
+  if (now < cdEnd) return { state: 'cooldown', remainMs: cdEnd - now };
+  return { state: 'available' };
+}
+
+/** Wenn ein REG-Event mehr als 12h zurückliegt und kein Modell-Event folgte:
+ *  KK-Event am Deadline-Zeitpunkt einfügen + Toast. */
+function processExpiredRegens() {
+  if (!STATE.data.events) return;
+  let inserted = 0;
+  for (const reg of STATE.data.events.filter(e => e.type === 'REG')) {
+    const regAt = eventDateTime(reg);
+    const deadline = new Date(regAt.getTime() + REGEN_WINDOW_MS);
+    if (new Date() < deadline) continue;
+    const hasFollowUp = STATE.data.events.some(e => {
+      if (e.type === 'REG' || e.type === 'OR') return false;
+      return eventDateTime(e) > regAt;
+    });
+    if (hasFollowUp) continue;
+    const isoDate = deadline.toISOString().slice(0,10);
+    const isoTime = `${String(deadline.getHours()).padStart(2,'0')}:${String(deadline.getMinutes()).padStart(2,'0')}`;
+    STATE.data.events.push({ date: isoDate, time: isoTime, type: 'KK', auto_regen_timeout: true });
+    inserted++;
+  }
+  if (inserted) {
+    STATE.data.events.sort((a,b) => (a.date + a.time).localeCompare(b.date + b.time));
+    STATE.dirty = true; persistLocal(); scheduleAutosave();
+    showToast(`Regeneration abgelaufen — Nicht Verschlossen eingetragen`, true);
+  }
+}
+
+function fmtCountdownHM(ms) {
+  const totalMin = Math.max(0, Math.ceil(ms / 60000));
+  const h = Math.floor(totalMin / 60), m = totalMin % 60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}h`;
+}
+function fmtCountdownDH(ms) {
+  const totalH = Math.max(0, Math.ceil(ms / 3600000));
+  const d = Math.floor(totalH / 24), h = totalH % 24;
+  if (d > 0) return `${d}d ${h}h`;
+  return `${h}h`;
+}
+
+function renderRegenButton() {
+  const btn = document.querySelector('.qb[data-model="REG"]');
+  if (!btn) return;
+  const sub = btn.querySelector('.qb-sub');
+  const st = regenState();
+  btn.classList.remove('regen-available','regen-active','regen-cooldown');
+  if (st.state === 'available') {
+    btn.disabled = false;
+    btn.classList.add('regen-available');
+    if (sub) sub.textContent = 'verfügbar';
+  } else if (st.state === 'active') {
+    btn.disabled = true;
+    btn.classList.add('regen-active');
+    if (sub) sub.textContent = `läuft ${fmtCountdownHM(st.deadlineMs)}`;
+  } else {
+    btn.disabled = true;
+    btn.classList.add('regen-cooldown');
+    if (sub) sub.textContent = `wieder in ${fmtCountdownDH(st.remainMs)}`;
+  }
+}
+
+function autoFlagFor(flag, iso) {
+  const all = computeAll();
+  const d = all.byDate[iso];
+  if (!d) return false;
+  const evs = d.events;
+  const hadOrgasm = evs.some(e => e.type === 'OR');
+  const hasModelEvent = evs.some(e => e.type === 'HT' || e.type === 'NS' || e.type === 'PC' || e.type === 'KK');
+  const hKK = d.hours.KK;
+  if (flag === 'orgasmusfrei') return !hadOrgasm;
+  if (flag === 'ungeoeffnet')  return !hasModelEvent && !hadOrgasm;
+  if (flag === 'keinKG')       return hKK > 12;
+  return false;
+}
+
+function toggleFlag(flag) {
+  const iso = datum.value;
+  STATE.data.days ||= {};
+  const day = (STATE.data.days[iso] ||= {});
+  if (day[flag] !== undefined) {
+    // Override existiert → entfernen (zurück zu Auto)
+    delete day[flag];
+  } else {
+    // Kein Override → Gegenteil von Auto setzen
+    const auto = autoFlagFor(flag, iso);
+    day[flag] = !auto;
+  }
+  if (Object.keys(day).length === 0) delete STATE.data.days[iso];
+  STATE.dirty = true; persistLocal(); scheduleAutosave();
+  renderAll();
+}
+
+document.querySelectorAll('.flag-pill').forEach(btn => {
+  btn.addEventListener('click', () => toggleFlag(btn.dataset.flag));
+});
+
+document.querySelectorAll('#datePills .pill').forEach(p => {
+  p.addEventListener('click', () => setDatumOffset(parseInt(p.dataset.offset, 10)));
+});
+
+document.getElementById('hoursOverride').addEventListener('change', commitHoursOverride);
+document.getElementById('hoursOverrideClear').addEventListener('click', () => {
+  document.getElementById('hoursOverride').value = '';
+  commitHoursOverride();
+});
+
+function renderHero() {
+  const iso = datum.value;
+  const { totals, days, byDate } = computeAll();
+  const d = byDate[iso];
+
+  // Index für Streak-Zählung
+  let idx = -1;
+  if (d) idx = days.indexOf(d);
+  else for (let i = days.length - 1; i >= 0; i--) if (days[i].tracked) { idx = i; break; }
+
+  // Heute-Punkte (Hauptzahl)
+  const todayDelta = d ? d.punkte : 0;
+  const heroNum = document.getElementById('heroNum');
+  heroNum.textContent = (todayDelta > 0 ? '+' : '') + fmtInt(todayDelta);
+  heroNum.classList.toggle('neg', todayDelta < 0);
+  heroNum.classList.toggle('zero', todayDelta === 0);
+
+  // Breakdown: woher kommen die Punkte heute
+  if (d) {
+    const parts = [];
+    if (d.orgasmusfrei && d.ofStreak > 0) parts.push(`Streak <b>+${fmtInt(d.ofStreak)}</b>`);
+    if (d.ungeoeffnet  && d.uoStreak > 0) parts.push(`Ungeöffnet <b>+${fmtInt(d.uoStreak)}</b>`);
+    if (d.stundenVerschlossen > 0)        parts.push(`Std <b>+${fmtInt(d.stundenVerschlossen * 0.5)}</b>`);
+    if (d.hadOrgasm)                      parts.push(`Orgasmus <b>−10</b>`);
+    if (d.keinKG)                         parts.push(`Nicht V. <b>−5</b>`);
+    document.getElementById('heroBreakdown').innerHTML = parts.length ? parts.join(' · ') : '';
+  } else {
+    document.getElementById('heroBreakdown').innerHTML = '';
+  }
+
+  // Streak-Row: Orgasmusfrei / Ungeöffnet / Verschlossen — drei unabhängige Zähler
+  let ofDays = 0, uoDays = 0, vDays = 0;
+  if (idx >= 0) {
+    for (let i = idx; i >= 0 && days[i].orgasmusfrei; i--) ofDays++;
+    for (let i = idx; i >= 0 && days[i].ungeoeffnet;  i--) uoDays++;
+    for (let i = idx; i >= 0 && !days[i].keinKG;      i--) vDays++;
+  }
+  const sinceStr = (count) => {
+    if (count === 0 || idx < 0) return '';
+    const startIdx = idx - count + 1;
+    if (startIdx < 0) return '';
+    const [y,m,d] = days[startIdx].date.split('-');
+    return `seit ${d}.${m}.${y.slice(2)}`;
+  };
+  document.getElementById('streakRow').innerHTML = [
+    { days: ofDays, label: 'Orgasmusfrei', since: sinceStr(ofDays) },
+    { days: uoDays, label: 'Ungeöffnet',   since: sinceStr(uoDays) },
+    { days: vDays,  label: 'Verschlossen', since: sinceStr(vDays) },
+  ].map(s => `<div class="streak-item">
+    <div class="days">${s.days} T</div>
+    <div class="label">${s.label}</div>
+    ${s.since ? `<div class="since">${s.since}</div>` : '<div class="since">—</div>'}
+  </div>`).join('');
+
+  // Footer-Kontext (klein): Jahres-Stand, Gesamt-Stand, Ø
+  const curYear = iso.slice(0,4);
+  const yearDays = days.filter(x => x.tracked && x.date.startsWith(curYear));
+  const yearSum  = yearDays.reduce((s,x) => s + x.punkte, 0);
+  const totalCum = days.filter(x => x.tracked).slice(-1)[0]?.cumPunkte ?? 0;
+  document.getElementById('heroFooter').innerHTML = `
+    <div class="item"><div class="v">${fmtInt(yearSum)}</div><div class="l">Jahr ${curYear}</div></div>
+    <div class="item"><div class="v">${fmtInt(totalCum)}</div><div class="l">Gesamt</div></div>
+    <div class="item"><div class="v">${fmtInt(totals.avgPunkte)}</div><div class="l">Ø/Tag</div></div>
+  `;
+}
+
+function renderDayTimeline() {
+  const iso = datum.value;
+  const all = computeAll();
+  const d = all.byDate[iso];
+  const wrap = document.getElementById('dayTimeline');
+  if (!d) { wrap.innerHTML = ''; return; }
+
+  // Segmente aus dem Tagesverlauf rekonstruieren
+  const segments = []; // { start, end, model }
+  let cur = d.prevEndModel || 'KK';
+  let curMin = 0;
+  for (const ev of d.events) {
+    if (ev.type === 'OR') continue;
+    const t = (() => { const [h,m] = ev.time.split(':').map(Number); return h*60+m; })();
+    if (t > curMin) segments.push({ start: curMin, end: t, model: cur });
+    cur = ev.type;
+    curMin = t;
+  }
+  if (curMin < 24*60) segments.push({ start: curMin, end: 24*60, model: cur });
+
+  const orMarks = d.events.filter(e => e.type === 'OR')
+    .map(e => { const [h,m] = e.time.split(':').map(Number); return h*60+m; });
+
+  const W = 480, H = 48, padL = 4, padR = 4, top = 4, barH = 24;
+  const innerW = W - padL - padR;
+  const scale = (min) => padL + (min / 1440) * innerW;
+  const colors = { ...MODEL_COLOR, KK: '#5a4b39' };
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">`;
+  // Hintergrund
+  svg += `<rect x="${padL}" y="${top}" width="${innerW}" height="${barH}" fill="var(--panel-2)" rx="4"/>`;
+  // Segmente
+  for (const s of segments) {
+    const x = scale(s.start), w = scale(s.end) - x;
+    svg += `<rect x="${x.toFixed(1)}" y="${top}" width="${w.toFixed(1)}" height="${barH}" fill="${colors[s.model]}"><title>${MODEL_LABEL[s.model]} ${String(Math.floor(s.start/60)).padStart(2,'0')}:${String(s.start%60).padStart(2,'0')}–${String(Math.floor(s.end/60)).padStart(2,'0')}:${String(s.end%60).padStart(2,'0')}</title></rect>`;
+  }
+  // Orgasmus-Marker
+  for (const m of orMarks) {
+    const x = scale(m);
+    svg += `<line x1="${x.toFixed(1)}" y1="${top-2}" x2="${x.toFixed(1)}" y2="${top+barH+2}" stroke="var(--danger)" stroke-width="2"/>`;
+    svg += `<circle cx="${x.toFixed(1)}" cy="${top-2}" r="3" fill="var(--danger)"/>`;
+  }
+  // Stundenmarken
+  for (let h = 0; h <= 24; h += 6) {
+    const x = scale(h*60);
+    svg += `<text x="${x.toFixed(1)}" y="${H-2}" text-anchor="${h===0?'start':h===24?'end':'middle'}" font-size="9" fill="var(--muted)">${String(h).padStart(2,'0')}</text>`;
+  }
+  svg += '</svg>';
+  wrap.innerHTML = svg;
+}
+
+function renderStreaks() {
+  const { days } = computeAll();
+  // Letzter erfasster Tag
+  let lastIdx = -1;
+  for (let i = days.length - 1; i >= 0; i--) if (days[i].tracked) { lastIdx = i; break; }
+  let ofDays = 0, uoDays = 0, ofPts = 0, uoPts = 0;
+  if (lastIdx >= 0) {
+    for (let i = lastIdx; i >= 0 && days[i].orgasmusfrei; i--) ofDays++;
+    for (let i = lastIdx; i >= 0 && days[i].ungeoeffnet;  i--) uoDays++;
+    ofPts = days[lastIdx].ofStreak;
+    uoPts = days[lastIdx].uoStreak;
+  }
+  const tile = (n, l, sub) => `<div class="kpi"><div class="v">${n}</div><div class="l">${l}</div>${sub ? `<div class="l" style="margin-top:2px;text-transform:none;letter-spacing:0;font-size:11px">${sub}</div>` : ''}</div>`;
+  document.getElementById('streakKpis').innerHTML =
+      tile(ofDays + ' T', 'Orgasmusfrei', ofPts > 0 ? `+${fmtInt(ofPts)} Pkt/Tag` : '')
+    + tile(uoDays + ' T', 'Ungeöffnet',   uoPts > 0 ? `+${fmtInt(uoPts)} Pkt/Tag` : '');
+}
+
+// =========================== DASHBOARD FILTER ===========================
+let DASH_YEAR = localStorage.getItem('locked_dash_year') || 'all'; // 'all' | '2026' | '2025' | '2024'
+let DETAILS_OPEN = false;
+
+function availableYears(days) {
+  const s = new Set();
+  for (const d of days) if (d.tracked) s.add(d.date.slice(0,4));
+  return [...s].sort();
+}
+function dayMatchesYear(d, yr) { return yr === 'all' || d.date.startsWith(yr); }
+
+function renderYearFilter(days) {
+  const years = availableYears(days);
+  const seg = document.getElementById('yearFilter');
+  const opts = ['all', ...years.reverse()];
+  if (!opts.includes(DASH_YEAR)) DASH_YEAR = 'all';
+  seg.innerHTML = opts.map(y =>
+    `<div class="seg-opt ${y === DASH_YEAR ? 'active' : ''}" data-year="${y}">${y === 'all' ? 'Alle' : y}</div>`
+  ).join('');
+  seg.querySelectorAll('.seg-opt').forEach(o => {
+    o.addEventListener('click', () => {
+      DASH_YEAR = o.dataset.year;
+      try { localStorage.setItem('locked_dash_year', DASH_YEAR); } catch {}
+      renderDashboard();
+    });
+  });
+}
+
+function filteredTotals(days) {
+  // Sub-totals nur für die im Filter sichtbaren Tage.
+  // Streaks/Punkte-Kumulation läuft weiter über alle Tage (sonst inkonsistent).
+  const t = emptyTotals();
+  const filtered = days.filter(d => dayMatchesYear(d, DASH_YEAR));
+  const tracked = filtered.filter(d => d.tracked);
+  t.tage = tracked.length;
+  let yearSumPunkte = 0;
+  for (const d of filtered) {
+    if (d.tracked) yearSumPunkte += d.punkte;
+    t.stundenVerschlossen += d.stundenVerschlossen;
+    for (const m of MODELS) t.hoursByModel[m] += d.hours[m];
+    if (d.orgasmusfrei) t.tageOrgasmusfrei++;
+    if (d.ungeoeffnet)  t.tageUngeoeffnet++;
+    if (d.keinKG)       t.tageKeinKG++;
+    if (d.hadOrgasm)    t.tageMitOrgasmus++;
+    if (d.tracked) {
+      if (d.punkte > t.bestePunkte) t.bestePunkte = d.punkte;
+      if (d.punkte < t.schlechtestePunkte) t.schlechtestePunkte = d.punkte;
+      const wd = new Date(d.date + 'T12:00:00').getDay();
+      t.byWeekday[wd].punkte += d.punkte;
+      t.byWeekday[wd].tage += 1;
+    }
+  }
+  // Best-Streaks im Filter neu zählen
+  let curOf = 0, curUo = 0;
+  for (const d of filtered) {
+    if (d.orgasmusfrei) { curOf++; if (curOf > t.bestOfStreak.days) t.bestOfStreak = { days: curOf, end: d.date }; }
+    else curOf = 0;
+    if (d.ungeoeffnet)  { curUo++; if (curUo > t.bestUoStreak.days) t.bestUoStreak = { days: curUo, end: d.date }; }
+    else curUo = 0;
+  }
+  // Punktestand = cumPunkte am letzten erfassten Tag im Filter (oder gesamt)
+  t.punkte = filtered.filter(d => d.tracked).slice(-1)[0]?.cumPunkte ?? 0;
+  t.avgPunkte = t.tage ? yearSumPunkte / t.tage : 0;
+  t.avgStdTag = t.tage ? t.stundenVerschlossen / t.tage : 0;
+  const monthMap = {};
+  for (const d of filtered) {
+    if (!d.tracked) continue;
+    const m = d.date.slice(0,7);
+    (monthMap[m] ||= { month: m, tage: 0, punkte: 0, stunden: 0 });
+    monthMap[m].tage++;
+    monthMap[m].punkte += d.punkte;
+    monthMap[m].stunden += d.stundenVerschlossen;
+  }
+  t.monatlich = Object.values(monthMap).sort((a,b) => a.month.localeCompare(b.month));
+  return { totals: t, filtered };
+}
+
+// =========================== CHARTS ===========================
+let CHART_SCALE = 'month'; // 'month' | 'week' | 'day'
+
+function isoWeek(iso) {
+  // ISO 8601 week, returns "YYYY-Www"
+  const d = new Date(iso + 'T12:00:00');
+  const target = new Date(d.valueOf());
+  const dayNr = (d.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = target.valueOf();
+  target.setMonth(0, 1);
+  if (target.getDay() !== 4) {
+    target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+  }
+  const week = 1 + Math.ceil((firstThursday - target) / 604800000);
+  return `${target.getFullYear()}-W${String(week).padStart(2,'0')}`;
+}
+
+function aggregatePunkte(days, scale) {
+  const m = new Map();
+  for (const d of days) {
+    if (!d.tracked) continue;
+    let key, label;
+    if (scale === 'month') {
+      key = d.date.slice(0, 7);
+      label = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'][parseInt(d.date.slice(5,7),10)-1];
+    } else if (scale === 'week') {
+      key = isoWeek(d.date);
+      label = 'KW' + key.slice(-2);
+    } else {
+      key = d.date;
+      label = d.date.slice(8);
+    }
+    if (!m.has(key)) m.set(key, { key, label, punkte: 0 });
+    m.get(key).punkte += d.punkte;
+  }
+  return [...m.values()].sort((a,b) => a.key.localeCompare(b.key));
+}
+
+function niceStep(max) {
+  if (max <= 0) return 1;
+  const pow = Math.pow(10, Math.floor(Math.log10(max)));
+  const n = max / pow;
+  const step = n <= 1 ? 0.2 : n <= 2 ? 0.5 : n <= 5 ? 1 : 2;
+  return step * pow;
+}
+
+function renderPunkteChart(days) {
+  const data = aggregatePunkte(days, CHART_SCALE);
+  const container = document.getElementById('punkteChart');
+  if (!data.length) { container.innerHTML = '<div class="empty">Noch keine Daten</div>'; return; }
+
+  const NEG_CAP = 1000;
+  const dataMax = Math.max(0, ...data.map(d => d.punkte));
+  const dataMin = Math.abs(Math.min(0, ...data.map(d => d.punkte)));
+  const posMax = Math.max(1, dataMax);
+  const negMax = Math.min(NEG_CAP, dataMin);
+
+  const W = 480, H = 200;
+  const padL = 36, padR = 8, padT = 12, padB = 24;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+
+  // Gemeinsamer Step, damit Gridlines konsistent sind
+  const step = niceStep(Math.max(posMax, negMax));
+  const yPos = Math.ceil(posMax / step) * step;
+  const yNeg = Math.min(NEG_CAP, Math.ceil(negMax / step) * step);
+  const totalRange = yPos + yNeg || 1;
+  const yScale = innerH / totalRange;
+  const zeroY = padT + yPos * yScale;
+
+  const xstep = innerW / data.length;
+  const barW = Math.max(2, Math.min(xstep * 0.75, 40));
+  const labelEvery = Math.max(1, Math.ceil(data.length / 12));
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">`;
+  // Gridlines + Y-Labels (von -yNeg bis +yPos)
+  for (let v = -yNeg; v <= yPos + 1e-9; v += step) {
+    const y = zeroY - v * yScale;
+    if (Math.abs(v) < 1e-9) continue;
+    svg += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-opacity=".4" stroke-dasharray="2 3"/>`;
+    svg += `<text x="${padL - 4}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)">${fmtInt(v)}</text>`;
+  }
+  // Zero line
+  svg += `<line x1="${padL}" y1="${zeroY.toFixed(1)}" x2="${W-padR}" y2="${zeroY.toFixed(1)}" stroke="var(--line)" stroke-width="1"/>`;
+  const chartBottom = padT + innerH;
+  data.forEach((d, i) => {
+    const cx = padL + xstep * (i + 0.5);
+    const x = cx - barW / 2;
+    const color = d.punkte >= 0 ? 'var(--accent)' : 'var(--bad)';
+    let y, h;
+    if (d.punkte >= 0) {
+      h = d.punkte * yScale;
+      y = zeroY - h;
+    } else {
+      // bei Werten unter -NEG_CAP an der unteren Kante abschneiden
+      const v = Math.max(-NEG_CAP, d.punkte);
+      h = Math.abs(v) * yScale;
+      y = zeroY;
+    }
+    svg += `<rect class="bar-clickable" data-key="${d.key}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${color}" rx="2" style="cursor:pointer"><title>${d.label}: ${fmtInt(d.punkte)} (tap = öffnen)</title></rect>`;
+    // Marker wenn unter Cap geclippt
+    if (d.punkte < -NEG_CAP) {
+      svg += `<rect x="${x.toFixed(1)}" y="${(chartBottom - 3).toFixed(1)}" width="${barW.toFixed(1)}" height="3" fill="var(--danger)"/>`;
+    }
+    if (i % labelEvery === 0) {
+      svg += `<text x="${cx.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="10" fill="var(--muted)">${d.label}</text>`;
+    }
+  });
+  svg += '</svg>';
+  container.innerHTML = svg;
+  container.querySelectorAll('.bar-clickable').forEach(rect => {
+    rect.addEventListener('click', () => drilldownToBar(rect.dataset.key));
+  });
+}
+
+function drilldownToBar(key) {
+  // key is 'YYYY-MM' (month), 'YYYY-Www' (week) or 'YYYY-MM-DD' (day)
+  let iso;
+  if (CHART_SCALE === 'month') {
+    iso = `${key}-01`;
+  } else if (CHART_SCALE === 'week') {
+    // ISO Week → Montag der KW
+    const [yr, wkStr] = key.split('-W');
+    const week = parseInt(wkStr, 10);
+    // Jan 4 ist immer in KW 1 (ISO 8601)
+    const jan4 = new Date(parseInt(yr,10), 0, 4, 12, 0, 0);
+    const dayNr = (jan4.getDay() + 6) % 7;
+    const week1Mon = new Date(jan4);
+    week1Mon.setDate(jan4.getDate() - dayNr);
+    const target = new Date(week1Mon);
+    target.setDate(week1Mon.getDate() + (week - 1) * 7);
+    iso = target.toISOString().slice(0, 10);
+  } else {
+    iso = key;
+  }
+  // Tab wechseln + Datum setzen
+  document.querySelector('.tab[data-tab="eintrag"]').click();
+  datum.value = iso;
+  renderAll();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function heatmapColor(p) {
+  if (p === undefined || p === null) return '#3a3024';
+  if (p < -5)   return '#c2553f';
+  if (p < 0)    return '#5a4b39';
+  if (p < 50)   return '#3f5212';
+  if (p < 200)  return '#65a30d';
+  return '#84cc16';
+}
+
+function renderHeatmap(days) {
+  const container = document.getElementById('heatmap');
+  const filtered = days.filter(d => dayMatchesYear(d, DASH_YEAR));
+  if (!filtered.length) { container.innerHTML = '<div class="empty">Noch keine Daten</div>'; return; }
+
+  const byYear = {};
+  for (const d of filtered) (byYear[d.date.slice(0,4)] ||= {})[d.date] = d;
+
+  let html = '';
+  for (const yr of Object.keys(byYear).sort()) {
+    html += renderHeatmapYear(yr, byYear[yr]);
+  }
+  container.innerHTML = html;
+  container.querySelectorAll('.hm-cell').forEach(c => {
+    c.addEventListener('click', () => {
+      const iso = c.dataset.iso;
+      if (!iso) return;
+      document.querySelector('.tab[data-tab="eintrag"]').click();
+      datum.value = iso;
+      renderAll();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+}
+
+function renderHeatmapYear(year, dataByIso) {
+  const start = new Date(parseInt(year,10), 0, 1);
+  const end   = new Date(parseInt(year,10), 11, 31);
+  const dayList = [];
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) dayList.push(new Date(d));
+
+  const cell = 11, gap = 2, padL = 18, padT = 14;
+  const firstOff = (start.getDay() + 6) % 7;
+  const totalCells = firstOff + dayList.length;
+  const cols = Math.ceil(totalCells / 7);
+  const W = padL + cols * (cell + gap);
+  const H = padT + 7 * (cell + gap);
+  const monthNames = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+
+  let svg = `<div style="margin-bottom:12px"><div style="font-size:13px;color:var(--muted);font-weight:600;margin-bottom:4px">${year}</div>`;
+  svg += `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">`;
+  // Weekday-Labels (Mo Mi Fr)
+  for (const [idx, name] of [[0,'Mo'],[2,'Mi'],[4,'Fr']]) {
+    const y = padT + idx * (cell + gap) + cell - 1;
+    svg += `<text x="0" y="${y}" font-size="8" fill="var(--muted)">${name}</text>`;
+  }
+  // Cells
+  const monthFirstCol = {};
+  dayList.forEach((d, i) => {
+    const idx = firstOff + i;
+    const col = Math.floor(idx / 7), row = idx % 7;
+    const iso = `${year}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const rec = dataByIso[iso];
+    const color = (rec && rec.tracked) ? heatmapColor(rec.punkte) : '#3a3024';
+    const x = padL + col * (cell + gap);
+    const y = padT + row * (cell + gap);
+    const tip = (rec && rec.tracked) ? `${iso}: ${fmtInt(rec.punkte)} Pkt` : `${iso}: keine Daten`;
+    svg += `<rect class="hm-cell" data-iso="${iso}" x="${x}" y="${y}" width="${cell}" height="${cell}" fill="${color}" rx="2" style="cursor:pointer"><title>${tip}</title></rect>`;
+    const m = d.getMonth();
+    if (!(m in monthFirstCol)) monthFirstCol[m] = col;
+  });
+  // Month-Labels
+  for (const [m, col] of Object.entries(monthFirstCol)) {
+    const x = padL + parseInt(col,10) * (cell + gap);
+    svg += `<text x="${x}" y="${padT - 3}" font-size="8" fill="var(--muted)">${monthNames[m]}</text>`;
+  }
+  svg += '</svg></div>';
+  return svg;
+}
+
+function renderStreakChart(days) {
+  const filtered = days.filter(d => dayMatchesYear(d, DASH_YEAR));
+  const container = document.getElementById('streakChart');
+  if (!filtered.length) { container.innerHTML = '<div class="empty">Noch keine Daten</div>'; return; }
+  let curOf = 0, curUo = 0;
+  const series = filtered.map(d => {
+    if (d.orgasmusfrei) curOf++; else curOf = 0;
+    if (d.ungeoeffnet)  curUo++; else curUo = 0;
+    return { date: d.date, of: curOf, uo: curUo };
+  });
+  const maxY = Math.max(1, ...series.map(s => Math.max(s.of, s.uo)));
+  const step = niceStep(maxY);
+  const yMax = Math.ceil(maxY / step) * step;
+  const W = 480, H = 180, padL = 36, padR = 8, padT = 10, padB = 22;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const xScale = (i) => padL + (i / Math.max(1, series.length - 1)) * innerW;
+  const yScale = (v) => padT + innerH - (v / yMax) * innerH;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">`;
+  // Gridlines + Y-Labels
+  for (let v = 0; v <= yMax + 1e-9; v += step) {
+    const y = yScale(v);
+    svg += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-opacity=".4" stroke-dasharray="2 3"/>`;
+    svg += `<text x="${padL - 4}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)">${fmtInt(v)}</text>`;
+  }
+  // Lines
+  const ofPath = series.map((s, i) => `${i===0?'M':'L'} ${xScale(i).toFixed(1)} ${yScale(s.of).toFixed(1)}`).join(' ');
+  const uoPath = series.map((s, i) => `${i===0?'M':'L'} ${xScale(i).toFixed(1)} ${yScale(s.uo).toFixed(1)}`).join(' ');
+  svg += `<path d="${ofPath}" stroke="var(--accent)" stroke-width="1.5" fill="none"/>`;
+  svg += `<path d="${uoPath}" stroke="var(--accent-strong)" stroke-width="1.5" fill="none"/>`;
+  // X-Labels (an Monatsanfängen)
+  const seen = new Set();
+  series.forEach((s, i) => {
+    const ym = s.date.slice(0,7);
+    if (!seen.has(ym)) {
+      seen.add(ym);
+      if (seen.size > 12) return; // höchstens 12 Labels
+      const x = xScale(i);
+      const monthName = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'][parseInt(s.date.slice(5,7),10)-1];
+      svg += `<text x="${x.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="9" fill="var(--muted)">${monthName}</text>`;
+    }
+  });
+  svg += '</svg>';
+  container.innerHTML = svg;
+}
+
+function renderModelDonut(hoursByModel, totalVerschl) {
+  const order = ['HT','NS','PC','REG','KK'];
+  const total = order.reduce((s,m) => s + (hoursByModel[m] || 0), 0);
+  if (!total) return '';
+  const colors = MODEL_COLOR;
+  const SIZE = 160, cx = SIZE/2, cy = SIZE/2, r = 60, sw = 22;
+  let angle = -Math.PI/2;
+  let svg = `<svg viewBox="0 0 ${SIZE} ${SIZE}" style="width:160px;height:160px">`;
+  svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--panel-2)" stroke-width="${sw}"/>`;
+  for (const m of order) {
+    const v = hoursByModel[m] || 0;
+    if (!v) continue;
+    const da = (v / total) * 2 * Math.PI;
+    const x1 = cx + r * Math.cos(angle), y1 = cy + r * Math.sin(angle);
+    const x2 = cx + r * Math.cos(angle + da), y2 = cy + r * Math.sin(angle + da);
+    const large = da > Math.PI ? 1 : 0;
+    svg += `<path d="M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}" stroke="${colors[m]}" stroke-width="${sw}" fill="none" stroke-linecap="butt"><title>${MODEL_LABEL[m]}: ${fmtInt(v)} h</title></path>`;
+    angle += da;
+  }
+  const pct = totalVerschl / total * 100;
+  svg += `<text x="${cx}" y="${cy-2}" text-anchor="middle" font-size="20" fill="var(--text)" font-weight="700">${fmtInt(pct)}%</text>`;
+  svg += `<text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="9" fill="var(--muted)">verschlossen</text>`;
+  svg += '</svg>';
+  return svg;
+}
+
+function renderRecords(totals) {
+  const tile = (v, l) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  const ofEnd = totals.bestOfStreak.end ? `bis ${totals.bestOfStreak.end}` : '';
+  const uoEnd = totals.bestUoStreak.end ? `bis ${totals.bestUoStreak.end}` : '';
+  document.getElementById('records').innerHTML =
+    `<div class="kpis">` +
+      tile(totals.bestOfStreak.days + ' T', 'Längste OF-Streak') +
+      tile(totals.bestUoStreak.days + ' T', 'Längste UÖ-Streak') +
+    `</div>` +
+    (ofEnd || uoEnd ? `<div class="small" style="margin-top:8px">OF ${ofEnd} · UÖ ${uoEnd}</div>` : '');
+}
+
+function renderWeekdayChart(byWeekday) {
+  // JS-Wochenstart So..Sa → in DE-Reihenfolge Mo..So darstellen
+  const order = [1,2,3,4,5,6,0];
+  const labels = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+  const data = order.map((idx, i) => {
+    const w = byWeekday[idx];
+    return { label: labels[i], avg: w.tage ? w.punkte / w.tage : 0, tage: w.tage };
+  });
+  const max = Math.max(1, ...data.map(d => Math.abs(d.avg)));
+  const W = 480, H = 160, padL = 36, padR = 8, padT = 10, padB = 24;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const midY = padT + innerH/2;
+  const yStep = niceStep(max);
+  const yMax = Math.ceil(max / yStep) * yStep;
+  const yScale = innerH / 2 / yMax;
+  const xstep = innerW / data.length;
+  const barW = xstep * 0.65;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">`;
+  for (let v = -yMax; v <= yMax + 1e-9; v += yStep) {
+    const y = midY - v * yScale;
+    if (Math.abs(v) < 1e-9) continue;
+    svg += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-opacity=".4" stroke-dasharray="2 3"/>`;
+    svg += `<text x="${padL - 4}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)">${fmtInt(v)}</text>`;
+  }
+  svg += `<line x1="${padL}" y1="${midY}" x2="${W-padR}" y2="${midY}" stroke="var(--line)"/>`;
+  data.forEach((d, i) => {
+    const cx = padL + xstep * (i + 0.5);
+    const h = Math.abs(d.avg) * yScale;
+    const y = d.avg >= 0 ? midY - h : midY;
+    const color = d.avg >= 0 ? 'var(--accent)' : 'var(--bad)';
+    svg += `<rect x="${(cx - barW/2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${color}" rx="2"><title>${d.label}: Ø ${fmtInt(d.avg)} Pkt · ${d.tage} Tage</title></rect>`;
+    svg += `<text x="${cx.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--muted)">${d.label}</text>`;
+  });
+  svg += '</svg>';
+  document.getElementById('weekdayChart').innerHTML = svg;
+}
+
+function renderDashboard() {
+  const { days } = computeAll();
+  renderYearFilter(days);
+  const { totals, filtered } = filteredTotals(days);
+
+  // KPIs
+  const k = document.getElementById('dashKpis');
+  const tile = (v, l, neg=false) => `<div class="kpi"><div class="v ${neg?'neg':''}">${v}</div><div class="l">${l}</div></div>`;
+  const punkteLabel = DASH_YEAR === 'all' ? 'Punktestand' : `Punktestand Ende ${DASH_YEAR}`;
+  // End-of-year-Prognose: cum + (verbleibende Tage × Ø Pkt der letzten 30 Tage)
+  const { days: allDays } = computeAll();
+  const tracked = allDays.filter(d => d.tracked);
+  const last30 = tracked.slice(-30);
+  const avgRecent = last30.length ? last30.reduce((s,d)=>s+d.punkte,0) / last30.length : 0;
+  const today = new Date();
+  const yearEnd = new Date(today.getFullYear(), 11, 31);
+  const daysLeft = Math.max(0, Math.round((yearEnd - today) / 86400000));
+  const lastCum = tracked.slice(-1)[0]?.cumPunkte ?? 0;
+  const projection = lastCum + daysLeft * avgRecent;
+  k.innerHTML = tile(fmtInt(totals.punkte), punkteLabel, totals.punkte < 0)
+    + tile(fmtInt(totals.tage), 'Tage erfasst')
+    + tile(fmtInt(totals.tageMitOrgasmus), 'Tage mit O.')
+    + tile(fmtNum(totals.stundenVerschlossen, 0), 'Std verschlossen')
+    + tile(fmtInt(totals.bestePunkte), 'Beste Wertung')
+    + tile(fmtInt(projection), `Prognose ${today.getFullYear()}`, projection < 0);
+
+  // Months
+  let html = '<table><thead><tr><th>Monat</th><th class="num">Tage</th><th class="num">Punkte</th><th class="num">Std</th></tr></thead><tbody>';
+  let totT=0, totP=0, totS=0;
+  for (const m of totals.monatlich) {
+    const monthName = MONTHS_DE[parseInt(m.month.slice(5,7), 10) - 1];
+    const yr = m.month.slice(0,4);
+    const label = DASH_YEAR === 'all' ? `${monthName} ${yr}` : monthName;
+    html += `<tr><td>${label}</td><td class="num">${m.tage}</td><td class="num ${m.punkte<0?'neg':'pos'}">${fmtInt(m.punkte)}</td><td class="num">${fmtNum(m.stunden,0)}</td></tr>`;
+    totT += m.tage; totP += m.punkte; totS += m.stunden;
+  }
+  html += `<tr class="total"><td>Gesamt</td><td class="num">${totT}</td><td class="num ${totP<0?'neg':'pos'}">${fmtInt(totP)}</td><td class="num">${fmtNum(totS,0)}</td></tr>`;
+  html += '</tbody></table>';
+  document.getElementById('monthTable').innerHTML = html;
+
+  // Punkte-Verlauf chart
+  renderPunkteChart(filtered);
+  renderStreakChart(days);
+  renderHeatmap(days);
+
+  // Records + Wochentage
+  renderRecords(totals);
+  renderWeekdayChart(totals.byWeekday);
+
+  // Models
+  const totalVerschl = VERSCHL.reduce((s,m)=>s+totals.hoursByModel[m], 0) || 1;
+  document.getElementById('modellDonut').innerHTML = renderModelDonut(totals.hoursByModel, totalVerschl);
+  let mhtml = '';
+  for (const m of VERSCHL) {
+    const h = totals.hoursByModel[m] || 0;
+    const pct = (h/totalVerschl*100);
+    mhtml += `<div class="modell-row">
+      <div class="name">${MODEL_LABEL[m]}</div>
+      <div class="val">${fmtNum(h,0)} h · ${fmtNum(pct,0)} %</div>
+      <div class="full"><div class="bar"><span style="width: ${pct}%; background: ${MODEL_COLOR[m]}"></span></div></div>
+    </div>`;
+  }
+  const kk = totals.hoursByModel.KK;
+  mhtml += `<div class="modell-row">
+    <div class="name">Nicht Verschlossen</div>
+    <div class="val">${fmtNum(kk,0)} h</div>
+    <div class="full"><div class="bar"><span class="warm" style="width: ${Math.min(100, kk/(kk+totalVerschl)*100)}%"></span></div></div>
+  </div>`;
+  document.getElementById('modellList').innerHTML = mhtml;
+
+  // Counters
+  document.getElementById('counters').innerHTML = `
+    <table><tbody>
+      <tr><td>Tage orgasmusfrei</td><td class="num">${totals.tageOrgasmusfrei}</td></tr>
+      <tr><td>Tage ungeöffnet</td><td class="num">${totals.tageUngeoeffnet}</td></tr>
+      <tr><td>Tage nicht verschlossen</td><td class="num">${totals.tageKeinKG}</td></tr>
+      <tr><td>Tage mit Orgasmus</td><td class="num">${totals.tageMitOrgasmus}</td></tr>
+    </tbody></table>`;
+}
+
+function updateWochentag() {
+  if (!datum.value) { wochentag.textContent = ''; return; }
+  const d = new Date(datum.value + 'T12:00:00');
+  wochentag.textContent = DAYS_DE[d.getDay()];
+}
+
+function renderAll() {
+  processExpiredRegens();
+  updateWochentag();
+  renderDatePills();
+  renderCurrentModel();
+  renderEvents();
+  renderDayTimeline();
+  renderFlagPills();
+  renderHoursOverride();
+  renderRegenButton();
+  renderHero();
+  renderDashboard();
+  updateMeta();
+}
+
+// Regen-Countdown jede Minute aktualisieren
+setInterval(() => {
+  processExpiredRegens();
+  renderRegenButton();
+}, 60000);
+
+let SAVE_STATE = 'idle'; // 'idle' | 'pending' | 'saving' | 'saved' | 'error'
+function updateMeta() {
+  let txt;
+  if (AUTH.account) {
+    if (SAVE_STATE === 'pending') txt = 'Änderung…';
+    else if (SAVE_STATE === 'saving') txt = 'speichere…';
+    else if (SAVE_STATE === 'saved')  txt = '✓ gespeichert';
+    else if (SAVE_STATE === 'error')  txt = '⚠ Fehler';
+    else txt = AUTH.account.username || 'angemeldet';
+  } else if (STATE.fileHandle) {
+    txt = `${STATE.fileHandle.name}${STATE.dirty ? ' •' : ''}`;
+  } else {
+    txt = STATE.data.events.length ? `${STATE.data.events.length} Events${STATE.dirty?' •':''}` : 'keine Datei';
+  }
+  meta.textContent = txt;
+}
+
+// =========================== AUTO-SAVE ===========================
+// Sofortiges Speichern bei jeder Änderung. Wenn schon ein Save läuft,
+// wird der nächste in eine Queue gelegt (verhindert Race-Conditions).
+let saveInFlight = false;
+let savePending  = false;
+
+async function scheduleAutosave() {
+  if (!AUTH.account) return; // ohne Login bleibt manuelles Speichern
+  if (saveInFlight) { savePending = true; return; }
+  saveInFlight = true;
+  SAVE_STATE = 'saving';
+  updateMeta();
+  try {
+    await saveToOneDrive();
+    SAVE_STATE = 'saved';
+    updateMeta();
+    setTimeout(() => { if (SAVE_STATE === 'saved') { SAVE_STATE = 'idle'; updateMeta(); } }, 1500);
+  } catch (e) {
+    console.error(e);
+    SAVE_STATE = 'error';
+    updateMeta();
+  } finally {
+    saveInFlight = false;
+    if (savePending) {
+      savePending = false;
+      // Neuen Lauf anstoßen (z.B. wenn während des Saves weitere Änderungen kamen)
+      scheduleAutosave();
+    }
+  }
+}
+
+// =========================== EVENT BINDINGS ===========================
+datum.value = todayIso();
+datum.addEventListener('change', () => { renderAll(); });
+
+function addQuickEvent(model, time) {
+  const iso = datum.value;
+  STATE.data.events.push({ date: iso, time, type: model });
+  STATE.dirty = true;
+  persistLocal();
+  scheduleAutosave();
+  showToast(model === 'OR' ? `Orgasmus ${time}` : `${MODEL_LABEL[model]} ${time}`);
+  renderAll();
+}
+
+const HOLD_MS = 800;
+document.querySelectorAll('.qb').forEach(btn => {
+  let timer = null;
+  let fired  = false;
+  const start = (e) => {
+    if (btn.disabled) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    fired = false;
+    btn.classList.add('holding');
+    timer = setTimeout(() => {
+      fired = true;
+      btn.classList.remove('holding');
+      const model = btn.dataset.model;
+      addQuickEvent(model, nowHM());
+      if (navigator.vibrate) navigator.vibrate(30);
+    }, HOLD_MS);
+  };
+  const cancel = () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    btn.classList.remove('holding');
+  };
+  btn.addEventListener('pointerdown', start);
+  btn.addEventListener('pointerup', cancel);
+  btn.addEventListener('pointercancel', cancel);
+  btn.addEventListener('pointerleave', cancel);
+  // Kurze Taps verhindern: zeige Hinweis statt Aktion
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (!fired && !timer) showToast('Halten zum Speichern');
+  });
+});
+
+document.getElementById('resetDay').addEventListener('click', () => {
+  const iso = datum.value;
+  const evCnt  = STATE.data.events.filter(e => e.date === iso).length;
+  const hasOv  = STATE.data.days && STATE.data.days[iso] && Object.keys(STATE.data.days[iso]).length > 0;
+  if (evCnt === 0 && !hasOv) { showToast('Tag ist leer'); return; }
+  const parts = [];
+  if (evCnt > 0) parts.push(`${evCnt} Eintrag${evCnt === 1 ? '' : 'e'}`);
+  if (hasOv)     parts.push('Flags + Stunden-Override');
+  if (!confirm(`Vom ${iso} löschen: ${parts.join(' + ')}?`)) return;
+  STATE.data.events = STATE.data.events.filter(e => e.date !== iso);
+  if (STATE.data.days) delete STATE.data.days[iso];
+  STATE.dirty = true; persistLocal(); scheduleAutosave();
+  renderAll();
+});
+
+document.getElementById('quickSave').addEventListener('click', async () => {
+  try {
+    if (AUTH.account) {
+      await saveToOneDrive();
+      showToast('In OneDrive gespeichert');
+    } else {
+      const res = await saveFile();
+      showToast(res.method === 'fsa' ? 'Gespeichert' : 'Heruntergeladen');
+    }
+    renderAll();
+  } catch (e) { showToast('Fehler beim Speichern', true); console.error(e); }
+});
+
+document.getElementById('btnLogin').addEventListener('click', login);
+document.getElementById('btnLogout').addEventListener('click', logout);
+
+document.getElementById('btnLoad').addEventListener('click', async () => {
+  try {
+    const r = await openFile();
+    if (!r) return;
+    showToast(`${STATE.data.events.length} Events geladen`);
+    renderAll();
+    document.getElementById('fileStatus').textContent = `Geladen: ${r.name} (${STATE.data.events.length} Events)`;
+  } catch (e) { showToast('Datei-Fehler', true); console.error(e); }
+});
+document.getElementById('btnSave').addEventListener('click', async () => {
+  try {
+    const r = await saveFile();
+    showToast(r.method === 'fsa' ? 'In Datei gespeichert' : 'Heruntergeladen');
+    renderAll();
+  } catch (e) { showToast('Speichern fehlgeschlagen', true); console.error(e); }
+});
+document.getElementById('btnExportCsv').addEventListener('click', () => {
+  exportCsv(); showToast('CSV exportiert');
+});
+
+document.getElementById('btnBackup').addEventListener('click', () => {
+  const stamp = new Date().toISOString().slice(0,10);
+  const blob = new Blob([JSON.stringify(STATE.data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `locked-backup-${stamp}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(a.href);
+  showToast('Backup heruntergeladen');
+});
+
+document.getElementById('btnExportXlsx').addEventListener('click', () => {
+  if (typeof XLSX === 'undefined') { showToast('Excel-Library nicht geladen', true); return; }
+  const wb = XLSX.utils.book_new();
+
+  // Events Sheet
+  const evRows = [['Datum','Zeit','Typ','Geschätzt']];
+  for (const e of STATE.data.events.slice().sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time))) {
+    evRows.push([e.date, e.time, e.type, e.time_estimated ? 'x' : '']);
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(evRows), 'Events');
+
+  // Days Sheet
+  const dayRows = [['Datum','Orgasmusfrei','Ungeöffnet','Nicht Verschlossen','Stunden Verschlossen','Notiz']];
+  const notes = STATE.data.notes || {};
+  const allDates = new Set([...Object.keys(STATE.data.days || {}), ...Object.keys(notes)]);
+  for (const iso of [...allDates].sort()) {
+    const ov = (STATE.data.days || {})[iso] || {};
+    dayRows.push([
+      iso,
+      ov.orgasmusfrei ? 'x' : '',
+      ov.ungeoeffnet  ? 'x' : '',
+      ov.keinKG       ? 'x' : '',
+      typeof ov.hoursLocked === 'number' ? ov.hoursLocked : '',
+      notes[iso] || ''
+    ]);
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dayRows), 'Days');
+
+  const stamp = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `locked-export-${stamp}.xlsx`);
+  showToast('Excel-Export heruntergeladen');
+});
+
+document.querySelectorAll('#chartScale .seg-opt').forEach(opt => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('#chartScale .seg-opt').forEach(o => o.classList.remove('active'));
+    opt.classList.add('active');
+    CHART_SCALE = opt.dataset.scale;
+    const { days } = computeAll();
+    const { filtered } = filteredTotals(days);
+    renderPunkteChart(filtered);
+  });
+});
+
+document.getElementById('detailsToggle').addEventListener('click', () => {
+  DETAILS_OPEN = !DETAILS_OPEN;
+  document.getElementById('detailsSection').classList.toggle('hide', !DETAILS_OPEN);
+  document.getElementById('detailsToggle').textContent =
+    DETAILS_OPEN ? 'Details ausblenden ▴' : 'Details anzeigen ▾';
+});
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    const which = t.dataset.tab;
+    document.getElementById('page-eintrag').classList.toggle('hide', which !== 'eintrag');
+    document.getElementById('page-dashboard').classList.toggle('hide', which !== 'dashboard');
+    document.getElementById('page-daten').classList.toggle('hide', which !== 'daten');
+    document.getElementById('savebar').classList.toggle('hide', which !== 'eintrag');
+    if (which === 'dashboard') renderDashboard();
+  });
+});
+
+// Show FSA hint
+document.getElementById('fsaHint').textContent = window.showOpenFilePicker
+  ? 'Tipp: nach „Laden…" einmal die locked.json aus dem OneDrive-Ordner auswählen — die Browser-Sitzung merkt sich die Datei zum direkten Schreiben.'
+  : 'Hinweis: Dein Browser unterstützt kein direktes Schreiben. „Speichern" lädt die Datei herunter, die du dann in den OneDrive-Ordner kopierst.';
+
+// Service Worker (PWA-Install + Offline-Caching + Update-Hinweis)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    reg.addEventListener('updatefound', () => {
+      const sw = reg.installing;
+      if (!sw) return;
+      sw.addEventListener('statechange', () => {
+        if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+          showUpdateBanner(sw);
+        }
+      });
+    });
+  }).catch(e => console.warn('SW reg failed', e));
+  // Wenn neuer SW Kontrolle übernimmt → einmal reloaden
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading) return; reloading = true;
+    window.location.reload();
+  });
+}
+
+function showUpdateBanner(sw) {
+  let banner = document.getElementById('updateBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'updateBanner';
+    banner.className = 'update-banner';
+    banner.innerHTML = `<span>Neue Version verfügbar</span><button class="btn primary" type="button">Aktualisieren</button>`;
+    document.body.appendChild(banner);
+    banner.querySelector('button').addEventListener('click', () => sw.postMessage('skipWaiting'));
+  }
+}
+
+// Bei Wiederkehr von Offline: ausstehende Änderungen automatisch speichern
+window.addEventListener('online', () => {
+  if (STATE.dirty && AUTH.account) {
+    showToast('Wieder online — speichere…');
+    scheduleAutosave();
+  }
+});
+window.addEventListener('offline', () => {
+  showToast('Offline — Änderungen werden lokal gemerkt');
+});
+
+// Init
+loadFromLocalStorage();
+document.getElementById('savebar').classList.remove('hide');
+renderAll();
+initAuth().then(() => {
+  if (AUTH.account) loadFromOneDrive(true);
+});
+
+// =========================== NATIVE (Capacitor) ===========================
+const APP_VERSION = '__APP_VERSION__'; // wird beim Build ersetzt
+const RELEASE_REPO = 'TheMachtin/locked-android';
+const IS_NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+
+function versionAsInt(v) {
+  // "1.0.42" → 100042 (max 999 pro Segment)
+  return v.replace(/^v/, '').split('.').reduce((acc, part) => acc * 1000 + (parseInt(part, 10) || 0), 0);
+}
+
+async function checkForAppUpdate() {
+  if (!APP_VERSION || APP_VERSION.startsWith('__')) return;
+  try {
+    const r = await fetch(`https://api.github.com/repos/${RELEASE_REPO}/releases/latest`, { cache: 'no-cache' });
+    if (!r.ok) return;
+    const rel = await r.json();
+    const latest = (rel.tag_name || '').replace(/^v/, '');
+    if (!latest) return;
+    if (versionAsInt(latest) <= versionAsInt(APP_VERSION)) return;
+    const apk = (rel.assets || []).find(a => a.name.toLowerCase().endsWith('.apk'));
+    const url = apk ? apk.browser_download_url : rel.html_url;
+    showAppUpdateBanner(latest, url);
+  } catch (e) { console.warn('Update-Check fehlgeschlagen', e); }
+}
+
+function showAppUpdateBanner(latest, url) {
+  if (document.getElementById('appUpdateBanner')) return;
+  const b = document.createElement('div');
+  b.id = 'appUpdateBanner';
+  b.className = 'update-banner';
+  b.innerHTML = `<span>Neue App-Version <b>${latest}</b> verfügbar</span><a href="${url}" target="_blank" class="btn primary" style="text-decoration:none;padding:8px 14px">Herunterladen</a>`;
+  document.body.appendChild(b);
+}
+
+async function setupNativeNotifications() {
+  if (!IS_NATIVE) return;
+  const LN = window.Capacitor.Plugins.LocalNotifications;
+  if (!LN) return;
+  try {
+    const perm = await LN.checkPermissions();
+    if (perm.display !== 'granted') {
+      const r = await LN.requestPermissions();
+      if (r.display !== 'granted') return;
+    }
+    // Alle alten Reminders löschen und neuen täglichen 08:00 setzen
+    const existing = await LN.getPending();
+    if (existing?.notifications?.length) {
+      await LN.cancel({ notifications: existing.notifications.map(n => ({ id: n.id })) });
+    }
+    await LN.schedule({
+      notifications: [{
+        id: 1,
+        title: 'Locked',
+        body: 'Zeit für deinen Eintrag.',
+        schedule: { on: { hour: 8, minute: 0 }, repeats: true, allowWhileIdle: true },
+      }],
+    });
+  } catch (e) { console.warn('LocalNotifications setup failed', e); }
+}
+
+// Version im Footer anzeigen (subtil)
+(function showVersion() {
+  const v = APP_VERSION.startsWith('__') ? 'dev' : APP_VERSION;
+  const meta = document.getElementById('meta');
+  if (meta) meta.title = `Locked v${v}`;
+})();
+
+// Native-Init: nach kurzer Verzögerung, damit UI zuerst rendert
+setTimeout(() => {
+  checkForAppUpdate();
+  setupNativeNotifications();
+}, 1500);
+</script>
+</body>
+</html>
