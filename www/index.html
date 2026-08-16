@@ -2239,6 +2239,45 @@ initAuth().then(() => {
 const APP_VERSION = '__APP_VERSION__'; // wird beim Build ersetzt
 const RELEASE_REPO = 'TheMachtin/locked-android';
 const IS_NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const NATIVE_FILE = 'locked.json';
+const NATIVE_DIR  = 'DATA'; // App-privater Storage — überlebt Updates, weg bei Deinstall
+
+async function persistLocalNative() {
+  if (!IS_NATIVE) return;
+  const FS = window.Capacitor.Plugins.Filesystem;
+  if (!FS) return;
+  try {
+    await FS.writeFile({
+      path: NATIVE_FILE,
+      data: JSON.stringify(STATE.data, null, 2),
+      directory: NATIVE_DIR,
+      encoding: 'utf8',
+    });
+  } catch (e) { console.warn('Native persist failed', e); }
+}
+
+async function loadFromNativeFile() {
+  if (!IS_NATIVE) return false;
+  const FS = window.Capacitor.Plugins.Filesystem;
+  if (!FS) return false;
+  try {
+    const r = await FS.readFile({ path: NATIVE_FILE, directory: NATIVE_DIR, encoding: 'utf8' });
+    const parsed = JSON.parse(r.data);
+    if (parsed && (parsed.events || parsed.days)) {
+      STATE.data = parsed;
+      return true;
+    }
+  } catch (e) {
+    // Datei existiert noch nicht — kein Fehler
+  }
+  return false;
+}
+
+// persistLocal um Native-Persist erweitern
+if (typeof persistLocal === 'function') {
+  const _origPersist = persistLocal;
+  persistLocal = function() { _origPersist(); persistLocalNative(); };
+}
 
 function versionAsInt(v) {
   // "1.0.42" → 100042 (max 999 pro Segment)
@@ -2382,12 +2421,25 @@ if (_origAddQuickEvent) {
   if (meta) meta.title = `Locked v${v}`;
 })();
 
-// Native-Init: nach kurzer Verzögerung, damit UI zuerst rendert
-setTimeout(() => {
+// Native-Init: Filesystem-Datei laden (falls vorhanden), sonst bleibt localStorage-Cache
+async function initNative() {
+  if (!IS_NATIVE) return;
+  const loaded = await loadFromNativeFile();
+  if (loaded) {
+    STATE.dirty = false;
+    renderAll();
+  } else {
+    // Erstmalig oder frisch installiert: aktuellen State ins Native-File spiegeln
+    persistLocalNative();
+  }
+}
+
+setTimeout(async () => {
+  await initNative();
   processInactivityEscalation();
   checkForAppUpdate();
   setupNativeNotifications();
-}, 1500);
+}, 300);
 </script>
 </body>
 </html>
