@@ -2269,6 +2269,66 @@ function showAppUpdateBanner(latest, url) {
   document.body.appendChild(b);
 }
 
+// =========================== INAKTIVITÄTS-LOGIK ===========================
+const INACTIVITY_REMINDER_DAYS = 2;   // ab wann erste Erinnerung
+const INACTIVITY_AUTO_KK_DAYS  = 4;   // ab wann Auto-Nicht-Verschlossen + tägl. Orgasmus
+
+function lastRealInteractionMs() {
+  const evs = (STATE.data.events || []).filter(e => !e.auto_inactivity && !e.auto_regen_timeout);
+  if (!evs.length) return null;
+  const latest = evs.reduce((a,b) => (b.date+b.time) > (a.date+a.time) ? b : a);
+  return new Date(`${latest.date}T${latest.time}:00`).getTime();
+}
+
+function pad(n) { return String(n).padStart(2,'0'); }
+function isoLocal(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+
+/** Nach 4 Tagen ohne Interaktion: Auto-KK am Deadline-Zeitpunkt + tägliche Auto-Orgasmen bis heute. */
+function processInactivityEscalation() {
+  const lastMs = lastRealInteractionMs();
+  if (!lastMs) return;
+  const now = Date.now();
+  const daysSince = (now - lastMs) / 86400000;
+  if (daysSince < INACTIVITY_AUTO_KK_DAYS) return;
+
+  const kkAt = new Date(lastMs + INACTIVITY_AUTO_KK_DAYS * 86400000);
+  const kkIso  = isoLocal(kkAt);
+  const kkTime = `${pad(kkAt.getHours())}:${pad(kkAt.getMinutes())}`;
+  let inserted = 0, kkNew = false;
+
+  // 1) Auto-KK einfügen falls noch nicht da
+  const hasKk = STATE.data.events.some(e => e.type === 'KK' && e.date === kkIso && e.time === kkTime && e.auto_inactivity);
+  if (!hasKk) {
+    STATE.data.events.push({ date: kkIso, time: kkTime, type: 'KK', auto_inactivity: true });
+    kkNew = true;
+  }
+
+  // 2) Für jeden Tag ab kkAt+1 bis heute: eine Auto-Orgasmus-Erfassung wenn nicht schon da
+  const cursor = new Date(kkAt);
+  cursor.setDate(cursor.getDate() + 1);
+  cursor.setHours(0,0,0,0);
+  const today = new Date();
+  today.setHours(23,59,59,999);
+  while (cursor <= today) {
+    const iso = isoLocal(cursor);
+    const exists = STATE.data.events.some(e => e.type === 'OR' && e.date === iso && e.auto_inactivity);
+    if (!exists) {
+      STATE.data.events.push({ date: iso, time: '12:00', type: 'OR', auto_inactivity: true, time_estimated: true });
+      inserted++;
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  if (kkNew || inserted > 0) {
+    STATE.data.events.sort((a,b) => (a.date + a.time).localeCompare(b.date + b.time));
+    STATE.dirty = true; persistLocal(); scheduleAutosave();
+    const parts = [];
+    if (kkNew) parts.push('Nicht Verschlossen');
+    if (inserted > 0) parts.push(`${inserted}× Orgasmus`);
+    showToast(`Inaktivität: ${parts.join(' + ')} eingetragen`, true);
+  }
+}
+
 async function setupNativeNotifications() {
   if (!IS_NATIVE) return;
   const LN = window.Capacitor.Plugins.LocalNotifications;
@@ -2279,20 +2339,40 @@ async function setupNativeNotifications() {
       const r = await LN.requestPermissions();
       if (r.display !== 'granted') return;
     }
-    // Alle alten Reminders löschen und neuen täglichen 08:00 setzen
+    // Alle alten Reminders löschen
     const existing = await LN.getPending();
     if (existing?.notifications?.length) {
       await LN.cancel({ notifications: existing.notifications.map(n => ({ id: n.id })) });
+    }
+    // Reminder ab (lastInteraction + 2 Tage), dann täglich wiederholend
+    const lastMs = lastRealInteractionMs();
+    if (!lastMs) return;
+    const firstAt = new Date(lastMs + INACTIVITY_REMINDER_DAYS * 86400000);
+    if (firstAt.getTime() < Date.now()) {
+      // Bereits überfällig — heute 08:00 als Startzeitpunkt nehmen
+      const t = new Date();
+      t.setHours(8, 0, 0, 0);
+      if (t.getTime() < Date.now()) t.setDate(t.getDate() + 1);
+      firstAt.setTime(t.getTime());
     }
     await LN.schedule({
       notifications: [{
         id: 1,
         title: 'Locked',
-        body: 'Zeit für deinen Eintrag.',
-        schedule: { on: { hour: 8, minute: 0 }, repeats: true, allowWhileIdle: true },
+        body: 'Zeit für einen Eintrag — sonst greift ab Tag 4 die Auto-Escalation.',
+        schedule: { at: firstAt, repeats: true, every: 'day', allowWhileIdle: true },
       }],
     });
   } catch (e) { console.warn('LocalNotifications setup failed', e); }
+}
+
+// Nach jeder Interaktion Reminder neu setzen (Timer zurücksetzen)
+const _origAddQuickEvent = typeof addQuickEvent === 'function' ? addQuickEvent : null;
+if (_origAddQuickEvent) {
+  window.addQuickEvent = function(model, time) {
+    _origAddQuickEvent(model, time);
+    setupNativeNotifications();
+  };
 }
 
 // Version im Footer anzeigen (subtil)
@@ -2304,6 +2384,7 @@ async function setupNativeNotifications() {
 
 // Native-Init: nach kurzer Verzögerung, damit UI zuerst rendert
 setTimeout(() => {
+  processInactivityEscalation();
   checkForAppUpdate();
   setupNativeNotifications();
 }, 1500);
