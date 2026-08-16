@@ -2304,8 +2304,45 @@ function showAppUpdateBanner(latest, url) {
   const b = document.createElement('div');
   b.id = 'appUpdateBanner';
   b.className = 'update-banner';
-  b.innerHTML = `<span>Neue App-Version <b>${latest}</b> verfügbar</span><a href="${url}" target="_blank" class="btn primary" style="text-decoration:none;padding:8px 14px">Herunterladen</a>`;
+  const btnLabel = IS_NATIVE ? 'Installieren' : 'Herunterladen';
+  b.innerHTML = `<span>Neue App-Version <b>${latest}</b> verfügbar</span><button type="button" class="btn primary" style="padding:8px 14px">${btnLabel}</button>`;
   document.body.appendChild(b);
+  b.querySelector('button').addEventListener('click', () => {
+    if (IS_NATIVE) downloadAndInstallApk(url, latest);
+    else window.open(url, '_blank');
+  });
+}
+
+async function downloadAndInstallApk(url, version) {
+  const FS = window.Capacitor.Plugins.Filesystem;
+  const AppInstaller = window.Capacitor.Plugins.AppInstaller;
+  if (!FS || !AppInstaller) { showToast('Update-Plugin fehlt', true); return; }
+  const banner = document.getElementById('appUpdateBanner');
+  const btn = banner ? banner.querySelector('button') : null;
+  const setLabel = t => { if (btn) btn.textContent = t; };
+  try {
+    setLabel('Lade…');
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const blob = await resp.blob();
+    // Blob → base64 (chunked, damit große Dateien nicht den Stack sprengen)
+    const b64 = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload  = () => res(String(r.result).split(',')[1]);
+      r.onerror = () => rej(r.error);
+      r.readAsDataURL(blob);
+    });
+    setLabel('Speichere…');
+    const filename = `locked-${(version||'update').replace(/[^0-9.]/g,'')}.apk`;
+    const w = await FS.writeFile({ path: filename, data: b64, directory: 'CACHE' });
+    setLabel('Installiere…');
+    await AppInstaller.installApk({ path: w.uri });
+    setLabel('OK');
+  } catch (e) {
+    console.error(e);
+    showToast('Update fehlgeschlagen: ' + (e.message || e), true);
+    setLabel('Erneut versuchen');
+  }
 }
 
 // =========================== INAKTIVITÄTS-LOGIK ===========================

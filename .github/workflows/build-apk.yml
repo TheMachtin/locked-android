@@ -57,6 +57,38 @@ jobs:
       - name: Sync web assets to native
         run: npx cap sync android
 
+      - name: Install AppInstaller plugin + FileProvider (native)
+        run: |
+          # Java-Klassen kopieren
+          mkdir -p android/app/src/main/java/app/locked/themachtin/plugins
+          cp native/java/AppInstallerPlugin.java android/app/src/main/java/app/locked/themachtin/plugins/
+          cp native/java/MainActivity.java android/app/src/main/java/app/locked/themachtin/MainActivity.java
+          # FileProvider Paths-XML
+          mkdir -p android/app/src/main/res/xml
+          cp native/xml/file_provider_paths.xml android/app/src/main/res/xml/
+          # AndroidManifest patchen: REQUEST_INSTALL_PACKAGES + FileProvider
+          python3 << 'PY'
+          import re
+          p = 'android/app/src/main/AndroidManifest.xml'
+          with open(p) as f: c = f.read()
+          if 'REQUEST_INSTALL_PACKAGES' not in c:
+              c = c.replace('<application',
+                  '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <application', 1)
+          if 'FileProvider' not in c:
+              fp = ('        <provider\n'
+                    '            android:name="androidx.core.content.FileProvider"\n'
+                    '            android:authorities="${applicationId}.fileprovider"\n'
+                    '            android:exported="false"\n'
+                    '            android:grantUriPermissions="true">\n'
+                    '            <meta-data\n'
+                    '                android:name="android.support.FILE_PROVIDER_PATHS"\n'
+                    '                android:resource="@xml/file_provider_paths" />\n'
+                    '        </provider>\n')
+              c = c.replace('</application>', fp + '    </application>', 1)
+          with open(p, 'w') as f: f.write(c)
+          print('Manifest patched OK')
+          PY
+
       - name: Configure app version + name
         run: |
           # applicationId & version in android/app/build.gradle setzen
