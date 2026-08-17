@@ -509,8 +509,13 @@
             Verschlossen ab Beginn der aktuellen verschlossenen Phase
             (Fallback: 00:00 des ersten Streak-Tages)<br>
           • <b>Orgasmus-Zähler</b>: Anzahl der OR-Events (inkl. automatisch erzeugter
-            aus der Inaktivitäts-Escalation); Ø Abstand = Spanne erster↔letzter Orgasmus
-            geteilt durch die Anzahl der Lücken
+            aus der Inaktivitäts-Escalation); die Fenster 30/90/365 T rollieren ab dem
+            gewählten Tag, hängen also nicht an Kalendergrenzen; Ø Abstand =
+            Spanne erster↔letzter Orgasmus geteilt durch die Anzahl der Lücken<br>
+          • <b>Zeitbalken im Einträge-Block</b>: beim heutigen Tag nur bis zur aktuellen
+            Uhrzeit gefüllt. Die <i>Punkte</i> rechnen den laufenden Zustand dagegen bis
+            Mitternacht hoch — der Balken zeigt also den Ist-Stand, die Punkte den
+            voraussichtlichen Tagesabschluss
         </div>
       </details>
     </div>
@@ -1562,10 +1567,14 @@ function orgasmEvents() {
     .sort((a,b) => (a.date + a.time).localeCompare(b.date + b.time));
 }
 
-/** Zähler rund um Orgasmen, bezogen auf das gewählte Datum (Jahr/Monat/Tag) + global. */
+/** Zähler rund um Orgasmen. Alles bezogen auf den gewählten Tag: bei heute auf
+ *  "jetzt", bei einem vergangenen Tag auf dessen Ende. Die Fenster rollieren
+ *  (letzte N Tage) statt an Kalendergrenzen zu hängen — ein Kalenderjahr steht
+ *  im Januar sonst auf 0 und sagt nichts aus. */
 function orgasmStats(iso) {
-  const evs = orgasmEvents();
-  const year  = iso.slice(0,4);
+  const refMs = refTimeFor(iso).getTime();
+  const all   = orgasmEvents();
+  const evs   = all.filter(e => eventDateTime(e).getTime() <= refMs);
   const month = iso.slice(0,7);
   const last  = evs.length ? evs[evs.length - 1] : null;
   const lastMs = last ? eventDateTime(last).getTime() : null;
@@ -1576,17 +1585,20 @@ function orgasmStats(iso) {
     const firstMs = eventDateTime(evs[0]).getTime();
     avgGapMs = (lastMs - firstMs) / (evs.length - 1);
   }
-  const since30 = Date.now() - 30 * 86400000;
+  const windowCount = (days) => {
+    const from = refMs - days * 86400000;
+    return evs.filter(e => eventDateTime(e).getTime() >= from).length;
+  };
 
   return {
     total: evs.length,
     auto:  evs.filter(e => e.auto_inactivity).length,
-    year:  evs.filter(e => e.date.startsWith(year)).length,
     month: evs.filter(e => e.date.startsWith(month)).length,
     day:   evs.filter(e => e.date === iso).length,
-    last30: evs.filter(e => eventDateTime(e).getTime() >= since30).length,
-    last, lastMs, avgGapMs,
-    yearLabel: year,
+    last30:  windowCount(30),
+    last90:  windowCount(90),
+    last365: windowCount(365),
+    last, lastMs, refMs, avgGapMs,
     monthLabel: MONTHS_DE[parseInt(month.slice(5,7), 10) - 1],
   };
 }
@@ -1594,15 +1606,14 @@ function orgasmStats(iso) {
 function renderOrgasmCounter() {
   const iso = datum.value;
   const s = orgasmStats(iso);
-  const nowMs = Date.now();
   const tile = (v, l) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
 
   document.getElementById('orgCounter').innerHTML =
-      tile(fmtInt(s.total), 'Gesamt')
-    + tile(fmtInt(s.year),  `Jahr ${s.yearLabel}`)
-    + tile(fmtInt(s.month), s.monthLabel)
-    + tile(s.lastMs != null ? fmtDurationShort(nowMs - s.lastMs) : '—', 'seit letztem')
-    + tile(fmtInt(s.last30), 'letzte 30 T')
+      tile(fmtInt(s.month), s.monthLabel)
+    + tile(fmtInt(s.last30),  'letzte 30 T')
+    + tile(fmtInt(s.last90),  'letzte 90 T')
+    + tile(fmtInt(s.last365), 'letzte 365 T')
+    + tile(s.lastMs != null ? fmtDurationShort(s.refMs - s.lastMs) : '—', 'seit letztem')
     + tile(s.avgGapMs != null ? fmtNum(s.avgGapMs / 86400000, 1) + ' T' : '—', 'Ø Abstand');
 
   const isToday = iso === todayIso();
@@ -1616,7 +1627,7 @@ function renderOrgasmCounter() {
   } else {
     const autoNote = s.auto > 0 ? ` · ${s.auto} automatisch (Inaktivität)` : '';
     lastEl.innerHTML = `Letzter: <b>${fmtDateShort(s.last.date)} ${s.last.time}</b> ` +
-      `(${fmtAgo(nowMs - s.lastMs)})${autoNote}`;
+      `(${fmtAgo(s.refMs - s.lastMs)})${autoNote}`;
   }
 }
 
@@ -1742,6 +1753,13 @@ function renderDayTimeline() {
   const wrap = document.getElementById('dayTimeline');
   if (!d) { wrap.innerHTML = ''; return; }
 
+  // Heute nur bis zur aktuellen Uhrzeit einfärben — der Rest des Tages ist
+  // noch nicht passiert und würde als "schon getragen" missverstanden.
+  const nowD = new Date();
+  const nowMin = (iso === todayIso())
+    ? Math.min(24*60, nowD.getHours()*60 + nowD.getMinutes())
+    : 24*60;
+
   // Segmente aus dem Tagesverlauf rekonstruieren
   const segments = []; // { start, end, model }
   let cur = d.prevEndModel || 'KK';
@@ -1754,6 +1772,10 @@ function renderDayTimeline() {
     curMin = t;
   }
   if (curMin < 24*60) segments.push({ start: curMin, end: 24*60, model: cur });
+  // auf "jetzt" beschneiden
+  const drawn = segments
+    .filter(s => s.start < nowMin)
+    .map(s => (s.end > nowMin ? { ...s, end: nowMin } : s));
 
   const orMarks = d.events.filter(e => e.type === 'OR')
     .map(e => { const [h,m] = e.time.split(':').map(Number); return h*60+m; });
@@ -1766,10 +1788,17 @@ function renderDayTimeline() {
   let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">`;
   // Hintergrund
   svg += `<rect x="${padL}" y="${top}" width="${innerW}" height="${barH}" fill="var(--panel-2)" rx="4"/>`;
-  // Segmente
-  for (const s of segments) {
+  // Segmente (nur bis "jetzt")
+  const hhmm = (min) => `${String(Math.floor(min/60)).padStart(2,'0')}:${String(min%60).padStart(2,'0')}`;
+  for (const s of drawn) {
     const x = scale(s.start), w = scale(s.end) - x;
-    svg += `<rect x="${x.toFixed(1)}" y="${top}" width="${w.toFixed(1)}" height="${barH}" fill="${colors[s.model]}"><title>${MODEL_LABEL[s.model]} ${String(Math.floor(s.start/60)).padStart(2,'0')}:${String(s.start%60).padStart(2,'0')}–${String(Math.floor(s.end/60)).padStart(2,'0')}:${String(s.end%60).padStart(2,'0')}</title></rect>`;
+    const bis = (s.end === nowMin && nowMin < 24*60) ? `${hhmm(s.end)} (jetzt)` : hhmm(s.end);
+    svg += `<rect x="${x.toFixed(1)}" y="${top}" width="${w.toFixed(1)}" height="${barH}" fill="${colors[s.model]}"><title>${MODEL_LABEL[s.model]} ${hhmm(s.start)}–${bis}</title></rect>`;
+  }
+  // "Jetzt"-Marke am Ende des gefärbten Bereichs
+  if (nowMin < 24*60) {
+    const x = scale(nowMin);
+    svg += `<line x1="${x.toFixed(1)}" y1="${top-3}" x2="${x.toFixed(1)}" y2="${top+barH+3}" stroke="var(--text)" stroke-width="1.5" opacity=".8"><title>jetzt ${hhmm(nowMin)}</title></line>`;
   }
   // Orgasmus-Marker
   for (const m of orMarks) {
@@ -2319,7 +2348,7 @@ function renderDashboard() {
       <tr><td>Tage mit Orgasmus</td><td class="num">${totals.tageMitOrgasmus}</td></tr>
       <tr><td>Orgasmen (Zeitraum)</td><td class="num">${totals.orgasmen}</td></tr>
       <tr><td>davon automatisch</td><td class="num">${totals.orgasmenAuto}</td></tr>
-      <tr><td>Orgasmen gesamt</td><td class="num">${os.total}</td></tr>
+      <tr><td>Orgasmen gesamt</td><td class="num">${orgasmEvents().length}</td></tr>
       <tr><td>Letzter Orgasmus</td><td class="num">${lastOrgasmCell}</td></tr>
     </tbody></table>`;
 }
@@ -2352,6 +2381,7 @@ setInterval(() => {
   renderRegenButton();
   renderHero();
   renderOrgasmCounter();
+  renderDayTimeline();   // "jetzt"-Marke mitziehen
 }, 60000);
 
 let SAVE_STATE = 'idle'; // 'idle' | 'pending' | 'saving' | 'saved' | 'error'
