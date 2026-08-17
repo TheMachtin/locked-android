@@ -111,7 +111,9 @@
   .streak-item { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
     padding: 10px 4px; text-align: center; }
   .streak-item .days { font-size: 20px; font-weight: 700; color: var(--text);
-    font-variant-numeric: tabular-nums; line-height: 1; }
+    font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .streak-item .hrs { font-size: 11px; font-weight: 600; color: var(--muted);
+    font-variant-numeric: tabular-nums; white-space: nowrap; margin-left: 3px; }
   .streak-item .label { font-size: 10px; color: var(--muted); text-transform: uppercase;
     letter-spacing: .5px; margin-top: 4px; font-weight: 600; }
   .streak-item .since { font-size: 10px; color: var(--muted); margin-top: 4px;
@@ -366,6 +368,13 @@
       </details>
     </div>
 
+    <!-- Orgasmus-Zähler -->
+    <div class="card">
+      <h2>Orgasmus-Zähler <span class="sub" id="orgSub"></span></h2>
+      <div class="kpis" id="orgCounter"></div>
+      <div class="small" id="orgLast"></div>
+    </div>
+
     <!-- Einträge -->
     <div class="card">
       <h2>Einträge am <span class="sub" id="evDateLabel"></span></h2>
@@ -492,7 +501,14 @@
           • <b>Nicht Verschlossen</b>: ganzer Tag ohne Käfig<br>
           • <b>Punkte/Tag</b>: OF-Streak + UÖ-Streak + (Stunden verschlossen × 0,5) − 10 (Orgasmus) − 5 (Nicht Verschlossen)<br>
           • <b>Streaks</b>: bei orgasmusfreiem/ungeöffnetem Tag: <code>vortag × 1,07 + basis</code> (Basis 3 bzw. 5)<br>
-          • <b>Stunden verschlossen</b>: HT + NS + PC (ohne KK)
+          • <b>Stunden verschlossen</b>: HT + NS + PC (ohne KK)<br>
+          • <b>Stunden in Klammern (Hero)</b>: exakte Dauer seit Streak-Beginn —
+            Orgasmusfrei ab letztem Orgasmus, Ungeöffnet ab letztem Öffnen,
+            Verschlossen ab Beginn der aktuellen verschlossenen Phase
+            (Fallback: 00:00 des ersten Streak-Tages)<br>
+          • <b>Orgasmus-Zähler</b>: Anzahl der OR-Events (inkl. automatisch erzeugter
+            aus der Inaktivitäts-Escalation); Ø Abstand = Spanne erster↔letzter Orgasmus
+            geteilt durch die Anzahl der Lücken
         </div>
       </details>
     </div>
@@ -802,6 +818,43 @@ function isoDateAdd(iso, days) {
   return d.toISOString().slice(0,10);
 }
 
+/** Bezugszeitpunkt für Dauer-Berechnungen: heute = jetzt, sonst Tagesende (00:00 des Folgetags). */
+function refTimeFor(iso) {
+  const today = todayIso();
+  if (iso === today) return new Date();
+  return new Date(isoDateAdd(iso, 1) + 'T00:00:00');
+}
+/** ms → ganze Stunden (abgerundet) */
+function msToHours(ms) { return Math.floor(Math.max(0, ms) / 3600000); }
+/** ms → "12 T 5 h" bzw. "5 h 12 min" */
+function fmtDurationShort(ms) {
+  if (ms == null || !isFinite(ms)) return '—';
+  const totalMin = Math.floor(Math.max(0, ms) / 60000);
+  const d = Math.floor(totalMin / 1440), h = Math.floor((totalMin % 1440) / 60), m = totalMin % 60;
+  if (d > 0) return `${d} T ${h} h`;
+  if (h > 0) return `${h} h ${m} min`;
+  return `${m} min`;
+}
+/** ms-Abstand → "vor 12 T 5 h" / "gerade eben" (negativ = Zeitpunkt liegt noch vor uns) */
+function fmtAgo(ms) {
+  if (ms == null || !isFinite(ms)) return '—';
+  if (ms < 0) return 'später heute';
+  if (ms < 60000) return 'gerade eben';
+  return 'vor ' + fmtDurationShort(ms);
+}
+/** ms → "12 T 5 h 37 min" (für Tooltips) */
+function fmtDurationLong(ms) {
+  if (ms == null || !isFinite(ms)) return '—';
+  const totalMin = Math.floor(Math.max(0, ms) / 60000);
+  const d = Math.floor(totalMin / 1440), h = Math.floor((totalMin % 1440) / 60), m = totalMin % 60;
+  return `${d} T ${h} h ${m} min`;
+}
+/** "2026-08-14" → "14.08.26" */
+function fmtDateShort(iso) {
+  const [y,m,d] = iso.split('-');
+  return `${d}.${m}.${y.slice(2)}`;
+}
+
 /** Group events by date */
 function groupByDay() {
   const by = {};
@@ -856,7 +909,8 @@ function computeAll() {
     const ov = overrides[cursor] || {};
     const { hours, endModel } = computeDayHours(evs, prevEndModel);
 
-    const hadOrgasm = evs.some(e => e.type === 'OR');
+    const orgasmEvs = evs.filter(e => e.type === 'OR');
+    const hadOrgasm = orgasmEvs.length > 0;
     const hadKK = evs.some(e => e.type === 'KK');
     const derivedVerschl = VERSCHL.reduce((s,m) => s + hours[m], 0);
     const stundenVerschlossen = (typeof ov.hoursLocked === 'number') ? ov.hoursLocked : derivedVerschl;
@@ -890,6 +944,8 @@ function computeAll() {
       hours, endModel, prevEndModel,
       stundenVerschlossen,
       orgasmusfrei, ungeoeffnet, keinKG, hadOrgasm,
+      orgasmCount: orgasmEvs.length,
+      orgasmAutoCount: orgasmEvs.filter(e => e.auto_inactivity).length,
       ofStreak, uoStreak,
       punkte, cumPunkte,
       tracked,
@@ -905,9 +961,10 @@ function computeAll() {
 }
 
 function emptyTotals() {
-  return { tage: 0, punkte: 0, avgPunkte: 0, avgStdTag: 0, stundenVerschlossen: 0,
+  return { tage: 0, kalendertage: 0, punkte: 0, avgPunkte: 0, avgStdTag: 0, stundenVerschlossen: 0,
     hoursByModel: { HT:0, PC:0, NS:0, KK:0, REG:0 },
     tageOrgasmusfrei: 0, tageUngeoeffnet: 0, tageKeinKG: 0, tageMitOrgasmus: 0,
+    orgasmen: 0, orgasmenAuto: 0,
     bestePunkte: 0, schlechtestePunkte: 0, monatlich: [],
     bestOfStreak: { days: 0, end: null }, bestUoStreak: { days: 0, end: null },
     byWeekday: [0,0,0,0,0,0,0].map(() => ({ punkte: 0, tage: 0 })) };
@@ -916,6 +973,7 @@ function computeTotals(days) {
   const t = emptyTotals();
   const trackedDays = days.filter(d => d.tracked);
   t.tage = trackedDays.length;
+  t.kalendertage = days.length;
   let lastCum = 0;
   let curOf = 0, curUo = 0;
   for (const d of days) {
@@ -926,6 +984,8 @@ function computeTotals(days) {
     if (d.ungeoeffnet)  t.tageUngeoeffnet++;
     if (d.keinKG)       t.tageKeinKG++;
     if (d.hadOrgasm)    t.tageMitOrgasmus++;
+    t.orgasmen     += d.orgasmCount || 0;
+    t.orgasmenAuto += d.orgasmAutoCount || 0;
     if (d.tracked) {
       if (d.punkte > t.bestePunkte) t.bestePunkte = d.punkte;
       if (d.punkte < t.schlechtestePunkte) t.schlechtestePunkte = d.punkte;
@@ -1295,6 +1355,116 @@ document.getElementById('hoursOverrideClear').addEventListener('click', () => {
   commitHoursOverride();
 });
 
+// =========================== ORGASMUS-COUNTER ===========================
+/** Alle OR-Events chronologisch sortiert. */
+function orgasmEvents() {
+  return (STATE.data.events || [])
+    .filter(e => e.type === 'OR')
+    .sort((a,b) => (a.date + a.time).localeCompare(b.date + b.time));
+}
+
+/** Zähler rund um Orgasmen, bezogen auf das gewählte Datum (Jahr/Monat/Tag) + global. */
+function orgasmStats(iso) {
+  const evs = orgasmEvents();
+  const year  = iso.slice(0,4);
+  const month = iso.slice(0,7);
+  const last  = evs.length ? evs[evs.length - 1] : null;
+  const lastMs = last ? eventDateTime(last).getTime() : null;
+
+  // Ø Abstand zwischen zwei Orgasmen (Spanne erster↔letzter / Lücken)
+  let avgGapMs = null;
+  if (evs.length >= 2) {
+    const firstMs = eventDateTime(evs[0]).getTime();
+    avgGapMs = (lastMs - firstMs) / (evs.length - 1);
+  }
+  const since30 = Date.now() - 30 * 86400000;
+
+  return {
+    total: evs.length,
+    auto:  evs.filter(e => e.auto_inactivity).length,
+    year:  evs.filter(e => e.date.startsWith(year)).length,
+    month: evs.filter(e => e.date.startsWith(month)).length,
+    day:   evs.filter(e => e.date === iso).length,
+    last30: evs.filter(e => eventDateTime(e).getTime() >= since30).length,
+    last, lastMs, avgGapMs,
+    yearLabel: year,
+    monthLabel: MONTHS_DE[parseInt(month.slice(5,7), 10) - 1],
+  };
+}
+
+function renderOrgasmCounter() {
+  const iso = datum.value;
+  const s = orgasmStats(iso);
+  const nowMs = Date.now();
+  const tile = (v, l) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+
+  document.getElementById('orgCounter').innerHTML =
+      tile(fmtInt(s.total), 'Gesamt')
+    + tile(fmtInt(s.year),  `Jahr ${s.yearLabel}`)
+    + tile(fmtInt(s.month), s.monthLabel)
+    + tile(s.lastMs != null ? fmtDurationShort(nowMs - s.lastMs) : '—', 'seit letztem')
+    + tile(fmtInt(s.last30), 'letzte 30 T')
+    + tile(s.avgGapMs != null ? fmtNum(s.avgGapMs / 86400000, 1) + ' T' : '—', 'Ø Abstand');
+
+  const isToday = iso === todayIso();
+  document.getElementById('orgSub').textContent =
+    s.day > 0 ? `${s.day}× ${isToday ? 'heute' : 'am ' + fmtDateShort(iso)}`
+              : (isToday ? 'heute keiner' : 'keiner am ' + fmtDateShort(iso));
+
+  const lastEl = document.getElementById('orgLast');
+  if (!s.last) {
+    lastEl.textContent = 'Noch kein Orgasmus erfasst.';
+  } else {
+    const autoNote = s.auto > 0 ? ` · ${s.auto} automatisch (Inaktivität)` : '';
+    lastEl.innerHTML = `Letzter: <b>${fmtDateShort(s.last.date)} ${s.last.time}</b> ` +
+      `(${fmtAgo(nowMs - s.lastMs)})${autoNote}`;
+  }
+}
+
+// =========================== STREAK-DAUER (exakte Stunden) ===========================
+const OPEN_TYPES = ['HT','NS','PC','KK'];
+
+/** Startzeitpunkt einer laufenden Streak — so exakt wie die Events es hergeben.
+ *  'of' = letzter Orgasmus, 'uo' = letztes Öffnen, 'v' = Beginn der verschlossenen Phase.
+ *  Fallback (exact=false): 00:00 des ersten Streak-Tages.
+ *  Rückgabe: { ms, exact } oder null. */
+function streakStart(kind, days, idx, count, refMs) {
+  if (count <= 0 || idx < 0) return null;
+  const startIdx = idx - count + 1;
+  if (startIdx < 0) return null;
+  const boundary = new Date(days[startIdx].date + 'T00:00:00').getTime();
+  const fallback = { ms: boundary, exact: false };
+  const evs = (STATE.data.events || [])
+    .map(e => ({ e, t: eventDateTime(e).getTime() }))
+    .filter(x => isFinite(x.t) && x.t <= refMs)
+    .sort((a,b) => a.t - b.t);
+
+  if (kind === 'of') {
+    const prior = evs.filter(x => x.e.type === 'OR' && x.t <= boundary).pop();
+    return prior ? { ms: prior.t, exact: true } : fallback;
+  }
+  if (kind === 'uo') {
+    const prior = evs.filter(x => OPEN_TYPES.includes(x.e.type) && x.t <= boundary).pop();
+    return prior ? { ms: prior.t, exact: true } : fallback;
+  }
+  // 'v': seit wann durchgehend verschlossen → erstes Käfig-Event nach dem letzten KK
+  const lastKK = evs.filter(x => x.e.type === 'KK').pop();
+  if (!lastKK) {
+    const firstLock = evs.find(x => VERSCHL.includes(x.e.type));
+    return (firstLock && firstLock.t >= boundary) ? { ms: firstLock.t, exact: true } : fallback;
+  }
+  const lockStart = evs.find(x => VERSCHL.includes(x.e.type) && x.t > lastKK.t);
+  return lockStart ? { ms: lockStart.t, exact: true } : fallback;
+}
+
+/** "seit 07.08.26 09:30" (exakter Anker) bzw. "seit 07.08.26" (Tagesgrenze) */
+function fmtStreakSince(start) {
+  if (!start) return '';
+  const d = new Date(start.ms);
+  const date = fmtDateShort(isoLocal(d));
+  return start.exact ? `seit ${date} ${pad(d.getHours())}:${pad(d.getMinutes())}` : `seit ${date}`;
+}
+
 function renderHero() {
   const iso = datum.value;
   const { totals, days, byDate } = computeAll();
@@ -1332,19 +1502,24 @@ function renderHero() {
     for (let i = idx; i >= 0 && days[i].ungeoeffnet;  i--) uoDays++;
     for (let i = idx; i >= 0 && !days[i].keinKG;      i--) vDays++;
   }
-  const sinceStr = (count) => {
-    if (count === 0 || idx < 0) return '';
-    const startIdx = idx - count + 1;
-    if (startIdx < 0) return '';
-    const [y,m,d] = days[startIdx].date.split('-');
-    return `seit ${d}.${m}.${y.slice(2)}`;
+  // Exakte Dauer je Streak — Bezug: heute = jetzt, sonst Tagesende
+  const refMs = refTimeFor(iso).getTime();
+  const item = (kind, count, label) => {
+    const start = streakStart(kind, days, idx, count, refMs);
+    return {
+      days: count, label,
+      since: fmtStreakSince(start),
+      ms: start ? Math.max(0, refMs - start.ms) : null,
+    };
   };
   document.getElementById('streakRow').innerHTML = [
-    { days: ofDays, label: 'Orgasmusfrei', since: sinceStr(ofDays) },
-    { days: uoDays, label: 'Ungeöffnet',   since: sinceStr(uoDays) },
-    { days: vDays,  label: 'Verschlossen', since: sinceStr(vDays) },
+    item('of', ofDays, 'Orgasmusfrei'),
+    item('uo', uoDays, 'Ungeöffnet'),
+    item('v',  vDays,  'Verschlossen'),
   ].map(s => `<div class="streak-item">
-    <div class="days">${s.days} T</div>
+    <div class="days">${s.days} T${s.ms != null
+      ? ` <span class="hrs" title="${fmtDurationLong(s.ms)}">(${fmtInt(msToHours(s.ms))} h)</span>`
+      : ''}</div>
     <div class="label">${s.label}</div>
     ${s.since ? `<div class="since">${s.since}</div>` : '<div class="since">—</div>'}
   </div>`).join('');
@@ -1465,6 +1640,7 @@ function filteredTotals(days) {
   const filtered = days.filter(d => dayMatchesYear(d, DASH_YEAR));
   const tracked = filtered.filter(d => d.tracked);
   t.tage = tracked.length;
+  t.kalendertage = filtered.length;
   let yearSumPunkte = 0;
   for (const d of filtered) {
     if (d.tracked) yearSumPunkte += d.punkte;
@@ -1474,6 +1650,8 @@ function filteredTotals(days) {
     if (d.ungeoeffnet)  t.tageUngeoeffnet++;
     if (d.keinKG)       t.tageKeinKG++;
     if (d.hadOrgasm)    t.tageMitOrgasmus++;
+    t.orgasmen     += d.orgasmCount || 0;
+    t.orgasmenAuto += d.orgasmAutoCount || 0;
     if (d.tracked) {
       if (d.punkte > t.bestePunkte) t.bestePunkte = d.punkte;
       if (d.punkte < t.schlechtestePunkte) t.schlechtestePunkte = d.punkte;
@@ -1870,9 +2048,17 @@ function renderDashboard() {
   const daysLeft = Math.max(0, Math.round((yearEnd - today) / 86400000));
   const lastCum = tracked.slice(-1)[0]?.cumPunkte ?? 0;
   const projection = lastCum + daysLeft * avgRecent;
+  // Orgasmus-Kennzahlen im gewählten Zeitraum — Bezug ist die Kalender-Spanne,
+  // nicht nur die Tage mit Einträgen (sonst verzerrt sich der Ø-Abstand).
+  const spanTage = totals.kalendertage || totals.tage;
+  const avgDaysPerOrgasm = totals.orgasmen ? spanTage / totals.orgasmen : null;
+  const orgasmenProMonat = spanTage ? totals.orgasmen / (spanTage / 30.44) : 0;
   k.innerHTML = tile(fmtInt(totals.punkte), punkteLabel, totals.punkte < 0)
     + tile(fmtInt(totals.tage), 'Tage erfasst')
     + tile(fmtInt(totals.tageMitOrgasmus), 'Tage mit O.')
+    + tile(fmtInt(totals.orgasmen), 'Orgasmen')
+    + tile(avgDaysPerOrgasm != null ? fmtNum(avgDaysPerOrgasm, 1) + ' T' : '—', 'Ø Tage/O.')
+    + tile(fmtNum(orgasmenProMonat, 1), 'Ø O./Monat')
     + tile(fmtNum(totals.stundenVerschlossen, 0), 'Std verschlossen')
     + tile(fmtInt(totals.bestePunkte), 'Beste Wertung')
     + tile(fmtInt(projection), `Prognose ${today.getFullYear()}`, projection < 0);
@@ -1922,12 +2108,20 @@ function renderDashboard() {
   document.getElementById('modellList').innerHTML = mhtml;
 
   // Counters
+  const os = orgasmStats(datum.value || todayIso());
+  const lastOrgasmCell = os.last
+    ? `${fmtDateShort(os.last.date)} ${os.last.time} (${fmtAgo(Date.now() - os.lastMs)})`
+    : '—';
   document.getElementById('counters').innerHTML = `
     <table><tbody>
       <tr><td>Tage orgasmusfrei</td><td class="num">${totals.tageOrgasmusfrei}</td></tr>
       <tr><td>Tage ungeöffnet</td><td class="num">${totals.tageUngeoeffnet}</td></tr>
       <tr><td>Tage nicht verschlossen</td><td class="num">${totals.tageKeinKG}</td></tr>
       <tr><td>Tage mit Orgasmus</td><td class="num">${totals.tageMitOrgasmus}</td></tr>
+      <tr><td>Orgasmen (Zeitraum)</td><td class="num">${totals.orgasmen}</td></tr>
+      <tr><td>davon automatisch</td><td class="num">${totals.orgasmenAuto}</td></tr>
+      <tr><td>Orgasmen gesamt</td><td class="num">${os.total}</td></tr>
+      <tr><td>Letzter Orgasmus</td><td class="num">${lastOrgasmCell}</td></tr>
     </tbody></table>`;
 }
 
@@ -1948,14 +2142,17 @@ function renderAll() {
   renderHoursOverride();
   renderRegenButton();
   renderHero();
+  renderOrgasmCounter();
   renderDashboard();
   updateMeta();
 }
 
-// Regen-Countdown jede Minute aktualisieren
+// Regen-Countdown + laufende Stunden-Zähler jede Minute aktualisieren
 setInterval(() => {
   processExpiredRegens();
   renderRegenButton();
+  renderHero();
+  renderOrgasmCounter();
 }, 60000);
 
 let SAVE_STATE = 'idle'; // 'idle' | 'pending' | 'saving' | 'saved' | 'error'
@@ -2474,6 +2671,7 @@ async function initNative() {
 setTimeout(async () => {
   await initNative();
   processInactivityEscalation();
+  renderAll(); // Auto-Events der Escalation sofort in Hero/Zähler sichtbar machen
   checkForAppUpdate();
   setupNativeNotifications();
 }, 300);
