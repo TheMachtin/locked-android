@@ -17,6 +17,37 @@ Native Android-Version der [Locked-PWA](https://github.com/TheMachtin/locked), g
 4. Passwort aus `keystore.password.txt` als Secret `KEYSTORE_PASSWORD` speichern
 5. Keystore-Datei (`locked-release.jks`) **sicher offline** aufheben — bei Verlust kein App-Update mehr möglich
 
+## Microsoft-Login (OneDrive-Sync) — Azure-Setup
+
+Die native App kann **nicht** denselben Login-Weg nutzen wie die PWA: `loginPopup()` ruft
+`window.open()`, und die Capacitor-WebView reicht das an den externen Chrome weiter — das
+Token käme über `window.opener` nie in die App zurück. Deshalb läuft der Login nativ über
+den System-Browser (Chrome Custom Tab) mit **Auth-Code-Flow + PKCE** und springt über das
+eigene Schema `locked://auth` zurück.
+
+Damit das funktioniert, braucht die App-Registrierung im
+[Azure-Portal](https://portal.azure.com) → *App-Registrierungen* → *Authentifizierung*:
+
+| Plattform | Redirect-URI | wofür |
+|---|---|---|
+| Mobile- und Desktopanwendungen | `locked://auth` | native App |
+| Single-page application | URL der PWA | Browser-Version |
+
+Die native URI wird über *Plattform hinzufügen → Mobile- und Desktopanwendungen →
+Benutzerdefinierte Redirect-URI* eingetragen. Sie darf **nicht** unter „Single-page
+application" stehen — sonst lehnt der Token-Endpunkt den Tausch ab.
+
+Welche URI die laufende Installation tatsächlich sendet, steht in der App unter
+**Daten → OneDrive-Sync**. Schlägt die Anmeldung fehl, zeigt die App die vollständige
+Microsoft-Meldung an (inkl. `AADSTS`-Code, falls vorhanden).
+
+Zwei Details, die leicht übersehen werden:
+- Der Token-Tausch läuft nativ über `CapacitorHttp`, nicht über `fetch()`. Ein `fetch()`
+  aus der WebView schickt einen `Origin`-Header mit, den Azure bei nicht-SPA-Redirect-URIs
+  mit `AADSTS9002326` ablehnt.
+- Für den Refresh-Token wird der Scope `offline_access` angefordert. Ohne ihn müsstest du
+  dich stündlich neu anmelden.
+
 ## Build
 
 Jeder Push auf `main` löst automatisch einen APK-Build aus. Ergebnis:

@@ -464,6 +464,7 @@
         <button class="btn ghost hide" id="btnLogout" type="button">Abmelden</button>
       </div>
       <div class="small">Bei Anmeldung lädt die App <code>locked.json</code> automatisch aus deinem OneDrive und speichert Änderungen dort.</div>
+      <div class="small" id="authRedirectInfo"></div>
     </div>
 
     <div class="card">
@@ -536,7 +537,18 @@ const CFG = {
   oneDrivePath: '/Documents/sonstiges/Keuschhaltung/locked.json',
 };
 
-// =========================== AUTH (MSAL) ===========================
+// =========================== AUTH ===========================
+// Zwei Wege, weil MSAL in der nativen App nicht funktioniert:
+//  - Browser/PWA: MSAL mit Popup (unverändert)
+//  - Native App : Auth-Code-Flow mit PKCE im System-Browser (Custom Tab),
+//                 Rücksprung über locked://auth.
+// Grund: window.open() aus der Capacitor-WebView landet im externen Chrome —
+// MSAL wartet dort vergeblich auf window.opener, das Token kommt nie zurück.
+// Custom-Scheme-Redirects kann MSAL Browser wiederum nicht.
+function isNativeApp() {
+  return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+}
+
 let msalInstance = null;
 const AUTH = {
   account: null,
@@ -552,8 +564,174 @@ const msalConfig = {
   cache: { cacheLocation: 'localStorage' },
 };
 
+// ---------- Nativer PKCE-Flow ----------
+const MS_AUTH = {
+  authority: 'https://login.microsoftonline.com/common',
+  redirectUri: 'locked://auth',
+  scopes: 'Files.ReadWrite offline_access openid profile',
+  lsKey: 'locked_ms_auth_v1',
+};
+let NATIVE_TOKENS = null;   // { access_token, refresh_token, expires_at, username }
+let PENDING_AUTH  = null;   // { verifier, state }
+
+function nativeAuthLoad() {
+  try { NATIVE_TOKENS = JSON.parse(localStorage.getItem(MS_AUTH.lsKey) || 'null'); }
+  catch { NATIVE_TOKENS = null; }
+  return NATIVE_TOKENS;
+}
+function nativeAuthSave() {
+  try { localStorage.setItem(MS_AUTH.lsKey, JSON.stringify(NATIVE_TOKENS)); } catch {}
+}
+function nativeAuthClear() {
+  NATIVE_TOKENS = null;
+  try { localStorage.removeItem(MS_AUTH.lsKey); } catch {}
+}
+
+function b64url(bytes) {
+  let s = '';
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function randomB64(len = 32) {
+  const a = new Uint8Array(len);
+  crypto.getRandomValues(a);
+  return b64url(a);
+}
+async function pkceChallenge(verifier) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  return b64url(new Uint8Array(digest));
+}
+/** Query-Parameter aus einer Custom-Scheme-URL ziehen (new URL() ist da unzuverlässig). */
+function paramsFromUrl(url) {
+  const qi = url.indexOf('?');
+  if (qi < 0) return new URLSearchParams('');
+  const hi = url.indexOf('#', qi);
+  return new URLSearchParams(hi > qi ? url.slice(qi + 1, hi) : url.slice(qi + 1));
+}
+/** Anzeigename aus dem id_token (nur Payload, keine Signaturprüfung nötig — rein kosmetisch). */
+function usernameFromIdToken(idToken) {
+  try {
+    const p = JSON.parse(atob(idToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return p.preferred_username || p.email || p.name || null;
+  } catch { return null; }
+}
+
+/** Token-Endpunkt nativ ansprechen. Über fetch() würde ein Origin-Header mitgehen,
+ *  den Azure bei nicht-SPA-Redirect-URIs mit AADSTS9002326 ablehnt. */
+async function nativeTokenRequest(data) {
+  const Http = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorHttp;
+  if (!Http) throw new Error('CapacitorHttp nicht verfügbar');
+  const res = await Http.request({
+    url: `${MS_AUTH.authority}/oauth2/v2.0/token`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    data,
+  });
+  const body = typeof res.data === 'string' ? (() => { try { return JSON.parse(res.data); } catch { return {}; } })() : (res.data || {});
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error(body.error_description || body.error || `Token-Endpunkt HTTP ${res.status}`);
+  }
+  if (!body.access_token) throw new Error('Antwort ohne access_token');
+  return {
+    access_token: body.access_token,
+    refresh_token: body.refresh_token || (NATIVE_TOKENS && NATIVE_TOKENS.refresh_token) || null,
+    expires_at: Date.now() + ((body.expires_in || 3600) - 120) * 1000, // 2 Min Sicherheitsabstand
+    username: (body.id_token && usernameFromIdToken(body.id_token))
+      || (NATIVE_TOKENS && NATIVE_TOKENS.username) || 'Microsoft-Konto',
+  };
+}
+
+async function nativeLogin() {
+  const P = (window.Capacitor && window.Capacitor.Plugins) || {};
+  if (!P.Browser) { showToast('Browser-Plugin fehlt', true); return; }
+  const verifier = randomB64();
+  const state = randomB64(16);
+  PENDING_AUTH = { verifier, state };
+  const q = new URLSearchParams({
+    client_id: CFG.clientId,
+    response_type: 'code',
+    redirect_uri: MS_AUTH.redirectUri,
+    response_mode: 'query',
+    scope: MS_AUTH.scopes,
+    state,
+    code_challenge: await pkceChallenge(verifier),
+    code_challenge_method: 'S256',
+    prompt: 'select_account',
+  });
+  await P.Browser.open({ url: `${MS_AUTH.authority}/oauth2/v2.0/authorize?${q}` });
+}
+
+/** Rücksprung aus dem Custom Tab: locked://auth?code=…&state=… */
+async function handleNativeAuthRedirect(url) {
+  if (!url || url.indexOf(MS_AUTH.redirectUri) !== 0) return;
+  const P = (window.Capacitor && window.Capacitor.Plugins) || {};
+  try { if (P.Browser) await P.Browser.close(); } catch {}
+
+  const q = paramsFromUrl(url);
+  const err = q.get('error');
+  if (err) {
+    showToast('Anmeldung: ' + (q.get('error_description') || err), true);
+    PENDING_AUTH = null;
+    return;
+  }
+  const code = q.get('code');
+  if (!code) return;
+  if (!PENDING_AUTH || q.get('state') !== PENDING_AUTH.state) {
+    showToast('Anmeldung abgelehnt (state stimmt nicht)', true);
+    PENDING_AUTH = null;
+    return;
+  }
+  try {
+    NATIVE_TOKENS = await nativeTokenRequest({
+      client_id: CFG.clientId,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: MS_AUTH.redirectUri,
+      code_verifier: PENDING_AUTH.verifier,
+      scope: MS_AUTH.scopes,
+    });
+    nativeAuthSave();
+    AUTH.account = { username: NATIVE_TOKENS.username };
+    updateAuthUI();
+    showToast('Angemeldet als ' + NATIVE_TOKENS.username);
+    await loadFromOneDrive(true);
+  } catch (e) {
+    console.error('Token-Tausch fehlgeschlagen', e);
+    showToast('Anmeldung fehlgeschlagen: ' + (e.message || e), true);
+  } finally {
+    PENDING_AUTH = null;
+  }
+}
+
+async function nativeGetToken() {
+  if (!NATIVE_TOKENS) throw new Error('Nicht angemeldet');
+  if (NATIVE_TOKENS.access_token && Date.now() < NATIVE_TOKENS.expires_at) {
+    return NATIVE_TOKENS.access_token;
+  }
+  if (!NATIVE_TOKENS.refresh_token) throw new Error('Sitzung abgelaufen — bitte neu anmelden');
+  NATIVE_TOKENS = await nativeTokenRequest({
+    client_id: CFG.clientId,
+    grant_type: 'refresh_token',
+    refresh_token: NATIVE_TOKENS.refresh_token,
+    scope: MS_AUTH.scopes,
+  });
+  nativeAuthSave();
+  return NATIVE_TOKENS.access_token;
+}
+
 async function initAuth() {
-  if (typeof msal === 'undefined') return;
+  if (isNativeApp()) {
+    const P = (window.Capacitor && window.Capacitor.Plugins) || {};
+    if (P.App && P.App.addListener) {
+      P.App.addListener('appUrlOpen', ev => { handleNativeAuthRedirect(ev && ev.url); });
+    }
+    nativeAuthLoad();
+    if (NATIVE_TOKENS) AUTH.account = { username: NATIVE_TOKENS.username };
+    AUTH.ready = true;
+    updateAuthUI();
+    return;
+  }
+  if (typeof msal === 'undefined') { updateAuthUI(); return; }
   msalInstance = new msal.PublicClientApplication(msalConfig);
   await msalInstance.initialize();
   try { await msalInstance.handleRedirectPromise(); } catch (e) { console.error(e); }
@@ -567,6 +745,11 @@ async function initAuth() {
 }
 
 async function login() {
+  if (isNativeApp()) {
+    try { await nativeLogin(); }
+    catch (e) { console.error(e); showToast('Anmeldung fehlgeschlagen: ' + (e.message || e), true); }
+    return;
+  }
   if (!msalInstance) return;
   try {
     const r = await msalInstance.loginPopup({ scopes: ['Files.ReadWrite'] });
@@ -576,10 +759,19 @@ async function login() {
     showToast('Angemeldet als ' + (r.account.username || r.account.name));
     await loadFromOneDrive(true);
   } catch (e) {
-    console.error(e); showToast('Anmeldung fehlgeschlagen', true);
+    console.error(e);
+    showToast('Anmeldung fehlgeschlagen: ' + (e.errorMessage || e.message || e), true);
   }
 }
 async function logout() {
+  if (isNativeApp()) {
+    nativeAuthClear();
+    AUTH.account = null;
+    STATE.etag = null;
+    updateAuthUI();
+    showToast('Abgemeldet');
+    return;
+  }
   if (!msalInstance) return;
   try {
     await msalInstance.logoutPopup({ account: AUTH.account });
@@ -589,6 +781,7 @@ async function logout() {
 }
 
 async function getToken() {
+  if (isNativeApp()) return nativeGetToken();
   if (!msalInstance || !AUTH.account) throw new Error('Nicht angemeldet');
   try {
     const r = await msalInstance.acquireTokenSilent({
@@ -696,6 +889,11 @@ async function saveToOneDrive() {
 }
 
 function updateAuthUI() {
+  const info = document.getElementById('authRedirectInfo');
+  if (info) {
+    const uri = isNativeApp() ? MS_AUTH.redirectUri : msalConfig.auth.redirectUri;
+    info.innerHTML = 'Redirect-URI dieser Installation: <code>' + escapeHtml(uri) + '</code>';
+  }
   const status = document.getElementById('authStatus');
   const loginBtn = document.getElementById('btnLogin');
   const logoutBtn = document.getElementById('btnLogout');
@@ -2436,7 +2634,7 @@ initAuth().then(() => {
 // =========================== NATIVE (Capacitor) ===========================
 const APP_VERSION = '__APP_VERSION__'; // wird beim Build ersetzt
 const RELEASE_REPO = 'TheMachtin/locked-android';
-const IS_NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const IS_NATIVE = isNativeApp();
 const NATIVE_FILE = 'locked.json';
 const NATIVE_DIR  = 'DATA'; // App-privater Storage — überlebt Updates, weg bei Deinstall
 
