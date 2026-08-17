@@ -352,23 +352,6 @@
       <div class="legend">Button <b style="color:var(--accent)">gedrückt halten</b> zum Speichern (~1s)</div>
     </div>
 
-    <!-- Tag-Markierungen (kompakte Pillen + collapsible Override) -->
-    <div class="card">
-      <h2>Tag-Markierungen <span class="sub">Auto · ● = manuell</span></h2>
-      <div class="flag-pills" id="flagPills">
-        <button class="flag-pill" data-flag="orgasmusfrei" type="button">Orgasmusfrei</button>
-        <button class="flag-pill" data-flag="ungeoeffnet"  type="button">Ungeöffnet</button>
-        <button class="flag-pill" data-flag="keinKG"       type="button">Nicht Verschlossen</button>
-      </div>
-      <details class="ho-details">
-        <summary>Stunden verschlossen manuell setzen</summary>
-        <div class="ho-input">
-          <input type="number" id="hoursOverride" step="0.25" min="0" max="24" placeholder="auto">
-          <button class="ho-clear hide" id="hoursOverrideClear" type="button" title="Override entfernen">×</button>
-        </div>
-      </details>
-    </div>
-
     <!-- Orgasmus-Zähler -->
     <div class="card">
       <h2>Orgasmus-Zähler <span class="sub" id="orgSub"></span></h2>
@@ -492,6 +475,27 @@
       </div>
     </div>
 
+    <!-- Tag-Markierungen: manuelle Korrektur der automatisch abgeleiteten Flags -->
+    <div class="card">
+      <h2>Tag-Markierungen <span class="sub" id="flagDateLabel"></span></h2>
+      <div class="small" style="margin-top:-4px; margin-bottom:10px">
+        Korrigiert die automatische Ableitung für den im <b>Eintrag</b>-Tab gewählten Tag.
+        Tippen setzt das Gegenteil (● = manuell), nochmal tippen geht zurück auf Auto.
+      </div>
+      <div class="flag-pills" id="flagPills">
+        <button class="flag-pill" data-flag="orgasmusfrei" type="button">Orgasmusfrei</button>
+        <button class="flag-pill" data-flag="ungeoeffnet"  type="button">Ungeöffnet</button>
+        <button class="flag-pill" data-flag="keinKG"       type="button">Nicht Verschlossen</button>
+      </div>
+      <details class="ho-details">
+        <summary>Stunden verschlossen manuell setzen</summary>
+        <div class="ho-input">
+          <input type="number" id="hoursOverride" step="0.25" min="0" max="24" placeholder="auto">
+          <button class="ho-clear hide" id="hoursOverrideClear" type="button" title="Override entfernen">×</button>
+        </div>
+      </details>
+    </div>
+
     <div class="card">
       <h2>Berechnung</h2>
       <details>
@@ -512,10 +516,9 @@
             aus der Inaktivitäts-Escalation); die Fenster 30/90/365 T rollieren ab dem
             gewählten Tag, hängen also nicht an Kalendergrenzen; Ø Abstand =
             Spanne erster↔letzter Orgasmus geteilt durch die Anzahl der Lücken<br>
-          • <b>Zeitbalken im Einträge-Block</b>: beim heutigen Tag nur bis zur aktuellen
-            Uhrzeit gefüllt. Die <i>Punkte</i> rechnen den laufenden Zustand dagegen bis
-            Mitternacht hoch — der Balken zeigt also den Ist-Stand, die Punkte den
-            voraussichtlichen Tagesabschluss
+          • <b>Heutiger Tag</b>: Zeitbalken und Stunden zählen nur bis zur aktuellen
+            Uhrzeit. Die Tagespunkte wachsen dadurch im Lauf des Tages mit, statt
+            morgens schon den ganzen Tag gutzuschreiben
         </div>
       </details>
     </div>
@@ -1069,21 +1072,37 @@ function groupByDay() {
   return by;
 }
 
-/** Compute hours per model for one day, given start model. Returns {hours:{HT,PC,NS,KK}, endModel} */
-function computeDayHours(dayEvents, startModel) {
+/** Minuten seit Mitternacht (lokal). */
+function nowMinutes() {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
+}
+
+/** Compute hours per model for one day, given start model.
+ *  endMin begrenzt die Zählung (heute: bis jetzt) — sonst würde ein morgens
+ *  angelegter Käfig sofort den ganzen Tag gutgeschrieben bekommen.
+ *  Returns {hours:{HT,PC,NS,KK}, endModel} */
+function computeDayHours(dayEvents, startModel, endMin) {
+  const limit = (typeof endMin === 'number') ? Math.max(0, Math.min(24*60, endMin)) : 24*60;
   const hours = Object.fromEntries(MODELS.map(m => [m, 0]));
   let cur = startModel || 'KK';
   let curMin = 0;
+  let endModel = cur;
   for (const ev of dayEvents) {
     if (ev.type === 'OR') continue; // does not change model
     if (!MODELS.includes(ev.type)) continue;
     const t = timeToMin(ev.time);
-    if (t > curMin) hours[cur] += (t - curMin) / 60;
-    cur = ev.type;
-    curMin = t;
+    if (t <= limit) {
+      if (t > curMin) hours[cur] += (t - curMin) / 60;
+      cur = ev.type;
+      curMin = t;
+    }
+    // Events nach dem Limit zählen noch keine Stunden, bestimmen aber das
+    // Modell, mit dem der Folgetag startet.
+    endModel = ev.type;
   }
-  if (curMin < 24*60) hours[cur] += (24*60 - curMin) / 60;
-  return { hours, endModel: cur };
+  if (curMin < limit) hours[cur] += (limit - curMin) / 60;
+  return { hours, endModel };
 }
 
 /** Compute all per-day metrics across the full event range. */
@@ -1094,11 +1113,13 @@ function computeAll() {
   const allDates = [...new Set([...Object.keys(byDay), ...Object.keys(overrides)])].sort();
   if (allDates.length === 0) return { days: [], byDate: {}, totals: emptyTotals() };
 
-  // Determine full date span: vom frühesten Tag (Event oder Override) bis heute (oder letzter Tag)
+  // Determine full date span: vom frühesten Tag (Event oder Override) bis heute (oder letzter Tag).
+  // Bewusst todayIso() (lokal) statt toISOString() — letzteres liefert UTC und ließ in den
+  // frühen Morgenstunden den heutigen Tag aus der Spanne fallen.
   const start = allDates[0];
-  const todayIso = new Date().toISOString().slice(0,10);
+  const today = todayIso();
   const lastDate = allDates[allDates.length - 1];
-  const end = lastDate > todayIso ? lastDate : todayIso;
+  const end = lastDate > today ? lastDate : today;
 
   // Iterate every day in span
   let cursor = start;
@@ -1111,7 +1132,10 @@ function computeAll() {
   while (cursor <= end) {
     const evs = byDay[cursor] || [];
     const ov = overrides[cursor] || {};
-    const { hours, endModel } = computeDayHours(evs, prevEndModel);
+    // Heute nur bis zur aktuellen Uhrzeit werten, Zukunft gar nicht — die
+    // Tagespunkte wachsen dadurch mit, statt morgens schon vollständig dazustehen.
+    const limitMin = cursor === today ? nowMinutes() : (cursor > today ? 0 : 24*60);
+    const { hours, endModel } = computeDayHours(evs, prevEndModel, limitMin);
 
     const orgasmEvs = evs.filter(e => e.type === 'OR');
     const hadOrgasm = orgasmEvs.length > 0;
@@ -1335,6 +1359,8 @@ function renderFlagPills() {
   const all = computeAll();
   const d = all.byDate[iso];
   const ov = (STATE.data.days || {})[iso] || {};
+  const lbl = document.getElementById('flagDateLabel');
+  if (lbl) lbl.textContent = iso === todayIso() ? 'heute' : fmtDateShort(iso);
   document.querySelectorAll('.flag-pill').forEach(btn => {
     const flag = btn.dataset.flag;
     const on = d ? d[flag] : false;
