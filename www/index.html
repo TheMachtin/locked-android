@@ -237,8 +237,9 @@
     border: 1px solid var(--accent-strong); border-radius: 12px;
     padding: 10px 14px; display: flex; align-items: center; gap: 12px;
     z-index: 20; box-shadow: 0 6px 24px rgba(0,0,0,.4); margin-top: 10px;
-    max-width: 90%; }
+    max-width: 90%; flex-wrap: wrap; }
   .update-banner button { padding: 8px 14px; font-size: 14px; }
+  .update-banner .msg { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 
   .legend { font-size: 11px; color: var(--muted); margin-top: 10px; text-align: center; }
   .hide { display: none !important; }
@@ -2496,50 +2497,100 @@ async function checkForAppUpdate() {
   } catch (e) { console.warn('Update-Check fehlgeschlagen', e); }
 }
 
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
 function showAppUpdateBanner(latest, url) {
   if (document.getElementById('appUpdateBanner')) return;
   const b = document.createElement('div');
   b.id = 'appUpdateBanner';
   b.className = 'update-banner';
   const btnLabel = IS_NATIVE ? 'Installieren' : 'Herunterladen';
-  b.innerHTML = `<span>Neue App-Version <b>${latest}</b> verfügbar</span><button type="button" class="btn primary" style="padding:8px 14px">${btnLabel}</button>`;
+  b.innerHTML =
+    `<span class="msg">Neue App-Version <b>${escapeHtml(latest)}</b> verfügbar</span>` +
+    `<button type="button" class="btn primary" data-act="main" style="padding:8px 14px">${btnLabel}</button>` +
+    `<button type="button" class="btn ghost hide" data-act="browser" style="padding:8px 14px">Im Browser</button>`;
   document.body.appendChild(b);
-  b.querySelector('button').addEventListener('click', () => {
+  b.querySelector('[data-act="main"]').addEventListener('click', () => {
     if (IS_NATIVE) downloadAndInstallApk(url, latest);
     else window.open(url, '_blank');
   });
+  b.querySelector('[data-act="browser"]').addEventListener('click', () => window.open(url, '_blank'));
+}
+
+/** Fehler dauerhaft im Banner anzeigen (Toast ist nach 1,6s weg) + Browser-Ausweg einblenden. */
+function showUpdateBannerError(msg) {
+  const b = document.getElementById('appUpdateBanner');
+  if (!b) { showToast('Update fehlgeschlagen: ' + msg, true); return; }
+  const el = b.querySelector('.msg');
+  if (el) el.innerHTML = `<b>Update fehlgeschlagen</b><br>` +
+    `<span style="font-size:12px;color:var(--muted)">${escapeHtml(msg)}</span>`;
+  const main = b.querySelector('[data-act="main"]');
+  if (main) main.textContent = 'Erneut versuchen';
+  const alt = b.querySelector('[data-act="browser"]');
+  if (alt) alt.classList.remove('hide');
 }
 
 async function downloadAndInstallApk(url, version) {
-  const FS = window.Capacitor.Plugins.Filesystem;
-  const AppInstaller = window.Capacitor.Plugins.AppInstaller;
-  if (!FS || !AppInstaller) { showToast('Update-Plugin fehlt', true); return; }
+  const FS = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem;
+  const AppInstaller = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AppInstaller;
   const banner = document.getElementById('appUpdateBanner');
-  const btn = banner ? banner.querySelector('button') : null;
+  const btn = banner ? banner.querySelector('[data-act="main"]') : null;
   const setLabel = t => { if (btn) btn.textContent = t; };
+  if (!FS || !AppInstaller) { showUpdateBannerError('Update-Plugin fehlt'); return; }
+
+  const filename = `locked-${(version || 'update').replace(/[^0-9.]/g, '')}.apk`;
+  let progressSub = null;
   try {
     setLabel('Lade…');
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const blob = await resp.blob();
-    // Blob → base64 (chunked, damit große Dateien nicht den Stack sprengen)
-    const b64 = await new Promise((res, rej) => {
-      const r = new FileReader();
-      r.onload  = () => res(String(r.result).split(',')[1]);
-      r.onerror = () => rej(r.error);
-      r.readAsDataURL(blob);
-    });
-    setLabel('Speichere…');
-    const filename = `locked-${(version||'update').replace(/[^0-9.]/g,'')}.apk`;
-    const w = await FS.writeFile({ path: filename, data: b64, directory: 'CACHE' });
+    let path;
+    if (typeof FS.downloadFile === 'function') {
+      // Nativer Download statt fetch(): GitHub liefert beim Release-Asset weder auf
+      // dem 302 noch auf release-assets.githubusercontent.com CORS-Header, ein
+      // fetch() aus der WebView scheitert deshalb sofort mit "Failed to fetch".
+      if (typeof FS.addListener === 'function') {
+        progressSub = await FS.addListener('progress', p => {
+          if (p && p.contentLength > 0) {
+            setLabel(`Lade ${Math.round(p.bytes / p.contentLength * 100)} %`);
+          }
+        });
+      }
+      const r = await FS.downloadFile({ url, path: filename, directory: 'CACHE', progress: true });
+      path = r && (r.path || r.uri);
+      if (!path) throw new Error('Download lieferte keinen Dateipfad');
+    } else {
+      // Fallback für ältere Filesystem-Plugins ohne downloadFile()
+      path = await downloadApkViaFetch(FS, url, filename, setLabel);
+    }
     setLabel('Installiere…');
-    await AppInstaller.installApk({ path: w.uri });
+    await AppInstaller.installApk({ path });
     setLabel('OK');
   } catch (e) {
-    console.error(e);
-    showToast('Update fehlgeschlagen: ' + (e.message || e), true);
-    setLabel('Erneut versuchen');
+    console.error('APK-Update fehlgeschlagen', e);
+    showUpdateBannerError((e && (e.message || e.errorMessage)) || String(e));
+  } finally {
+    if (progressSub && typeof progressSub.remove === 'function') {
+      try { await progressSub.remove(); } catch {}
+    }
   }
+}
+
+/** Alter Weg: über die WebView laden und als base64 durch die Bridge schreiben. */
+async function downloadApkViaFetch(FS, url, filename, setLabel) {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const blob = await resp.blob();
+  const b64 = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload  = () => res(String(r.result).split(',')[1]);
+    r.onerror = () => rej(r.error);
+    r.readAsDataURL(blob);
+  });
+  setLabel('Speichere…');
+  const w = await FS.writeFile({ path: filename, data: b64, directory: 'CACHE' });
+  return w.uri;
 }
 
 // =========================== INAKTIVITÄTS-LOGIK ===========================
