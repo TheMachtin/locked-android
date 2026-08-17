@@ -85,7 +85,21 @@ jobs:
                     '                android:resource="@xml/file_provider_paths" />\n'
                     '        </provider>\n')
               c = c.replace('</application>', fp + '    </application>', 1)
+          # OAuth-Rücksprung aus dem System-Browser: locked://auth
+          if 'android:scheme="locked"' not in c:
+              flt = ('            <intent-filter>\n'
+                     '                <action android:name="android.intent.action.VIEW" />\n'
+                     '                <category android:name="android.intent.category.DEFAULT" />\n'
+                     '                <category android:name="android.intent.category.BROWSABLE" />\n'
+                     '                <data android:scheme="locked" android:host="auth" />\n'
+                     '            </intent-filter>\n')
+              # erstes </activity> = MainActivity; Einrückung des Tags übernehmen
+              m = re.search(r'\n([ \t]*)</activity>', c)
+              assert m, 'kein </activity> im Manifest'
+              c = c[:m.start()] + '\n' + flt + m.group(1) + '</activity>' + c[m.end():]
           with open(p, 'w') as f: f.write(c)
+          for needle in ('REQUEST_INSTALL_PACKAGES', 'FileProvider', 'android:scheme="locked"'):
+              assert needle in c, f'Manifest-Patch fehlgeschlagen: {needle}'
           print('Manifest patched OK')
           PY
 
