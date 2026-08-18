@@ -3,11 +3,12 @@
 // - Microsoft Graph / Login wird NIE gecached (frische Daten nötig)
 // - CDN-Scripts (MSAL, SheetJS) werden mitgecached, damit App offline lädt
 
-const CACHE = 'locked-static-v3';
+const CACHE = 'locked-static-v4';
 const PRECACHE = [
   './',
   './index.html',
   './calc.js',
+  './merge.js',
   './manifest.webmanifest',
   './favicon.png',
   './icon-192.png',

@@ -536,6 +536,7 @@
 <div class="toast" id="toast">Eingetragen</div>
 
 <script src="calc.js"></script>
+<script src="merge.js"></script>
 <script>
 'use strict';
 
@@ -777,6 +778,8 @@ async function logout() {
     nativeAuthClear();
     AUTH.account = null;
     STATE.etag = null;
+    STATE.base = null;
+    try { localStorage.removeItem(LS_BASE_KEY); } catch {}
     updateAuthUI();
     showToast('Abgemeldet');
     return;
@@ -824,6 +827,7 @@ async function loadFromOneDrive(silent=false) {
     const issues = sanityCheck(incoming);
     STATE.data = incoming;
     invalidateCalc();
+    setSyncBase(incoming);          // ab hier ist dieser Stand die gemeinsame Basis
     STATE.etag = res.headers.get('ETag') || null;
     persistLocal();
     STATE.dirty = false;
@@ -868,7 +872,7 @@ function sanityCheck(data) {
   return issues;
 }
 
-async function saveToOneDrive() {
+async function saveToOneDrive(versuch = 0) {
   const token = await getToken();
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   if (STATE.etag) headers['If-Match'] = STATE.etag;
@@ -876,26 +880,47 @@ async function saveToOneDrive() {
     method: 'PUT', headers,
     body: JSON.stringify(STATE.data, null, 2),
   });
+
   if (res.status === 412) {
-    // Konflikt: Datei in OneDrive wurde seit Laden verändert
-    const reload = confirm(
-      'Konflikt: Datei wurde anderswo geändert (anderes Gerät?).\n\n' +
-      'OK = OneDrive-Version laden (deine ungespeicherten Änderungen gehen verloren)\n' +
-      'Abbrechen = lokale Version behalten (klick danach nochmal Speichern um zu überschreiben)'
-    );
-    if (reload) {
-      STATE.etag = null;
-      await loadFromOneDrive(true);
-    } else {
-      STATE.etag = null; // nächstes Save überschreibt ohne If-Match
-    }
-    throw new Error('Konflikt');
+    // Die Datei wurde anderswo geändert. Statt eine Seite zu verwerfen, den
+    // Serverstand holen und dreiwegig zusammenführen (Basis = letzter Abgleich).
+    if (versuch >= 2) throw new Error('Sync-Konflikt bleibt bestehen — bitte später nochmal speichern');
+    const merged = await mergeWithRemote();
+    if (!merged) throw new Error('Konflikt: Serverstand nicht lesbar');
+    return saveToOneDrive(versuch + 1);
   }
+
   if (!res.ok) throw new Error(`Graph ${res.status}`);
   const body = await res.json().catch(() => null);
   STATE.etag = res.headers.get('ETag') || (body && body.eTag) || null;
+  setSyncBase(STATE.data);   // dieser Stand liegt jetzt auf dem Server
   STATE.dirty = false;
   return true;
+}
+
+/** Serverstand laden und mit dem lokalen zusammenführen. Ergebnis wird lokal
+ *  übernommen; gespeichert wird danach vom Aufrufer. */
+async function mergeWithRemote() {
+  const token = await getToken();
+  const res = await fetch(graphUrl(), { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) return null;
+  const remote = await res.json();
+  const { data, stats } = mergeData(STATE.base, STATE.data, remote);
+
+  STATE.data = data;
+  invalidateCalc();
+  STATE.etag = res.headers.get('ETag') || null;
+  persistLocal();
+  renderAll();
+
+  const teile = [];
+  if (stats.uebernommen) teile.push(`${stats.uebernommen} Eintrag${stats.uebernommen === 1 ? '' : 'e'} vom anderen Gerät`);
+  if (stats.entfernt)    teile.push(`${stats.entfernt} entfernt oder geändert`);
+  if (stats.konflikte.length) teile.push(`${stats.konflikte.length}× Markierung beidseitig geändert (lokal behalten)`);
+  if (!stats.basisBekannt)    teile.push('ohne Basis vereinigt');
+  showToast(teile.length ? `Zusammengeführt: ${teile.join(', ')}` : 'Mit OneDrive zusammengeführt');
+  if (stats.konflikte.length) console.warn('Merge-Konflikte:', stats.konflikte);
+  return stats;
 }
 
 function updateAuthUI() {
@@ -921,10 +946,15 @@ function updateAuthUI() {
 // =========================== DATA LAYER ===========================
 const STATE = {
   data: { version: 2, events: [], notes: {}, days: {} },
+  // Zuletzt mit OneDrive abgeglichener Stand. Basis für den Drei-Wege-Merge:
+  // nur damit ist eine Löschung von "das andere Gerät hat es neu angelegt"
+  // unterscheidbar.
+  base: null,
   fileHandle: null,
   dirty: false,
 };
 const LS_KEY = 'locked_data_v1';
+const LS_BASE_KEY = 'locked_sync_base_v1';
 const LS_HANDLE_HINT = 'locked_has_handle';
 
 function loadFromLocalStorage() {
@@ -937,6 +967,18 @@ function loadFromLocalStorage() {
 function persistLocal() {
   invalidateCalc();
   try { localStorage.setItem(LS_KEY, JSON.stringify(STATE.data)); } catch {}
+}
+
+/** Serverstand als Merge-Basis merken (überlebt App-Neustarts). */
+function setSyncBase(data) {
+  STATE.base = JSON.parse(JSON.stringify(data));
+  try { localStorage.setItem(LS_BASE_KEY, JSON.stringify(STATE.base)); } catch {}
+}
+function loadSyncBase() {
+  try {
+    const raw = localStorage.getItem(LS_BASE_KEY);
+    STATE.base = raw ? JSON.parse(raw) : null;
+  } catch { STATE.base = null; }
 }
 
 async function openFile() {
@@ -2487,6 +2529,7 @@ window.addEventListener('offline', () => {
 
 // Init
 loadFromLocalStorage();
+loadSyncBase();
 document.getElementById('savebar').classList.remove('hide');
 renderAll();
 initAuth().then(() => {
