@@ -241,6 +241,13 @@
   .update-banner button { padding: 8px 14px; font-size: 14px; }
   .update-banner .msg { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 
+  .card.escalation { border-color: var(--danger); background: var(--danger-dim); }
+  .card.escalation h2 { color: #fecaca; }
+  .card.escalation .small { color: #fecaca; }
+  .escalation-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .btn.danger-outline { background: var(--danger); color: #fff; }
+  .btn.danger-outline:active { background: #b91c1c; }
+
   .legend { font-size: 11px; color: var(--muted); margin-top: 10px; text-align: center; }
   .hide { display: none !important; }
 
@@ -311,6 +318,16 @@
 
   <!-- ============ EINTRAG ============ -->
   <div id="page-eintrag">
+
+    <!-- Inaktivitaets-Vorschlag: erscheint nur, wenn etwas ansteht -->
+    <div class="card escalation hide" id="escalationCard">
+      <h2>Länger kein Eintrag <span class="sub" id="escalationSince"></span></h2>
+      <div class="small" id="escalationText"></div>
+      <div class="escalation-actions">
+        <button class="btn danger-outline" id="escalationApply" type="button">Übernehmen</button>
+        <button class="btn ghost" id="escalationDismiss" type="button">Verwerfen</button>
+      </div>
+    </div>
 
     <!-- Hero: Datum + Status-Snapshot -->
     <div class="card hero">
@@ -867,6 +884,13 @@ function sanityCheck(data) {
         const h = ov.hoursLocked;
         if (typeof h !== 'number' || h < 0 || h > 24) issues.push(`days[${iso}].hoursLocked außerhalb 0–24: ${h}`);
       }
+    }
+  }
+  if (data.meta !== undefined) {
+    if (!data.meta || typeof data.meta !== 'object') issues.push('meta ist kein Objekt');
+    else if (data.meta.escalationDismissedAt !== undefined
+             && isNaN(new Date(data.meta.escalationDismissedAt).getTime())) {
+      issues.push(`meta.escalationDismissedAt kein gültiges Datum: ${data.meta.escalationDismissedAt}`);
     }
   }
   return issues;
@@ -2243,6 +2267,7 @@ function renderAll() {
   renderFlagPills();
   renderHoursOverride();
   renderRegenButton();
+  renderEscalation();
   renderHero();
   renderOrgasmCounter();
   renderDashboard();
@@ -2698,64 +2723,57 @@ async function downloadApkViaFetch(FS, url, filename, setLabel) {
 }
 
 // =========================== INAKTIVITÄTS-LOGIK ===========================
-const INACTIVITY_REMINDER_DAYS = 2;   // ab wann erste Erinnerung
-const INACTIVITY_AUTO_KK_DAYS  = 4;   // ab wann Auto-Nicht-Verschlossen + tägl. Orgasmus
-
-function lastRealInteractionMs() {
-  const evs = (STATE.data.events || []).filter(e => !e.auto_inactivity && !e.auto_regen_timeout);
-  if (!evs.length) return null;
-  const latest = evs.reduce((a,b) => (b.date+b.time) > (a.date+a.time) ? b : a);
-  return new Date(`${latest.date}T${latest.time}:00`).getTime();
-}
+// INACTIVITY_*, lastRealInteractionMs, pendingEscalation und escalationEvents
+// kommen aus calc.js.
 
 function pad(n) { return String(n).padStart(2,'0'); }
 function isoLocal(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
 
-/** Nach 4 Tagen ohne Interaktion: Auto-KK am Deadline-Zeitpunkt + tägliche Auto-Orgasmen bis heute. */
-function processInactivityEscalation() {
-  const lastMs = lastRealInteractionMs();
-  if (!lastMs) return;
-  const now = Date.now();
-  const daysSince = (now - lastMs) / 86400000;
-  if (daysSince < INACTIVITY_AUTO_KK_DAYS) return;
+/** Vorschlagskarte fuellen bzw. ausblenden. Es wird nichts geschrieben —
+ *  erfundene Eintraege waeren spaeter nicht mehr von echten zu unterscheiden. */
+function renderEscalation() {
+  const card = document.getElementById('escalationCard');
+  if (!card) return;
+  const v = pendingEscalation(STATE.data);
+  if (!v.faellig) { card.classList.add('hide'); return; }
 
-  const kkAt = new Date(lastMs + INACTIVITY_AUTO_KK_DAYS * 86400000);
-  const kkIso  = isoLocal(kkAt);
-  const kkTime = `${pad(kkAt.getHours())}:${pad(kkAt.getMinutes())}`;
-  let inserted = 0, kkNew = false;
-
-  // 1) Auto-KK einfügen falls noch nicht da
-  const hasKk = STATE.data.events.some(e => e.type === 'KK' && e.date === kkIso && e.time === kkTime && e.auto_inactivity);
-  if (!hasKk) {
-    STATE.data.events.push({ date: kkIso, time: kkTime, type: 'KK', auto_inactivity: true });
-    kkNew = true;
+  const teile = [];
+  if (v.kk) teile.push(`<b>Nicht Verschlossen</b> ab ${fmtDateShort(v.kk.date)} ${v.kk.time}`);
+  if (v.orgasmen.length) {
+    const von = fmtDateShort(v.orgasmen[0].date);
+    const bis = fmtDateShort(v.orgasmen[v.orgasmen.length - 1].date);
+    teile.push(`<b>${v.orgasmen.length}×&nbsp;Orgasmus</b> (${von}${v.orgasmen.length > 1 ? '–' + bis : ''})`);
   }
-
-  // 2) Für jeden Tag ab kkAt+1 bis heute: eine Auto-Orgasmus-Erfassung wenn nicht schon da
-  const cursor = new Date(kkAt);
-  cursor.setDate(cursor.getDate() + 1);
-  cursor.setHours(0,0,0,0);
-  const today = new Date();
-  today.setHours(23,59,59,999);
-  while (cursor <= today) {
-    const iso = isoLocal(cursor);
-    const exists = STATE.data.events.some(e => e.type === 'OR' && e.date === iso && e.auto_inactivity);
-    if (!exists) {
-      STATE.data.events.push({ date: iso, time: '12:00', type: 'OR', auto_inactivity: true, time_estimated: true });
-      inserted++;
-    }
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  if (kkNew || inserted > 0) {
-    STATE.data.events.sort((a,b) => (a.date + a.time).localeCompare(b.date + b.time));
-    STATE.dirty = true; persistLocal(); scheduleAutosave();
-    const parts = [];
-    if (kkNew) parts.push('Nicht Verschlossen');
-    if (inserted > 0) parts.push(`${inserted}× Orgasmus`);
-    showToast(`Inaktivität: ${parts.join(' + ')} eingetragen`, true);
-  }
+  document.getElementById('escalationSince').textContent = 'seit ' + fmtDurationShort(v.seitMs);
+  document.getElementById('escalationText').innerHTML =
+    `Die Inaktivitäts-Regel würde eintragen: ${teile.join(' und ')}. ` +
+    `Übernehmen schreibt ${v.anzahl === 1 ? '1 Eintrag' : v.anzahl + ' Einträge'} in deine Daten, ` +
+    `Verwerfen setzt die Frist neu.`;
+  card.classList.remove('hide');
 }
+
+function applyEscalation() {
+  const v = pendingEscalation(STATE.data);
+  if (!v.faellig) return;
+  STATE.data.events.push(...escalationEvents(v));
+  STATE.data.events.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  STATE.dirty = true; persistLocal(); scheduleAutosave();
+  showToast(`${v.anzahl === 1 ? '1 Eintrag' : v.anzahl + ' Einträge'} übernommen`, true);
+  renderAll();
+}
+
+function dismissEscalation() {
+  const v = pendingEscalation(STATE.data);
+  STATE.data.meta ||= {};
+  STATE.data.meta.escalationDismissedAt = new Date().toISOString();
+  STATE.dirty = true; persistLocal(); scheduleAutosave();
+  showToast(`${v.anzahl === 1 ? '1 Vorschlag' : v.anzahl + ' Vorschläge'} verworfen`);
+  renderAll();
+  setupNativeNotifications();
+}
+
+document.getElementById('escalationApply').addEventListener('click', applyEscalation);
+document.getElementById('escalationDismiss').addEventListener('click', dismissEscalation);
 
 async function setupNativeNotifications() {
   if (!IS_NATIVE) return;
@@ -2773,7 +2791,7 @@ async function setupNativeNotifications() {
       await LN.cancel({ notifications: existing.notifications.map(n => ({ id: n.id })) });
     }
     // Reminder ab (lastInteraction + 2 Tage), dann täglich wiederholend
-    const lastMs = lastRealInteractionMs();
+    const lastMs = lastRealInteractionMs(STATE.data.events);
     if (!lastMs) return;
     const firstAt = new Date(lastMs + INACTIVITY_REMINDER_DAYS * 86400000);
     if (firstAt.getTime() < Date.now()) {
@@ -2825,8 +2843,7 @@ async function initNative() {
 
 setTimeout(async () => {
   await initNative();
-  processInactivityEscalation();
-  renderAll(); // Auto-Events der Escalation sofort in Hero/Zähler sichtbar machen
+  renderAll();
   checkForAppUpdate();
   setupNativeNotifications();
 }, 300);
