@@ -238,11 +238,89 @@ function computeTotals(days) {
   return t;
 }
 
+
+// =========================== INAKTIVITÄT ===========================
+const INACTIVITY_REMINDER_DAYS = 2;   // ab wann erinnert wird
+const INACTIVITY_AUTO_KK_DAYS  = 4;   // ab wann Einträge vorgeschlagen werden
+
+/** Zeitpunkt der letzten *echten* Interaktion (automatisch erzeugte zählen nicht). */
+function lastRealInteractionMs(events) {
+  const evs = (events || []).filter(e => !e.auto_inactivity && !e.auto_regen_timeout);
+  if (!evs.length) return null;
+  const latest = evs.reduce((a, b) => (b.date + b.time) > (a.date + a.time) ? b : a);
+  return new Date(`${latest.date}T${latest.time}:00`).getTime();
+}
+
+/**
+ * Was die Inaktivitäts-Regel *vorschlagen* würde — ohne etwas zu schreiben.
+ * Die Entscheidung trifft der Nutzer; erfundene Einträge sind später nicht mehr
+ * von echten zu unterscheiden und würden die Datengrundlage entwerten.
+ *
+ * @param {object} data   { events, meta }
+ * @param {object} [opts] { now?: Date, autoKkDays?: number }
+ * @returns {{faellig, seitMs, anchorMs, kk, orgasmen, anzahl}}
+ */
+function pendingEscalation(data, opts) {
+  const now = (opts && opts.now) || new Date();
+  const autoKkDays = (opts && opts.autoKkDays) || INACTIVITY_AUTO_KK_DAYS;
+  const events = (data && data.events) || [];
+  const leer = { faellig: false, seitMs: 0, anchorMs: null, kk: null, orgasmen: [], anzahl: 0 };
+
+  const lastMs = lastRealInteractionMs(events);
+  if (!lastMs) return leer;
+
+  // Ein verworfener Vorschlag setzt die Uhr neu — sonst käme er bei jedem Start wieder.
+  const dismissedAt = data && data.meta && data.meta.escalationDismissedAt;
+  const dismissedMs = dismissedAt ? new Date(dismissedAt).getTime() : 0;
+  const anchorMs = Math.max(lastMs, isFinite(dismissedMs) ? dismissedMs : 0);
+
+  const seitMs = now.getTime() - anchorMs;
+  if (seitMs < autoKkDays * 86400000) return { ...leer, seitMs, anchorMs };
+
+  const kkAt = new Date(anchorMs + autoKkDays * 86400000);
+  const kkIso = isoOf(kkAt);
+  const kkTime = `${pad2(kkAt.getHours())}:${pad2(kkAt.getMinutes())}`;
+  const hatKk = events.some(e => e.type === 'KK' && e.date === kkIso && e.time === kkTime && e.auto_inactivity);
+
+  const orgasmen = [];
+  const cursor = new Date(kkAt);
+  cursor.setDate(cursor.getDate() + 1);
+  cursor.setHours(0, 0, 0, 0);
+  const bis = new Date(now);
+  bis.setHours(23, 59, 59, 999);
+  while (cursor <= bis) {
+    const iso = isoOf(cursor);
+    if (!events.some(e => e.type === 'OR' && e.date === iso && e.auto_inactivity)) {
+      orgasmen.push({ date: iso, time: '12:00' });
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  const kk = hatKk ? null : { date: kkIso, time: kkTime };
+  return {
+    faellig: !!kk || orgasmen.length > 0,
+    seitMs, anchorMs, kk, orgasmen,
+    anzahl: (kk ? 1 : 0) + orgasmen.length,
+  };
+}
+
+/** Vorschlag in echte Events umwandeln (erst nach Bestätigung durch den Nutzer). */
+function escalationEvents(vorschlag) {
+  const out = [];
+  if (vorschlag.kk) out.push({ date: vorschlag.kk.date, time: vorschlag.kk.time, type: 'KK', auto_inactivity: true });
+  for (const o of vorschlag.orgasmen) {
+    out.push({ date: o.date, time: o.time, type: 'OR', auto_inactivity: true, time_estimated: true });
+  }
+  return out;
+}
+
 // Node (Tests) — im Browser ist `module` nicht definiert.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     MODELS, VERSCHL, POINTS, REGEN_WINDOW_MS, REGEN_COOLDOWN_MS,
     timeToMin, isoOf, minutesOf, isoDateAdd, isoWeek,
     groupByDay, computeDayHours, computeAllFrom, computeTotals, emptyTotals,
+    INACTIVITY_REMINDER_DAYS, INACTIVITY_AUTO_KK_DAYS,
+    lastRealInteractionMs, pendingEscalation, escalationEvents,
   };
 }
