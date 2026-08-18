@@ -1,14 +1,15 @@
 // Service Worker — Offline-fähigkeit + PWA-Install
 // - Static Assets werden gecached (Network-first, fallback Cache)
 // - Microsoft Graph / Login wird NIE gecached (frische Daten nötig)
-// - CDN-Scripts (MSAL, SheetJS) werden mitgecached, damit App offline lädt
+// - MSAL/SheetJS liegen lokal unter vendor/ (kein CDN)
 
-const CACHE = 'locked-static-v4';
+const CACHE = 'locked-static-v5';
 const PRECACHE = [
   './',
   './index.html',
   './calc.js',
   './merge.js',
+  './vendor/msal-browser.min.js',
   './manifest.webmanifest',
   './favicon.png',
   './icon-192.png',

@@ -8,8 +8,6 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.27.0/lib/msal-browser.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root {
     --bg: #2b241b; --panel: #3a3024; --panel-2: #463b2d; --line: #5a4b39;
@@ -231,6 +229,11 @@
     opacity: 0; transition: all .25s ease; pointer-events: none; z-index: 10; font-size: 14px; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .toast.bad { background: var(--bad); color: #fff; }
+  .toast { display: flex; align-items: center; gap: 10px; pointer-events: none; }
+  .toast.has-action { pointer-events: auto; }
+  .toast .undo { background: rgba(0,0,0,.22); color: inherit; border: none; border-radius: 999px;
+    padding: 4px 12px; font: inherit; font-weight: 700; font-size: 13px; cursor: pointer; }
+  .toast .undo:active { background: rgba(0,0,0,.35); }
 
   .update-banner { position: fixed; top: env(safe-area-inset-top); left: 50%;
     transform: translateX(-50%); background: var(--panel-2); color: var(--text);
@@ -550,7 +553,7 @@
   </div>
 </div>
 
-<div class="toast" id="toast">Eingetragen</div>
+<div class="toast" id="toast"><span class="toast-text">Eingetragen</span></div>
 
 <script src="calc.js"></script>
 <script src="merge.js"></script>
@@ -563,6 +566,33 @@ const CFG = {
   // Pfad relativ zum OneDrive-Root. Anpassen falls die Datei woanders liegt.
   oneDrivePath: '/Documents/sonstiges/Keuschhaltung/locked.json',
 };
+
+// =========================== FREMD-SKRIPTE ===========================
+// Beide Bibliotheken liegen mit im Paket statt beim CDN. Ein CDN-Skript ohne
+// Integritaetspruefung koennte beliebigen Code in einer App ausfuehren, die
+// OneDrive-Token haelt — und offline waere es gar nicht da. Lokal ausgeliefert
+// entfaellt beides. Geladen wird trotzdem erst bei Bedarf: msal nur im
+// Browser (die native App nutzt den PKCE-Flow), xlsx nur fuer den Excel-Export.
+const VENDOR = {
+  msal: { url: 'vendor/msal-browser.min.js', global: 'msal' },
+  xlsx: { url: 'vendor/xlsx.full.min.js',    global: 'XLSX' },
+};
+const vendorPending = {};
+function loadVendor(name) {
+  const v = VENDOR[name];
+  if (window[v.global]) return Promise.resolve(window[v.global]);
+  if (vendorPending[name]) return vendorPending[name];
+  vendorPending[name] = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = v.url;
+    s.onload = () => window[v.global]
+      ? resolve(window[v.global])
+      : reject(new Error(`${name} geladen, aber nicht verfügbar`));
+    s.onerror = () => { delete vendorPending[name]; reject(new Error(`${name} konnte nicht geladen werden`)); };
+    document.head.appendChild(s);
+  });
+  return vendorPending[name];
+}
 
 // =========================== AUTH ===========================
 // Zwei Wege, weil MSAL in der nativen App nicht funktioniert:
@@ -758,7 +788,8 @@ async function initAuth() {
     updateAuthUI();
     return;
   }
-  if (typeof msal === 'undefined') { updateAuthUI(); return; }
+  try { await loadVendor('msal'); }
+  catch (e) { console.warn('MSAL nicht ladbar', e); updateAuthUI(); return; }
   msalInstance = new msal.PublicClientApplication(msalConfig);
   await msalInstance.initialize();
   try { await msalInstance.handleRedirectPromise(); } catch (e) { console.error(e); }
@@ -1152,12 +1183,40 @@ function nowHM() {
   const d = new Date();
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
-function showToast(msg, bad=false) {
-  toast.textContent = msg;
+function showToast(msg, bad=false, action=null) {
+  toast.innerHTML = '<span class="toast-text"></span>';
+  toast.querySelector('.toast-text').textContent = msg;
   toast.classList.toggle('bad', bad);
+  toast.classList.toggle('has-action', !!action);
+  if (action) {
+    const btn = document.createElement('button');
+    btn.className = 'undo';
+    btn.type = 'button';
+    btn.textContent = action.label;
+    btn.addEventListener('click', () => {
+      toast.classList.remove('show', 'has-action');
+      clearTimeout(toast._t);
+      action.run();
+    });
+    toast.appendChild(btn);
+  }
   toast.classList.add('show');
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => toast.classList.remove('show'), 1600);
+  toast._t = setTimeout(() => toast.classList.remove('show', 'has-action'), action ? 6000 : 1600);
+}
+
+/** Zustand vor einer Löschung sichern und als "Rückgängig" anbieten.
+ *  Ein Fehlgriff auf dem Handy ist schnell passiert und war bisher endgültig. */
+function withUndo(msg, apply) {
+  const vorher = JSON.stringify(STATE.data);
+  apply();
+  showToast(msg, false, { label: 'Rückgängig', run: () => {
+    STATE.data = JSON.parse(vorher);
+    invalidateCalc();
+    STATE.dirty = true; persistLocal(); scheduleAutosave();
+    renderAll();
+    showToast('Wiederhergestellt');
+  }});
 }
 
 function dayEvents(iso) {
@@ -1233,9 +1292,11 @@ function renderEvents() {
       renderEvents(); renderDayTimeline(); renderDayFlags(); renderTopKpis();
     });
     row.querySelector('.del').addEventListener('click', () => {
-      STATE.data.events.splice(idx, 1);
-      STATE.dirty = true; persistLocal(); scheduleAutosave();
-      renderAll();
+      withUndo(`${MODEL_LABEL[ev.type] || ev.type} ${ev.time} entfernt`, () => {
+        STATE.data.events.splice(idx, 1);
+        STATE.dirty = true; persistLocal(); scheduleAutosave();
+        renderAll();
+      });
     });
     eventsEl.appendChild(row);
   });
@@ -2383,13 +2444,14 @@ document.getElementById('resetDay').addEventListener('click', () => {
   const hasOv  = STATE.data.days && STATE.data.days[iso] && Object.keys(STATE.data.days[iso]).length > 0;
   if (evCnt === 0 && !hasOv) { showToast('Tag ist leer'); return; }
   const parts = [];
-  if (evCnt > 0) parts.push(`${evCnt} Eintrag${evCnt === 1 ? '' : 'e'}`);
-  if (hasOv)     parts.push('Flags + Stunden-Override');
-  if (!confirm(`Vom ${iso} löschen: ${parts.join(' + ')}?`)) return;
-  STATE.data.events = STATE.data.events.filter(e => e.date !== iso);
-  if (STATE.data.days) delete STATE.data.days[iso];
-  STATE.dirty = true; persistLocal(); scheduleAutosave();
-  renderAll();
+  if (evCnt > 0) parts.push(`${evCnt === 1 ? '1 Eintrag' : evCnt + ' Einträge'}`);
+  if (hasOv)     parts.push('Markierungen');
+  withUndo(`${fmtDateShort(iso)} geleert (${parts.join(' + ')})`, () => {
+    STATE.data.events = STATE.data.events.filter(e => e.date !== iso);
+    if (STATE.data.days) delete STATE.data.days[iso];
+    STATE.dirty = true; persistLocal(); scheduleAutosave();
+    renderAll();
+  });
 });
 
 document.getElementById('quickSave').addEventListener('click', async () => {
@@ -2439,8 +2501,9 @@ document.getElementById('btnBackup').addEventListener('click', () => {
   showToast('Backup heruntergeladen');
 });
 
-document.getElementById('btnExportXlsx').addEventListener('click', () => {
-  if (typeof XLSX === 'undefined') { showToast('Excel-Library nicht geladen', true); return; }
+document.getElementById('btnExportXlsx').addEventListener('click', async () => {
+  try { await loadVendor('xlsx'); }
+  catch (e) { console.error(e); showToast('Excel-Baustein nicht ladbar', true); return; }
   const wb = XLSX.utils.book_new();
 
   // Events Sheet
@@ -2489,6 +2552,15 @@ document.getElementById('detailsToggle').addEventListener('click', () => {
   document.getElementById('detailsToggle').textContent =
     DETAILS_OPEN ? 'Details ausblenden ▴' : 'Details anzeigen ▾';
 });
+
+function activeTab() {
+  const t = document.querySelector('.tab.active');
+  return t ? t.dataset.tab : 'eintrag';
+}
+function switchTab(name) {
+  const t = document.querySelector(`.tab[data-tab="${name}"]`);
+  if (t) t.click();
+}
 
 document.querySelectorAll('.tab').forEach(t => {
   t.addEventListener('click', () => {
@@ -2828,6 +2900,20 @@ if (_origAddQuickEvent) {
   if (meta) meta.title = `Locked v${v}`;
 })();
 
+/** Android-Zurück: erst zum Eintrag-Tab, dann in den Hintergrund.
+ *  Ohne Listener beendet die Taste die App sofort — in einer nativen App
+ *  erwartet man stattdessen eine Ebene zurück. */
+function setupBackButton() {
+  const App = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+  if (!App || !App.addListener) return;
+  App.addListener('backButton', () => {
+    if (activeTab() !== 'eintrag') { switchTab('eintrag'); return; }
+    if (window.scrollY > 0) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (App.minimizeApp) App.minimizeApp();
+    else if (App.exitApp) App.exitApp();
+  });
+}
+
 // Native-Init: Filesystem-Datei laden (falls vorhanden), sonst bleibt localStorage-Cache
 async function initNative() {
   if (!IS_NATIVE) return;
@@ -2843,6 +2929,7 @@ async function initNative() {
 
 setTimeout(async () => {
   await initNative();
+  setupBackButton();
   renderAll();
   checkForAppUpdate();
   setupNativeNotifications();
