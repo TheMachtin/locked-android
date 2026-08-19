@@ -234,3 +234,68 @@ test('groupByDay sortiert die Events eines Tages nach Uhrzeit', () => {
   assert.deepStrictEqual(by['2026-08-10'].map(e => e.time), ['06:00', '22:00']);
   assert.strictEqual(by['2026-08-11'].length, 1);
 });
+
+// -------------------------------------------------- verschlossene Phase
+test('lockPhaseStart: ohne Modell-Event läuft kein Zähler', () => {
+  assert.strictEqual(C.lockPhaseStart([], at(2026, 8, 19, 6, 0).getTime()), null);
+  assert.strictEqual(
+    C.lockPhaseStart([ev('2026-08-19', '05:00', 'OR')], at(2026, 8, 19, 6, 0).getTime()),
+    null, 'ein Orgasmus verschließt nichts');
+});
+
+test('lockPhaseStart: nach KK ist nicht verschlossen — auch am neuen Kalendertag', () => {
+  // Der Fall aus der Praxis: seit vorgestern 21:00 offen, jetzt 06:00 morgens.
+  // Früher sprang der Zähler an Mitternacht auf "6 h verschlossen".
+  const evs = [ev('2026-08-17', '21:00', 'KK')];
+  assert.strictEqual(C.lockPhaseStart(evs, at(2026, 8, 19, 6, 0).getTime()), null);
+});
+
+test('lockPhaseStart: Phase läuft über Mitternacht weiter', () => {
+  const evs = [ev('2026-08-17', '21:00', 'KK'), ev('2026-08-17', '22:30', 'HT')];
+  const p = C.lockPhaseStart(evs, at(2026, 8, 19, 6, 0).getTime());
+  assert.strictEqual(p.ms, at(2026, 8, 17, 22, 30).getTime());
+  assert.strictEqual(p.model, 'HT');
+  assert.strictEqual(C.calendarDaysBetween(p.ms, at(2026, 8, 19, 6, 0).getTime()), 2);
+});
+
+test('lockPhaseStart: Modellwechsel unterbricht die Phase nicht', () => {
+  const evs = [
+    ev('2026-08-15', '08:00', 'KK'),
+    ev('2026-08-15', '09:00', 'HT'),
+    ev('2026-08-16', '10:00', 'NS'),   // umgeschnallt, aber durchgehend verschlossen
+    ev('2026-08-17', '11:00', 'REG'),  // Regeneration zählt als verschlossen
+  ];
+  const p = C.lockPhaseStart(evs, at(2026, 8, 18, 12, 0).getTime());
+  assert.strictEqual(p.ms, at(2026, 8, 15, 9, 0).getTime());
+  assert.strictEqual(p.model, 'REG');
+});
+
+test('lockPhaseStart: ein KK beendet die Phase, danach beginnt sie neu', () => {
+  const evs = [
+    ev('2026-08-15', '09:00', 'HT'),
+    ev('2026-08-17', '07:00', 'KK'),
+    ev('2026-08-17', '19:00', 'PC'),
+  ];
+  const p = C.lockPhaseStart(evs, at(2026, 8, 18, 6, 0).getTime());
+  assert.strictEqual(p.ms, at(2026, 8, 17, 19, 0).getTime(), 'nur die neue Phase zählt');
+});
+
+test('lockPhaseStart: erste Phase ohne vorheriges KK', () => {
+  const evs = [ev('2026-08-15', '09:00', 'HT')];
+  const p = C.lockPhaseStart(evs, at(2026, 8, 16, 9, 0).getTime());
+  assert.strictEqual(p.ms, at(2026, 8, 15, 9, 0).getTime());
+});
+
+test('lockPhaseStart: Events nach dem Bezugszeitpunkt bleiben unbeachtet', () => {
+  const evs = [ev('2026-08-15', '09:00', 'HT'), ev('2026-08-15', '20:00', 'KK')];
+  const p = C.lockPhaseStart(evs, at(2026, 8, 15, 12, 0).getTime());
+  assert.strictEqual(p.ms, at(2026, 8, 15, 9, 0).getTime(), 'um 12:00 war noch verschlossen');
+  assert.strictEqual(C.lockPhaseStart(evs, at(2026, 8, 15, 21, 0).getTime()), null);
+});
+
+test('calendarDaysBetween zählt Tagesgrenzen, auch über die Zeitumstellung', () => {
+  assert.strictEqual(C.calendarDaysBetween(at(2026, 8, 19, 23, 0), at(2026, 8, 20, 1, 0)), 1);
+  assert.strictEqual(C.calendarDaysBetween(at(2026, 8, 19, 1, 0), at(2026, 8, 19, 23, 0)), 0);
+  // DE-Sommerzeit beginnt am 29.03.2026
+  assert.strictEqual(C.calendarDaysBetween(at(2026, 3, 28, 20, 0), at(2026, 3, 30, 6, 0)), 2);
+});
