@@ -529,9 +529,11 @@
           • <b>Streaks</b>: bei orgasmusfreiem/ungeöffnetem Tag: <code>vortag × 1,07 + basis</code> (Basis 3 bzw. 5)<br>
           • <b>Stunden verschlossen</b>: HT + NS + PC (ohne KK)<br>
           • <b>Stunden in Klammern (Hero)</b>: exakte Dauer seit Streak-Beginn —
-            Orgasmusfrei ab letztem Orgasmus, Ungeöffnet ab letztem Öffnen,
-            Verschlossen ab Beginn der aktuellen verschlossenen Phase
+            Orgasmusfrei ab letztem Orgasmus, Ungeöffnet ab letztem Öffnen
             (Fallback: 00:00 des ersten Streak-Tages)<br>
+          • <b>Verschlossen (Hero)</b>: läuft ab dem Käfig-Event der aktuellen Phase
+            durch — über Mitternacht hinweg, Modellwechsel unterbrechen sie nicht.
+            Nach einem KK-Event steht der Zähler auf 0, bis wieder verschlossen wird<br>
           • <b>Orgasmus-Zähler</b>: Anzahl der OR-Events (inkl. automatisch erzeugter
             aus der Inaktivitäts-Escalation); die Fenster 30/90/365 T rollieren ab dem
             gewählten Tag, hängen also nicht an Kalendergrenzen; Ø Abstand =
@@ -1106,7 +1108,8 @@ function exportCsv() {
 }
 
 // =========================== CALCULATIONS ===========================
-// MODELS, VERSCHL, POINTS, REGEN_*, timeToMin, isoDateAdd, isoWeek, groupByDay,
+// MODELS, VERSCHL, POINTS, REGEN_*, timeToMin, isoDateAdd, isoWeek, calendarDaysBetween,
+// lockPhaseStart, groupByDay,
 // computeDayHours, computeAllFrom, computeTotals, emptyTotals kommen aus calc.js.
 
 function fmtNum(n, dp=2) { if (n == null || isNaN(n)) return '—';
@@ -1608,9 +1611,11 @@ function renderOrgasmCounter() {
 // =========================== STREAK-DAUER (exakte Stunden) ===========================
 const OPEN_TYPES = ['HT','NS','PC','KK'];
 
-/** Startzeitpunkt einer laufenden Streak — so exakt wie die Events es hergeben.
- *  'of' = letzter Orgasmus, 'uo' = letztes Öffnen, 'v' = Beginn der verschlossenen Phase.
+/** Startzeitpunkt einer laufenden Tages-Streak — so exakt wie die Events es hergeben.
+ *  'of' = letzter Orgasmus, 'uo' = letztes Öffnen.
  *  Fallback (exact=false): 00:00 des ersten Streak-Tages.
+ *  Die verschlossene Phase läuft nicht über Tages-Flags, sondern über
+ *  lockPhaseStart() — sie hängt am aktuellen Zustand, nicht am Kalendertag.
  *  Rückgabe: { ms, exact } oder null. */
 function streakStart(kind, days, idx, count, refMs) {
   if (count <= 0 || idx < 0) return null;
@@ -1627,18 +1632,8 @@ function streakStart(kind, days, idx, count, refMs) {
     const prior = evs.filter(x => x.e.type === 'OR' && x.t <= boundary).pop();
     return prior ? { ms: prior.t, exact: true } : fallback;
   }
-  if (kind === 'uo') {
-    const prior = evs.filter(x => OPEN_TYPES.includes(x.e.type) && x.t <= boundary).pop();
-    return prior ? { ms: prior.t, exact: true } : fallback;
-  }
-  // 'v': seit wann durchgehend verschlossen → erstes Käfig-Event nach dem letzten KK
-  const lastKK = evs.filter(x => x.e.type === 'KK').pop();
-  if (!lastKK) {
-    const firstLock = evs.find(x => VERSCHL.includes(x.e.type));
-    return (firstLock && firstLock.t >= boundary) ? { ms: firstLock.t, exact: true } : fallback;
-  }
-  const lockStart = evs.find(x => VERSCHL.includes(x.e.type) && x.t > lastKK.t);
-  return lockStart ? { ms: lockStart.t, exact: true } : fallback;
+  const prior = evs.filter(x => OPEN_TYPES.includes(x.e.type) && x.t <= boundary).pop();
+  return prior ? { ms: prior.t, exact: true } : fallback;
 }
 
 /** "seit 07.08.26 09:30" (exakter Anker) bzw. "seit 07.08.26" (Tagesgrenze) */
@@ -1680,11 +1675,10 @@ function renderHero() {
   }
 
   // Streak-Row: Orgasmusfrei / Ungeöffnet / Verschlossen — drei unabhängige Zähler
-  let ofDays = 0, uoDays = 0, vDays = 0;
+  let ofDays = 0, uoDays = 0;
   if (idx >= 0) {
     for (let i = idx; i >= 0 && days[i].orgasmusfrei; i--) ofDays++;
     for (let i = idx; i >= 0 && days[i].ungeoeffnet;  i--) uoDays++;
-    for (let i = idx; i >= 0 && !days[i].keinKG;      i--) vDays++;
   }
   // Exakte Dauer je Streak — Bezug: heute = jetzt, sonst Tagesende
   const refMs = refTimeFor(iso).getTime();
@@ -1696,10 +1690,20 @@ function renderHero() {
       ms: start ? Math.max(0, refMs - start.ms) : null,
     };
   };
+  // Verschlossen hängt am Zustand, nicht am Kalendertag: die Phase beginnt beim
+  // Käfig-Event und läuft über Mitternacht weiter. Ohne Käfig läuft sie gar nicht —
+  // kein KG heißt nicht verschlossen, auch am gerade erst begonnenen Tag.
+  const lock = lockPhaseStart(STATE.data.events, refMs);
+  const lockItem = {
+    days: lock ? calendarDaysBetween(lock.ms, refMs) : 0,
+    label: 'Verschlossen',
+    since: lock ? fmtStreakSince({ ms: lock.ms, exact: true }) : 'nicht verschlossen',
+    ms: lock ? Math.max(0, refMs - lock.ms) : null,
+  };
   document.getElementById('streakRow').innerHTML = [
     item('of', ofDays, 'Orgasmusfrei'),
     item('uo', uoDays, 'Ungeöffnet'),
-    item('v',  vDays,  'Verschlossen'),
+    lockItem,
   ].map(s => `<div class="streak-item">
     <div class="days">${s.days} T${s.ms != null
       ? ` <span class="hrs" title="${fmtDurationLong(s.ms)}">(${fmtInt(msToHours(s.ms))} h)</span>`

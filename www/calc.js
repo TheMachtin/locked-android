@@ -43,6 +43,13 @@ function isoDateAdd(iso, days) {
   return isoOf(d);
 }
 
+/** Überschrittene Tagesgrenzen zwischen zwei Zeitpunkten (lokal, DST-sicher über 12:00). */
+function calendarDaysBetween(aMs, bMs) {
+  const a = new Date(aMs); a.setHours(12, 0, 0, 0);
+  const b = new Date(bMs); b.setHours(12, 0, 0, 0);
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+
 /** ISO 8601 Kalenderwoche, "YYYY-Www" */
 function isoWeek(iso) {
   const d = new Date(iso + 'T12:00:00');
@@ -239,6 +246,43 @@ function computeTotals(days) {
 }
 
 
+// =========================== VERSCHLOSSEN-PHASE ===========================
+/**
+ * Beginn der aktuell laufenden verschlossenen Phase — oder null, wenn gerade
+ * nicht verschlossen ist.
+ *
+ * "Verschlossen" ist ein Zustand, kein Tagesmerkmal: maßgeblich ist das zuletzt
+ * eingetragene Modell, nicht wie viele Stunden auf einem Kalendertag zusammen-
+ * kommen. Damit läuft die Phase über Mitternacht hinweg weiter, und ein KK-Tag
+ * ("nicht verschlossen") lässt keinen Zähler ab 00:00 neu starten — kein Käfig
+ * heißt nicht verschlossen, auch wenn der Kalendertag gerade erst begonnen hat.
+ *
+ * Modellwechsel innerhalb der Phase (z. B. HT → NS) unterbrechen sie nicht;
+ * erst ein KK-Event beendet sie.
+ *
+ * @param {Array} events  alle Events (roh, ungefiltert)
+ * @param {number} refMs  Bezugszeitpunkt — spätere Events bleiben unbeachtet
+ * @returns {{ms:number, model:string}|null}
+ */
+function lockPhaseStart(events, refMs) {
+  const ref = (typeof refMs === 'number') ? refMs : Date.now();
+  const evs = (events || [])
+    .filter(e => MODELS.includes(e.type))
+    .map(e => ({ type: e.type, t: new Date(`${e.date}T${e.time}:00`).getTime() }))
+    .filter(x => isFinite(x.t) && x.t <= ref)
+    .sort((a, b) => a.t - b.t);
+  // Ohne Modell-Event gilt der Startzustand KK — also nicht verschlossen.
+  if (!evs.length) return null;
+  const last = evs[evs.length - 1];
+  if (!VERSCHL.includes(last.type)) return null;
+  let start = last;
+  for (let i = evs.length - 2; i >= 0; i--) {
+    if (!VERSCHL.includes(evs[i].type)) break;
+    start = evs[i];
+  }
+  return { ms: start.t, model: last.type };
+}
+
 // =========================== INAKTIVITÄT ===========================
 const INACTIVITY_REMINDER_DAYS = 2;   // ab wann erinnert wird
 const INACTIVITY_AUTO_KK_DAYS  = 4;   // ab wann Einträge vorgeschlagen werden
@@ -318,7 +362,8 @@ function escalationEvents(vorschlag) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     MODELS, VERSCHL, POINTS, REGEN_WINDOW_MS, REGEN_COOLDOWN_MS,
-    timeToMin, isoOf, minutesOf, isoDateAdd, isoWeek,
+    timeToMin, isoOf, minutesOf, isoDateAdd, isoWeek, calendarDaysBetween,
+    lockPhaseStart,
     groupByDay, computeDayHours, computeAllFrom, computeTotals, emptyTotals,
     INACTIVITY_REMINDER_DAYS, INACTIVITY_AUTO_KK_DAYS,
     lastRealInteractionMs, pendingEscalation, escalationEvents,
