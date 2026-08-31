@@ -1,12 +1,15 @@
 {
   "name": "locked",
-  "version": "1.0.0",
-  "description": "Locked — personal tracking, native Android via Capacitor",
+  "version": "2.0.0",
+  "description": "Locked — persönliches Tracking als Android-, Desktop- und Web-App",
   "private": true,
   "scripts": {
+    "test": "node --test test/*.test.js",
     "sync": "cap sync android",
     "build:apk": "cap sync android && cd android && ./gradlew assembleRelease",
-    "test": "node --test test/*.test.js"
+    "start": "electron .",
+    "build:win": "electron-builder --win --publish never",
+    "build:linux": "electron-builder --linux --publish never"
   },
   "dependencies": {
     "@capacitor/android": "^6.1.2",
@@ -21,5 +24,7 @@
   "devDependencies": {
     "@capacitor/cli": "^6.1.2",
     "@capacitor/assets": "^3.0.5"
-  }
+  },
+  "type": "module",
+  "main": "electron/main.js"
 }

@@ -1,91 +1,75 @@
-/**
- * Tests für die Inaktivitäts-Vorschläge (www/calc.js).
- * Kernpunkt: es darf nichts geschrieben werden, bevor der Nutzer zugestimmt hat.
- */
-const test = require('node:test');
-const assert = require('node:assert');
-const C = require('../www/calc.js');
+import test from 'node:test';
+import assert from 'node:assert/strict';
 
-const at = (y, mo, d, h = 12, mi = 0) => new Date(y, mo - 1, d, h, mi, 0);
-const ev = (date, time, type, extra) => Object.assign({ date, time, type }, extra || {});
+import { pendingEscalation, escalationEvents, lastRealInteractionMs } from '../www/js/core/escalation.js';
+import { normalizeSettings } from '../www/js/core/settings.js';
 
-test('ohne Events gibt es nichts vorzuschlagen', () => {
-  const r = C.pendingEscalation({ events: [] }, { now: at(2026, 8, 20) });
-  assert.strictEqual(r.faellig, false);
-  assert.strictEqual(r.anzahl, 0);
+const ev = (date, time, type, extra) => ({ date, time, type, ...extra });
+
+test('Automatisch erzeugte Einträge zählen nicht als Interaktion', () => {
+  const events = [
+    ev('2026-03-01', '10:00', 'HT'),
+    ev('2026-03-05', '12:00', 'OR', { auto_inactivity: true }),
+  ];
+  const ms = lastRealInteractionMs(events);
+  assert.equal(new Date(ms).toISOString().slice(0, 10), '2026-03-01');
 });
 
-test('innerhalb der Frist passiert nichts', () => {
-  const r = C.pendingEscalation(
-    { events: [ev('2026-08-18', '08:00', 'HT')] },
-    { now: at(2026, 8, 21, 7, 0) });   // knapp unter 4 Tagen
-  assert.strictEqual(r.faellig, false);
-  assert.strictEqual(r.orgasmen.length, 0);
+test('Vor Ablauf der Frist wird nichts vorgeschlagen', () => {
+  const data = { events: [ev('2026-03-01', '10:00', 'HT')] };
+  const v = pendingEscalation(data, { now: new Date('2026-03-03T10:00:00') });
+  assert.equal(v.faellig, false);
 });
 
-test('nach 4 Tagen wird ein KK-Eintrag vorgeschlagen — aber nicht geschrieben', () => {
-  const data = { events: [ev('2026-08-10', '08:00', 'HT')] };
-  const r = C.pendingEscalation(data, { now: at(2026, 8, 14, 9, 0) });
-  assert.strictEqual(r.faellig, true);
-  assert.deepStrictEqual(r.kk, { date: '2026-08-14', time: '08:00' });
-  assert.strictEqual(data.events.length, 1, 'die Eingabedaten dürfen sich nicht ändern');
+test('Nach der Frist werden Öffnung und Orgasmen vorgeschlagen, aber nichts geschrieben', () => {
+  const events = [ev('2026-03-01', '10:00', 'HT')];
+  const v = pendingEscalation({ events }, { now: new Date('2026-03-07T10:00:00') });
+  assert.equal(v.faellig, true);
+  assert.equal(v.offen.date, '2026-03-05', 'vier Tage nach der letzten Interaktion');
+  assert.equal(v.offen.type, 'KK');
+  assert.equal(v.orgasmen.length, 2, 'ab dem Tag nach der Öffnung: 06. und 07.');
+  assert.deepEqual(v.orgasmen.map(o => o.date), ['2026-03-06', '2026-03-07']);
+  assert.equal(events.length, 1, 'die Daten bleiben unangetastet');
 });
 
-test('pro Tag nach der Frist kommt ein Orgasmus-Vorschlag dazu', () => {
-  const r = C.pendingEscalation(
-    { events: [ev('2026-08-10', '08:00', 'HT')] },
-    { now: at(2026, 8, 17, 12, 0) });
-  assert.deepStrictEqual(r.orgasmen.map(o => o.date),
-    ['2026-08-15', '2026-08-16', '2026-08-17']);
-  assert.strictEqual(r.anzahl, 4, 'ein KK plus drei Orgasmen');
-});
-
-test('bereits übernommene Vorschläge werden nicht doppelt angeboten', () => {
-  const r = C.pendingEscalation({ events: [
-    ev('2026-08-10', '08:00', 'HT'),
-    ev('2026-08-14', '08:00', 'KK', { auto_inactivity: true }),
-    ev('2026-08-15', '12:00', 'OR', { auto_inactivity: true }),
-  ] }, { now: at(2026, 8, 16, 12, 0) });
-  assert.strictEqual(r.kk, null, 'KK ist schon da');
-  assert.deepStrictEqual(r.orgasmen.map(o => o.date), ['2026-08-16']);
-});
-
-test('automatisch erzeugte Einträge verlängern die Frist nicht', () => {
-  // Nur Auto-Einträge nach dem letzten echten → Anker bleibt der echte Eintrag
-  const r = C.pendingEscalation({ events: [
-    ev('2026-08-10', '08:00', 'HT'),
-    ev('2026-08-14', '08:00', 'KK', { auto_inactivity: true }),
-  ] }, { now: at(2026, 8, 15, 12, 0) });
-  assert.strictEqual(r.anchorMs, new Date('2026-08-10T08:00:00').getTime());
-});
-
-test('ein verworfener Vorschlag setzt die Uhr neu', () => {
+test('Ein verworfener Vorschlag setzt die Frist neu', () => {
   const data = {
-    events: [ev('2026-08-10', '08:00', 'HT')],
-    meta: { escalationDismissedAt: new Date(at(2026, 8, 15, 10, 0)).toISOString() },
+    events: [ev('2026-03-01', '10:00', 'HT')],
+    meta: { escalationDismissedAt: '2026-03-07T10:00:00' },
   };
-  // 2 Tage nach dem Verwerfen: noch nichts fällig, obwohl der Eintrag 7 Tage her ist
-  assert.strictEqual(C.pendingEscalation(data, { now: at(2026, 8, 17, 12, 0) }).faellig, false);
-  // 5 Tage nach dem Verwerfen: wieder fällig
-  assert.strictEqual(C.pendingEscalation(data, { now: at(2026, 8, 20, 12, 0) }).faellig, true);
+  assert.equal(pendingEscalation(data, { now: new Date('2026-03-08T10:00:00') }).faellig, false);
+  assert.equal(pendingEscalation(data, { now: new Date('2026-03-12T10:00:00') }).faellig, true);
 });
 
-test('escalationEvents markiert alles als automatisch erzeugt', () => {
-  const vorschlag = C.pendingEscalation(
-    { events: [ev('2026-08-10', '08:00', 'HT')] },
-    { now: at(2026, 8, 16, 12, 0) });
-  const evs = C.escalationEvents(vorschlag);
-  assert.strictEqual(evs.length, vorschlag.anzahl);
-  assert.ok(evs.every(e => e.auto_inactivity === true), 'sonst zählen sie später als echt');
-  assert.strictEqual(evs[0].type, 'KK');
-  assert.ok(evs.slice(1).every(e => e.type === 'OR' && e.time_estimated === true));
+test('Übernommene Vorschläge tauchen nicht doppelt auf', () => {
+  const events = [ev('2026-03-01', '10:00', 'HT')];
+  const now = new Date('2026-03-07T10:00:00');
+  const v = pendingEscalation({ events }, { now });
+  events.push(...escalationEvents(v));
+  const nachher = pendingEscalation({ events }, { now });
+  assert.equal(nachher.faellig, false);
 });
 
-test('lastRealInteractionMs nimmt den spätesten echten Eintrag', () => {
-  const ms = C.lastRealInteractionMs([
-    ev('2026-08-10', '08:00', 'HT'),
-    ev('2026-08-12', '20:00', 'NS'),
-    ev('2026-08-14', '12:00', 'OR', { auto_inactivity: true }),
-  ]);
-  assert.strictEqual(ms, new Date('2026-08-12T20:00:00').getTime());
+test('Erzeugte Events sind als automatisch und geschätzt markiert', () => {
+  const v = pendingEscalation({ events: [ev('2026-03-01', '10:00', 'HT')] },
+    { now: new Date('2026-03-06T10:00:00') });
+  const out = escalationEvents(v);
+  assert.ok(out.every(e => e.auto_inactivity));
+  assert.ok(out.filter(e => e.type === 'OR').every(e => e.time_estimated));
+});
+
+test('Die Regel folgt der Registry: eigener offener Zustand, eigene Frist', () => {
+  const settings = normalizeSettings({
+    models: [
+      { id: 'KAEFIG', label: 'Käfig', rate: 0.5, locked: true },
+      { id: 'FREI', label: 'Frei', rate: -1, isOpen: true },
+      { id: 'KOMMEN', kind: 'orgasm', label: 'Orgasmus' },
+    ],
+    rules: { inactivityAutoDays: 2 },
+  });
+  const v = pendingEscalation({ events: [ev('2026-03-01', '10:00', 'KAEFIG')] },
+    { now: new Date('2026-03-04T10:00:00'), settings });
+  assert.equal(v.offen.type, 'FREI');
+  assert.equal(v.offen.date, '2026-03-03', 'zwei Tage statt vier');
+  assert.equal(v.orgasmen[0].type, 'KOMMEN');
 });
