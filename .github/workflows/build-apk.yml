@@ -44,6 +44,7 @@ jobs:
       - name: Bake version into www/index.html
         run: |
           sed -i "s|__APP_VERSION__|${{ steps.ver.outputs.name }}|g" www/index.html || true
+          sed -i "s|__APP_COMMIT__|${{ steps.ver.outputs.hash }}|g" www/index.html || true
 
       - name: Install npm dependencies
         run: npm install
