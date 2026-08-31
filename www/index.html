@@ -2688,6 +2688,10 @@ function versionAsInt(v) {
 }
 
 async function checkForAppUpdate() {
+  // Nur nativ: der Check endet in einem APK-Download. Die Web-Version am PC
+  // aktualisiert sich über den Service Worker und hat dafür ein eigenes Banner —
+  // ein APK-Link wäre dort nur irreführend.
+  if (!IS_NATIVE) return;
   if (!APP_VERSION || APP_VERSION.startsWith('__')) return;
   try {
     const r = await fetch(`https://api.github.com/repos/${RELEASE_REPO}/releases/latest`, { cache: 'no-cache' });
