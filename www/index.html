@@ -888,7 +888,12 @@ async function loadFromOneDrive(silent=false) {
     } else if (!silent) {
       showToast(`${STATE.data.events?.length || 0} Events geladen`);
     }
-  } catch (e) { console.error(e); if (!silent) showToast('Laden fehlgeschlagen', true); }
+  } catch (e) {
+    // Auch den stillen Start-Load melden: schlägt er fehl, bleibt der
+    // localStorage-Cache stehen und sieht aus wie der aktuelle Stand.
+    console.error(e);
+    showToast('OneDrive-Laden fehlgeschlagen — angezeigte Daten können veraltet sein', true);
+  }
 }
 
 // =========================== SANITY CHECK ===========================
@@ -930,6 +935,13 @@ function sanityCheck(data) {
 }
 
 async function saveToOneDrive(versuch = 0) {
+  // Ohne ETag ist der Serverstand unbekannt, und ein PUT ohne If-Match
+  // überschreibt ihn blind. Genau das passiert, wenn der Start-Load
+  // fehlgeschlagen ist: dann steht noch der localStorage-Cache im Speicher und
+  // der erste Eintrag würde die OneDrive-Datei damit ersetzen. Also erst den
+  // Serverstand holen und zusammenführen.
+  if (!STATE.etag && versuch === 0) await mergeWithRemote();
+
   const token = await getToken();
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   if (STATE.etag) headers['If-Match'] = STATE.etag;
@@ -942,8 +954,7 @@ async function saveToOneDrive(versuch = 0) {
     // Die Datei wurde anderswo geändert. Statt eine Seite zu verwerfen, den
     // Serverstand holen und dreiwegig zusammenführen (Basis = letzter Abgleich).
     if (versuch >= 2) throw new Error('Sync-Konflikt bleibt bestehen — bitte später nochmal speichern');
-    const merged = await mergeWithRemote();
-    if (!merged) throw new Error('Konflikt: Serverstand nicht lesbar');
+    await mergeWithRemote();
     return saveToOneDrive(versuch + 1);
   }
 
@@ -956,11 +967,15 @@ async function saveToOneDrive(versuch = 0) {
 }
 
 /** Serverstand laden und mit dem lokalen zusammenführen. Ergebnis wird lokal
- *  übernommen; gespeichert wird danach vom Aufrufer. */
+ *  übernommen; gespeichert wird danach vom Aufrufer.
+ *  @returns stats, oder null wenn es die Datei auf OneDrive noch nicht gibt.
+ *  @throws  wenn der Serverstand nicht lesbar ist — dann darf nicht gespeichert
+ *           werden, sonst überschreibt der lokale Stand ungeprüft. */
 async function mergeWithRemote() {
   const token = await getToken();
   const res = await fetch(graphUrl(), { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) return null;
+  if (res.status === 404) return null;   // erste Speicherung legt die Datei an
+  if (!res.ok) throw new Error(`Serverstand nicht lesbar (Graph ${res.status})`);
   const remote = await res.json();
   const { data, stats } = mergeData(STATE.base, STATE.data, remote);
 
@@ -1010,8 +1025,14 @@ const STATE = {
   fileHandle: null,
   dirty: false,
 };
-const LS_KEY = 'locked_data_v1';
-const LS_BASE_KEY = 'locked_sync_base_v1';
+// _v2 statt _v1, weil die alte PWA (themachtin.github.io/locked/) auf derselben
+// Origin liegt wie diese hier (themachtin.github.io/locked-android/) und dieselben
+// Schlüssel benutzte — localStorage trennt nach Origin, nicht nach Pfad. Die App
+// las dadurch deren Monate alten Cache und zeigte ihn als aktuellen Stand an.
+// Der Cache ist nur Zwischenspeicher: nativ kommt der Stand aus DATA/locked.json,
+// im Browser aus OneDrive.
+const LS_KEY = 'locked_data_v2';
+const LS_BASE_KEY = 'locked_sync_base_v2';
 const LS_HANDLE_HINT = 'locked_has_handle';
 
 function loadFromLocalStorage() {

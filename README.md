@@ -108,9 +108,15 @@ SPA-Redirect-URI in Azure stehen.
 ### Die alte PWA nicht parallel benutzen
 
 Das Vorgänger-Repo [TheMachtin/locked](https://github.com/TheMachtin/locked) liegt
-auf demselben OneDrive-Pfad, ist aber älter: bei einem Schreibkonflikt (HTTP 412)
-fragt es nur „lokal behalten oder Serverstand laden" und überschreibt die Datei
-danach ohne `If-Match` — der Drei-Wege-Merge aus `merge.js` fehlt dort. Wer beide
+auf demselben OneDrive-Pfad **und auf derselben Origin** — GitHub-Pages-Projektseiten
+teilen sich `themachtin.github.io`, und localStorage trennt nach Origin, nicht nach
+Pfad. Beide Apps benutzten deshalb denselben Cache-Schlüssel `locked_data_v1`: die
+neue App zeigte beim Start den Monate alten Stand der alten PWA an, bis der
+OneDrive-Load durch war. Seit `locked_data_v2` ist das getrennt.
+
+Davon abgesehen ist sie älter: bei einem Schreibkonflikt (HTTP 412) fragt sie nur
+„lokal behalten oder Serverstand laden" und überschreibt die Datei danach ohne
+`If-Match` — der Drei-Wege-Merge aus `merge.js` fehlt dort. Wer beide
 gleichzeitig nutzt, riskiert, Einträge des anderen Geräts zu verlieren.
 
 ## Tech
