@@ -59,7 +59,8 @@ Jeder Push auf `main` löst zwei Workflows aus:
 **Web-Version** (`deploy-pages.yml`): `www/` geht nach GitHub Pages, siehe
 [Am PC benutzen](#am-pc-benutzen). Beide Workflows berechnen die Version gleich
 (Commit-Anzahl → `1.0.N`), Handy und PC zeigen nach einem Push also dieselbe
-Nummer — sichtbar im Tooltip der Kopfzeile.
+Nummer — sichtbar im Daten-Tab unter *Version*, zusammen mit dem Build
+(Android/Web) und dem Commit-Hash.
 
 ## Installation
 

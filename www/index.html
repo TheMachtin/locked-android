@@ -544,6 +544,11 @@
         </div>
       </details>
     </div>
+
+    <div class="card">
+      <h2>Version</h2>
+      <div class="small" id="versionInfo">—</div>
+    </div>
   </div>
 
 </div>
@@ -2660,6 +2665,7 @@ initAuth().then(() => {
 
 // =========================== NATIVE (Capacitor) ===========================
 const APP_VERSION = '__APP_VERSION__'; // wird beim Build ersetzt
+const APP_COMMIT  = '__APP_COMMIT__';  // dito — kurzer Commit-Hash
 const RELEASE_REPO = 'TheMachtin/locked-android';
 const IS_NATIVE = isNativeApp();
 const NATIVE_FILE = 'locked.json';
@@ -2922,11 +2928,22 @@ if (_origAddQuickEvent) {
   };
 }
 
-// Version im Footer anzeigen (subtil)
+// Version sichtbar im Daten-Tab. Vorher stand sie nur im title-Attribut der
+// Kopfzeile — ein Tooltip, den ein Touch-Gerät gar nicht anzeigt. Welcher Build
+// läuft, gehört dazu: Web und APK tragen dieselbe Nummer und sehen gleich aus.
 (function showVersion() {
   const v = APP_VERSION.startsWith('__') ? 'dev' : APP_VERSION;
+  const build = IS_NATIVE ? 'Android' : 'Web';
+  const commit = APP_COMMIT.startsWith('__') ? null : APP_COMMIT;
+
   const meta = document.getElementById('meta');
-  if (meta) meta.title = `Locked v${v}`;
+  if (meta) meta.title = `Locked v${v} · ${build}`;
+
+  const info = document.getElementById('versionInfo');
+  if (info) {
+    info.innerHTML = `<b>Locked v${escapeHtml(v)}</b> · ${build}`
+      + (commit ? ` · Commit <code>${escapeHtml(commit)}</code>` : '');
+  }
 })();
 
 /** Android-Zurück: erst zum Eintrag-Tab, dann in den Hintergrund.
