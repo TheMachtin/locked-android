@@ -1,0 +1,84 @@
+name: Desktop-App bauen
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Der Release-Upload braucht Schreibrecht auf contents.
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            ziel: --win
+            artefakte: |
+              dist/*.exe
+          - os: ubuntu-latest
+            ziel: --linux
+            artefakte: |
+              dist/*.AppImage
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # rev-list --count braucht die volle Historie
+
+      - name: Node einrichten
+        uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - name: Version bestimmen
+        id: ver
+        shell: bash
+        run: |
+          # Dieselbe Rechnung wie im APK- und im Pages-Build: Commit-Anzahl → 2.0.N.
+          NAME="2.0.$(git rev-list --count HEAD)"
+          echo "name=$NAME" >> $GITHUB_OUTPUT
+          echo "hash=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Abhängigkeiten installieren
+        run: npm install
+
+      - name: Tests
+        # Ein kaputter Berechnungskern soll gar nicht erst als Installer enden.
+        run: npm test
+
+      - name: Version eintragen
+        shell: bash
+        run: ./scripts/bake-version.sh "${{ steps.ver.outputs.name }}" "${{ steps.ver.outputs.hash }}"
+
+      - name: Paket bauen
+        # Ohne Signatur — ein Code-Signing-Zertifikat kostet Geld und ist für eine
+        # App, die nur ihr Autor installiert, nicht nötig. Windows zeigt beim
+        # ersten Start den SmartScreen-Hinweis; „Weitere Informationen" →
+        # „Trotzdem ausführen".
+        run: npx electron-builder ${{ matrix.ziel }} --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Artefakte hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: locked-desktop-${{ runner.os }}
+          path: ${{ matrix.artefakte }}
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: An den Release hängen
+        # Der APK-Workflow legt den Release unter demselben Tag an; softprops
+        # ergänzt ihn, statt einen zweiten zu erzeugen.
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.name }}
+          name: Locked ${{ steps.ver.outputs.name }}
+          files: ${{ matrix.artefakte }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,127 +1,202 @@
-# Locked — Android App
+# Locked 2.0
 
-Native Android-Version der [Locked-PWA](https://github.com/TheMachtin/locked), gebaut mit Capacitor.
+Persönliches Tracking als **Android-App**, **Desktop-Programm** und **Web-App** —
+ein Quellcode (`www/`), drei Hüllen.
 
-## Features (zusätzlich zur PWA)
-
-- **Native Local Notifications** — täglicher Reminder um 08:00 (Berechtigung wird beim ersten Start abgefragt)
-- **In-App-Update-Check** — prüft beim Start ob eine neue Version im GitHub-Release liegt, zeigt Banner mit Download-Link
-- **Echtes Offline-First** — die App startet ohne Netz, OneDrive-Sync läuft opportunistisch
-
-## Setup (einmalig)
-
-1. **Keystore erzeugen**: im Repo → Actions → *Bootstrap Signing Keystore* → *Run workflow*
-2. Nach Abschluss: Artifact `locked-keystore` herunterladen
-3. Inhalt von `keystore.base64.txt` als Secret `KEYSTORE_BASE64` im Repo speichern
-   (Settings → Secrets and variables → Actions → New repository secret)
-4. Passwort aus `keystore.password.txt` als Secret `KEYSTORE_PASSWORD` speichern
-5. Keystore-Datei (`locked-release.jks`) **sicher offline** aufheben — bei Verlust kein App-Update mehr möglich
-
-## Microsoft-Login (OneDrive-Sync) — Azure-Setup
-
-Die native App kann **nicht** denselben Login-Weg nutzen wie die PWA: `loginPopup()` ruft
-`window.open()`, und die Capacitor-WebView reicht das an den externen Chrome weiter — das
-Token käme über `window.opener` nie in die App zurück. Deshalb läuft der Login nativ über
-den System-Browser (Chrome Custom Tab) mit **Auth-Code-Flow + PKCE** und springt über das
-eigene Schema `locked://auth` zurück.
-
-Damit das funktioniert, braucht die App-Registrierung im
-[Azure-Portal](https://portal.azure.com) → *App-Registrierungen* → *Authentifizierung*:
-
-| Plattform | Redirect-URI | wofür |
+| Plattform | Bezug | Installation |
 |---|---|---|
-| Mobile- und Desktopanwendungen | `locked://auth` | native App |
-| Single-page application | `https://themachtin.github.io/locked-android/` | Web-Version am PC |
+| Android | APK aus dem [neuesten Release](https://github.com/TheMachtin/locked-android/releases) | antippen → „Von unbekannter Quelle zulassen" |
+| Windows | `Locked-Setup-2.0.N.exe` aus demselben Release | ausführen; portable Variante liegt daneben |
+| Linux | `Locked-2.0.N.AppImage` | ausführbar machen und starten |
+| Browser | <https://themachtin.github.io/locked-android/> | Edge/Chrome → „App installieren" |
 
-Die native URI wird über *Plattform hinzufügen → Mobile- und Desktopanwendungen →
-Benutzerdefinierte Redirect-URI* eingetragen. Sie darf **nicht** unter „Single-page
-application" stehen — sonst lehnt der Token-Endpunkt den Tausch ab.
+Alle Installationen teilen sich dieselbe OneDrive-Datei und führen parallele
+Änderungen dreiwegig zusammen — Handy und PC dürfen gleichzeitig laufen.
 
-Welche URI die laufende Installation tatsächlich sendet, steht in der App unter
-**Daten → OneDrive-Sync**. Schlägt die Anmeldung fehl, zeigt die App die vollständige
-Microsoft-Meldung an (inkl. `AADSTS`-Code, falls vorhanden).
+## Wie die Punkte entstehen
+
+```
+Einnahmen = (verschlossene Stunden × Satz des Modells + Bonus) × Streak-Multiplikator
+Kosten    = offene Stunden × Satz + Preis je Orgasmus
+Konto     = Summe aller Tagesergebnisse seit dem Stichtag
+Form      = Form gestern × 0,97 + Tagesergebnis
+```
+
+Drei Eigenschaften, die das Modell tragen:
+
+**Der Streak wirkt als Multiplikator, nicht als Summand.** `1 + 0,02 × orgasmusfreie
+Tage`, gedeckelt bei 2,0. Er verstärkt, was tatsächlich getan wurde — ohne Käfig
+gibt es auch mit 200 Tagen Streak nichts.
+
+**Der Orgasmus hat einen sichtbaren Preis.** `15 + 45 × 2^(−Wartetage/7)`: heute
+nach dem letzten kostet er 60, nach einer Woche 37, nach einem Monat 17. Die App
+zeigt den aktuellen Preis an, *bevor* man ihn zahlt. Ein Streak-Bruch ist damit
+eine bezifferte Entscheidung statt einer stillen Katastrophe.
+
+**Konto und Form sagen Verschiedenes.** Das Konto summiert und wächst zwangsläufig.
+Die Form klingt mit 3 % pro Tag ab, läuft gegen einen Grenzwert und bleibt
+dadurch über Jahre vergleichbar: ein Ausrutscher dellt sie, zerstört sie nicht,
+und zwei ruhige Wochen bauen sie spürbar ab.
+
+Jede Zahl darin steht im Tab **Regeln** und liegt in der Datei, nicht im Programm.
+
+### Warum 1.x abgelöst wurde
+
+Die alte Formel war `Streak = Streak × 1,07 + Basis` — eine Rekursion ohne
+Fixpunkt:
+
+| Tag | Streak-Punkte/Tag | Anteil der Tragestunden am Tagesergebnis |
+|---|---|---|
+| 1 | 8 | 56 % |
+| 30 | 755 | 1,3 % |
+| 90 | 50.300 | 0,02 % |
+| 365 | 6,1 · 10¹² | ~0 % |
+
+Ab etwa Tag 40 maß die App nur noch „Tage seit dem letzten Orgasmus"; ob 24 oder
+4 Stunden getragen wurde, war rechnerisch Rauschen. Der Orgasmus kostete nominal
+−10, real aber den ganzen Streak — unbezifferbar und nirgends sichtbar. Und
+„Ungeöffnet" hieß *kein Eintrag an dem Tag*, mit der höchsten Basis im Modell:
+die App nicht zu benutzen zahlte sich am besten aus.
+
+## Modelle sind Daten
+
+Käfige, Ereignisse und Sätze stehen unter **Regeln**, nicht im Quellcode. Je
+Modell einstellbar: Bezeichnung, Farbe, Punkte je Stunde, „zählt als
+verschlossen". Ein neuer Käfig — oder derselbe Käfig in zwei Trageweisen — ist
+ein Eintrag, kein Release.
+
+Zwei Eigenschaften trägt das Programm mit und sichert sie gegen Unsinn ab:
+
+- **offener Zustand** — der Startzustand jeder Historie und das Ziel automatischer
+  Einträge. Genau einer, nicht löschbar, nicht archivierbar.
+- **Regeneration** — trägt Fenster und Sperrfrist. Höchstens eine, darf fehlen.
+
+Solange kein Eintrag auf ein Modell zeigt, folgt seine interne ID dem Namen
+(„Cobra Variante A" → `COBRAV`). Sobald Einträge existieren, bleibt sie fest und
+das Modell lässt sich nur noch archivieren — sonst zeigten alte Tage ins Leere.
+
+## Der Umstieg von 1.x
+
+Beim ersten Start rechnet `www/js/core/legacy.js` die alte Formel ein letztes Mal
+durch und legt das Ergebnis als `legacy` in der Datei ab. Danach wird dort nichts
+mehr gerechnet, nur noch angezeigt — als Archiv-Karte im Dashboard. Das neue
+Konto startet bei null.
+
+Der Schnappschuss steht **in der Datei, nicht im Programm**: wer die App frisch
+installiert, hat kein `legacy` und sieht die Karte gar nicht erst.
+
+2.0 schreibt nach `locked2.json` statt nach `locked.json`. Die alte App kennt
+weder `settings` noch `legacy` und würde beides beim Speichern stillschweigend
+entfernen; getrennte Dateien halten 1.x als Rückfallebene lauffähig. Die
+Übernahme läuft über **Daten → Daten aus Version 1.x übernehmen** (aus OneDrive
+oder aus einer Datei) und erkennt Dubletten, ist also gefahrlos wiederholbar.
+
+Die Einträge selbst bleiben unangetastet: Tragezeit, Orgasmus-Zähler und der
+getragene Zustand laufen über den Schnitt hinweg durch. Nur die Punkte beginnen neu.
+
+## Aufbau
+
+```
+www/
+  index.html          nur Struktur
+  css/app.css
+  js/
+    core/             ohne DOM, in Node testbar
+      time.js         Datum und Zeit, lokal und sommerzeitfest
+      settings.js     Modell-Registry, Normalisierung, Preisformel
+      calc.js         Einnahmen, Kosten, Konto, Form
+      legacy.js       die alte Formel, eingefroren
+      migrate.js      1.x → 2.0, Stichtag, Archiv
+      merge.js        Drei-Wege-Merge für den Sync
+      escalation.js   Inaktivitäts-Vorschläge
+    sync/             auth.js · onedrive.js · files.js
+    ui/               eintrag · dashboard · einstellungen · daten · charts
+    state.js          zentraler Zustand, alle Änderungen über mutate()
+    platform.js       Android / Desktop / Web an einer Stelle
+electron/             main.js · preload.cjs — die Desktop-Hülle
+test/                 node --test, ohne Testframework
+```
+
+Keine Build-Kette, kein Framework: ES-Module, die der Browser direkt lädt.
+Derselbe Ordner geht unverändert in die APK, in den Installer und nach Pages.
+
+```bash
+npm test          # 61 Tests, nur Node-Builtins
+npm start         # Desktop-App lokal starten
+npm run build:win # Windows-Installer (auf Windows)
+npx serve www     # Web-Version lokal
+```
+
+## Microsoft-Login (OneDrive-Sync)
+
+Drei Wege, weil MSAL nur im echten Browser funktioniert:
+
+| Hülle | Verfahren | Redirect-URI | Azure-Plattform |
+|---|---|---|---|
+| Web | MSAL-Popup | `https://themachtin.github.io/locked-android/` | Single-page application |
+| Android | Auth-Code + PKCE im System-Browser | `locked://auth` | Mobile- und Desktopanwendungen |
+| Desktop | Auth-Code + PKCE, Rücksprung über Loopback | `http://localhost` | Mobile- und Desktopanwendungen |
+
+Alle drei müssen unter [App-Registrierungen → Authentifizierung](https://portal.azure.com)
+eingetragen sein. `http://localhost` erlaubt dort ausdrücklich beliebige Ports —
+die Desktop-App sucht sich beim Anmelden einen freien.
 
 Zwei Details, die leicht übersehen werden:
-- Der Token-Tausch läuft nativ über `CapacitorHttp`, nicht über `fetch()`. Ein `fetch()`
-  aus der WebView schickt einen `Origin`-Header mit, den Azure bei nicht-SPA-Redirect-URIs
-  mit `AADSTS9002326` ablehnt.
-- Für den Refresh-Token wird der Scope `offline_access` angefordert. Ohne ihn müsstest du
-  dich stündlich neu anmelden.
+
+- Android und Desktop tauschen den Token **nicht** per `fetch()`. Ein `fetch()`
+  aus der WebView schickt einen `Origin`-Header mit, den Azure bei
+  Nicht-SPA-Redirect-URIs mit `AADSTS9002326` ablehnt. Android nutzt
+  `CapacitorHttp`, der Desktop den Hauptprozess.
+- Der Scope `offline_access` ist nötig, sonst müsste man sich stündlich neu
+  anmelden.
+
+Welche URI die laufende Installation sendet, steht in der App unter
+**Daten → OneDrive-Sync**.
 
 ## Build
 
-Jeder Push auf `main` löst zwei Workflows aus:
+Jeder Push auf `main` löst drei Workflows aus, die dieselbe Versionsnummer
+berechnen (Commit-Anzahl → `2.0.N`) und sie über `scripts/bake-version.sh`
+eintragen — Handy, PC und Web zeigen nach einem Push also dieselbe Nummer:
 
-**APK** (`build-apk.yml`):
-- **Artifact** (90 Tage Verfügbarkeit) unter der Workflow-Run-Seite
-- **Release** unter [Releases](https://github.com/TheMachtin/locked-android/releases) mit APK-Anhang
+| Workflow | Ergebnis |
+|---|---|
+| `build-apk.yml` | signierte APK, als Artefakt und am Release |
+| `build-desktop.yml` | Windows-Installer, portable `.exe`, Linux-AppImage |
+| `deploy-pages.yml` | `www/` nach GitHub Pages |
 
-**Web-Version** (`deploy-pages.yml`): `www/` geht nach GitHub Pages, siehe
-[Am PC benutzen](#am-pc-benutzen). Beide Workflows berechnen die Version gleich
-(Commit-Anzahl → `1.0.N`), Handy und PC zeigen nach einem Push also dieselbe
-Nummer — sichtbar im Daten-Tab unter *Version*, zusammen mit dem Build
-(Android/Web) und dem Commit-Hash.
+Alle drei laufen erst nach `npm test`.
 
-## Installation
-
-1. APK aus dem neuesten Release herunterladen
-2. Am Handy antippen → „Von unbekannter Quelle zulassen" bestätigen
-3. App installiert sich; Datenzugriff bleibt (OneDrive-Login persistent)
-
-Beim nächsten Update: im Startbanner „Herunterladen" tippen → APK antippen → Installieren.
-
-## Am PC benutzen
-
-Die App ist im Kern eine Web-App — Capacitor ist nur die Android-Hülle. `www/` wird
-deshalb zusätzlich als PWA nach GitHub Pages ausgerollt:
-
-**<https://themachtin.github.io/locked-android/>**
-
-Gleicher Code wie die APK, gleiche OneDrive-Datei, gleicher Drei-Wege-Merge — Handy
-und PC können also parallel laufen. Nativ-only bleiben Reminder-Notifications,
-APK-Update-Check und die Filesystem-Kopie der Daten; am PC hält der Service Worker
-die App offline-fähig, der lokale Stand liegt im localStorage des Browsers.
+Die Desktop-Pakete sind **nicht signiert** — ein Zertifikat kostet Geld und
+bringt für eine App, die nur ihr Autor installiert, nichts. Windows zeigt beim
+ersten Start den SmartScreen-Hinweis: „Weitere Informationen" → „Trotzdem
+ausführen".
 
 ### Einmalig einzurichten
 
-1. **Pages aktivieren**: Settings → Pages → *Source: GitHub Actions*, dann den
-   Workflow einmal neu starten. Das muss von Hand passieren — der `GITHUB_TOKEN`
-   darf die Pages-Site nicht anlegen (`Resource not accessible by integration`),
-   `pages: write` reicht nur fürs Deployen. Solange Pages aus ist, scheitert der
-   Workflow im Schritt *Configure Pages* mit `Not Found`.
-2. **Redirect-URI in Azure**: `https://themachtin.github.io/locked-android/` unter
-   *Authentifizierung → Single-page application* eintragen (siehe Tabelle oben).
-   Ohne den Eintrag scheitert der Login mit einem `AADSTS`-Fehler. Welche URI die
-   laufende Instanz sendet, steht in der App unter **Daten → OneDrive-Sync**.
+1. **Signatur für Android**: Actions → *Bootstrap Signing Keystore* → *Run
+   workflow*; danach `keystore.base64.txt` als Secret `KEYSTORE_BASE64` und das
+   Passwort als `KEYSTORE_PASSWORD` hinterlegen. Die `.jks`-Datei offline
+   aufheben — bei Verlust ist kein App-Update mehr möglich.
+2. **Pages aktivieren**: Settings → Pages → *Source: GitHub Actions*. Das muss von
+   Hand passieren; der `GITHUB_TOKEN` darf die Pages-Site nicht anlegen
+   (`Resource not accessible by integration`).
+3. **Redirect-URIs in Azure** eintragen, siehe Tabelle oben.
 
-### Alternative: lokal servieren
+## Datenformat
 
-Ohne Pages tut es auch ein lokaler Server — `file://` reicht nicht, Service Worker
-und MSAL brauchen einen echten Origin:
-
-```bash
-npx serve www          # oder: python3 -m http.server -d www 8000
+```jsonc
+{
+  "version": 3,
+  "startedAt": "2026-08-31",     // ab hier zählt das Konto
+  "events":   [ { "date": "…", "time": "HH:MM", "type": "HT" } ],
+  "settings": { "models": [ … ], "points": { … }, "rules": { … }, "updatedAt": "…" },
+  "legacy":   { "punkte": …, "von": "…", "bis": "…" },   // fehlt bei Neuinstallation
+  "days": {}, "notes": {}, "meta": {}
+}
 ```
 
-Die Origin (z. B. `http://localhost:8000/`) muss dann ebenfalls als
-SPA-Redirect-URI in Azure stehen.
-
-### Die alte PWA nicht parallel benutzen
-
-Das Vorgänger-Repo [TheMachtin/locked](https://github.com/TheMachtin/locked) liegt
-auf demselben OneDrive-Pfad **und auf derselben Origin** — GitHub-Pages-Projektseiten
-teilen sich `themachtin.github.io`, und localStorage trennt nach Origin, nicht nach
-Pfad. Beide Apps benutzten deshalb denselben Cache-Schlüssel `locked_data_v1`: die
-neue App zeigte beim Start den Monate alten Stand der alten PWA an, bis der
-OneDrive-Load durch war. Seit `locked_data_v2` ist das getrennt.
-
-Davon abgesehen ist sie älter: bei einem Schreibkonflikt (HTTP 412) fragt sie nur
-„lokal behalten oder Serverstand laden" und überschreibt die Datei danach ohne
-`If-Match` — der Drei-Wege-Merge aus `merge.js` fehlt dort. Wer beide
-gleichzeitig nutzt, riskiert, Einträge des anderen Geräts zu verlieren.
-
-## Tech
-
-- **Capacitor 6** — WebView-Wrapper um die bestehende HTML/JS-App
-- **Plugins**: LocalNotifications, Preferences, Network, Filesystem, App
-- **GitHub Actions** — APK-Build + Signing + Release-Upload, dazu Pages-Deploy der Web-Version
+Gespeichert werden nur **Ereignisse und Regeln**, nie Punkte. Jede Regeländerung
+rechnet die Historie automatisch neu — es ist nicht möglich, damit Daten
+kaputtzumachen. Einzige Ausnahme ist `legacy`: der Schnappschuss ist absichtlich
+eingefroren und wird auch vom Merge nie überschrieben.

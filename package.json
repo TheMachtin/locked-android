@@ -23,8 +23,73 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^6.1.2",
-    "@capacitor/assets": "^3.0.5"
+    "@capacitor/assets": "^3.0.5",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
   },
   "type": "module",
-  "main": "electron/main.js"
+  "main": "electron/main.js",
+  "build": {
+    "appId": "app.locked.themachtin",
+    "productName": "Locked",
+    "directories": {
+      "output": "dist",
+      "buildResources": "resources"
+    },
+    "files": [
+      "electron/**/*",
+      "www/**/*",
+      "package.json",
+      "!node_modules/@capacitor/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Locked",
+      "artifactName": "Locked-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Locked-portable-${version}.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.png",
+      "category": "Utility",
+      "artifactName": "Locked-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "TheMachtin",
+        "repo": "locked-android"
+      }
+    ]
+  }
 }
