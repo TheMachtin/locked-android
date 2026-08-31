@@ -83,9 +83,11 @@ die App offline-fähig, der lokale Stand liegt im localStorage des Browsers.
 
 ### Einmalig einzurichten
 
-1. **Pages aktivieren**: der Workflow versucht das beim ersten Lauf selbst
-   (`configure-pages` mit `enablement: true`). Schlägt das fehl, einmal von Hand:
-   Settings → Pages → *Source: GitHub Actions*, dann den Workflow erneut starten.
+1. **Pages aktivieren**: Settings → Pages → *Source: GitHub Actions*, dann den
+   Workflow einmal neu starten. Das muss von Hand passieren — der `GITHUB_TOKEN`
+   darf die Pages-Site nicht anlegen (`Resource not accessible by integration`),
+   `pages: write` reicht nur fürs Deployen. Solange Pages aus ist, scheitert der
+   Workflow im Schritt *Configure Pages* mit `Not Found`.
 2. **Redirect-URI in Azure**: `https://themachtin.github.io/locked-android/` unter
    *Authentifizierung → Single-page application* eintragen (siehe Tabelle oben).
    Ohne den Eintrag scheitert der Login mit einem `AADSTS`-Fehler. Welche URI die
@@ -106,9 +108,15 @@ SPA-Redirect-URI in Azure stehen.
 ### Die alte PWA nicht parallel benutzen
 
 Das Vorgänger-Repo [TheMachtin/locked](https://github.com/TheMachtin/locked) liegt
-auf demselben OneDrive-Pfad, ist aber älter: bei einem Schreibkonflikt (HTTP 412)
-fragt es nur „lokal behalten oder Serverstand laden" und überschreibt die Datei
-danach ohne `If-Match` — der Drei-Wege-Merge aus `merge.js` fehlt dort. Wer beide
+auf demselben OneDrive-Pfad **und auf derselben Origin** — GitHub-Pages-Projektseiten
+teilen sich `themachtin.github.io`, und localStorage trennt nach Origin, nicht nach
+Pfad. Beide Apps benutzten deshalb denselben Cache-Schlüssel `locked_data_v1`: die
+neue App zeigte beim Start den Monate alten Stand der alten PWA an, bis der
+OneDrive-Load durch war. Seit `locked_data_v2` ist das getrennt.
+
+Davon abgesehen ist sie älter: bei einem Schreibkonflikt (HTTP 412) fragt sie nur
+„lokal behalten oder Serverstand laden" und überschreibt die Datei danach ohne
+`If-Match` — der Drei-Wege-Merge aus `merge.js` fehlt dort. Wer beide
 gleichzeitig nutzt, riskiert, Einträge des anderen Geräts zu verlieren.
 
 ## Tech
