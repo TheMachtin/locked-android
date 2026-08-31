@@ -10,9 +10,7 @@
  */
 
 import { STATE, calc } from '../state.js';
-import {
-  fmtInt, fmtNum, fmtSigned, fmtHours, fmtDateShort, fmtMonth, escapeHtml,
-} from './format.js';
+import { fmtInt, fmtNum, fmtSigned, fmtHours, fmtDateShort, fmtMonth } from './format.js';
 import { nettoChart, verlaufChart, modellDonut, heatmap, weekdayChart } from './charts.js';
 import { emptyTotals, computeTotals } from '../core/calc.js';
 

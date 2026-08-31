@@ -17,12 +17,9 @@
  * testen. Tests in test/calc.test.js.
  */
 
+import { isoOf, isoDateAdd, minutesOf, timeToMin, eventMs, eventSortKey } from './time.js';
 import {
-  isoOf, isoDateAdd, minutesOf, timeToMin, eventMs, eventSortKey, isoDaysBetween,
-} from './time.js';
-import {
-  normalizeSettings, modelMap, resolveModel, openModelId, orgasmPrice,
-  KIND_MODEL, KIND_ORGASM,
+  normalizeSettings, modelMap, resolveModel, openModelId, orgasmPrice, KIND_MODEL, KIND_ORGASM,
 } from './settings.js';
 
 // =========================== EVENTS ===========================

@@ -2,14 +2,14 @@
  * Daten-Tab: Synchronisation, Dateien, Export, Umzug und Version.
  */
 
-import { STATE, calc, setData, mutate, clearSyncBase } from '../state.js';
+import { STATE, calc, setData, clearSyncBase } from '../state.js';
 import { showToast, confirmAction } from './toast.js';
-import { fmtDateShort, fmtInt, escapeHtml } from './format.js';
+import { fmtDateShort, escapeHtml } from './format.js';
 import { AUTH, CFG, login, logout, isSignedIn } from '../sync/auth.js';
 import { loadFromCloud, saveToCloud, fetchLegacyFile, sanityCheck } from '../sync/onedrive.js';
 import { openFile, saveFile, readJsonFile, backup, exportCsv, exportXlsx } from '../sync/files.js';
 import { importLegacyData } from '../core/migrate.js';
-import { IS_NATIVE, IS_ELECTRON, platformName, versionLabel, APP_COMMIT } from '../platform.js';
+import { platformName, versionLabel, APP_COMMIT } from '../platform.js';
 
 const $ = id => document.getElementById(id);
 

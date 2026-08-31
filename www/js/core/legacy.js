@@ -20,7 +20,7 @@
  * Archiv rückwirkend, sobald ein Modell umbenannt wird.
  */
 
-import { isoOf, isoDateAdd, timeToMin, isoDaysBetween } from './time.js';
+import { isoDateAdd, timeToMin, isoDaysBetween } from './time.js';
 
 const L_MODELS  = ['HT', 'PC', 'NS', 'KK', 'REG'];
 const L_VERSCHL = ['HT', 'PC', 'NS', 'REG'];

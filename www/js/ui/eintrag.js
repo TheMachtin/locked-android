@@ -11,15 +11,12 @@
 import { STATE, calc, mutate, withUndo, settings as getSettings } from '../state.js';
 import { showToast } from './toast.js';
 import {
-  fmtInt, fmtNum, fmtSigned, fmtDateShort, fmtDurationShort, fmtDurationLong, fmtAgo,
-  fmtCountdownHM, fmtCountdownDH, msToHours, escapeHtml, weekdayOf, refTimeFor, MONTHS_DE,
+  fmtInt, fmtNum, fmtSigned, fmtDateShort, fmtDurationShort, fmtDurationLong, fmtAgo, fmtCountdownHM, fmtCountdownDH, msToHours, escapeHtml, weekdayOf, refTimeFor, MONTHS_DE,
 } from './format.js';
 import { dayTimeline } from './charts.js';
-import { isoOf, isoDateAdd, hmOf, eventMs, calendarDaysBetween, pad2 } from '../core/time.js';
+import { isoOf, isoDateAdd, hmOf, eventMs, calendarDaysBetween } from '../core/time.js';
 import { lockPhaseStart, currentOrgasmPrice, regenState, expiredRegenEvents } from '../core/calc.js';
-import {
-  resolveModel, modelMap, stateModels, orgasmModels, KIND_ORGASM,
-} from '../core/settings.js';
+import { resolveModel, modelMap, KIND_ORGASM } from '../core/settings.js';
 import { pendingEscalation, escalationEvents } from '../core/escalation.js';
 
 const $ = id => document.getElementById(id);

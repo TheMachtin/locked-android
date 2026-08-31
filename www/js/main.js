@@ -5,9 +5,11 @@
  * aussieht, in ui/; wo es herkommt, in sync/ und platform.js.
  */
 
-import { STATE, subscribe, loadLocal, loadSyncBase, setData, registerSaver, notify } from './state.js';
+import {
+  STATE, subscribe, loadLocal, loadSyncBase, setData, registerSaver, notify,
+} from './state.js';
 import { showToast } from './ui/toast.js';
-import { escapeHtml, fmtDateShort } from './ui/format.js';
+import { escapeHtml } from './ui/format.js';
 import * as eintrag from './ui/eintrag.js';
 import * as dashboard from './ui/dashboard.js';
 import * as einstellungen from './ui/einstellungen.js';
@@ -17,8 +19,7 @@ import { loadFromCloud, autosave, setSaveStateHandler } from './sync/onedrive.js
 import { lastRealInteractionMs } from './core/escalation.js';
 import { settings as getSettings } from './state.js';
 import {
-  IS_NATIVE, IS_ELECTRON, initPersistence, loadNativeFile, setupBackButton,
-  scheduleReminder, checkForAppUpdate, downloadAndInstallApk, versionLabel,
+  IS_NATIVE, IS_ELECTRON, initPersistence, loadNativeFile, setupBackButton, scheduleReminder, checkForAppUpdate, downloadAndInstallApk,
 } from './platform.js';
 
 const $ = id => document.getElementById(id);

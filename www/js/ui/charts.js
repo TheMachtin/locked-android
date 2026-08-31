@@ -8,7 +8,7 @@
  */
 
 import { isoWeek } from '../core/time.js';
-import { fmtInt, fmtNum, fmtDateShort, escapeHtml, MONTHS_DE } from './format.js';
+import { fmtInt, fmtNum, fmtDateShort, escapeHtml } from './format.js';
 import { resolveModel, modelMap, KIND_ORGASM } from '../core/settings.js';
 
 const MON_KURZ = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
