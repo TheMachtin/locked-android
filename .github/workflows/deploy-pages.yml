@@ -1,0 +1,68 @@
+name: Deploy Web-App to Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# contents: Checkout. pages+id-token: das Deployment authentifiziert sich per OIDC.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Zwei parallele Deployments würden sich überholen. Laufende nicht abbrechen —
+# ein halb ausgerollter Stand soll erst fertig werden.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # rev-list --count braucht die volle Historie
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - name: Run tests
+        # calc.js und merge.js hängen nur an Node-Builtins — kein npm install nötig.
+        # Ein kaputter Berechnungskern soll gar nicht erst online gehen.
+        run: npm test
+
+      - name: Compute version
+        id: ver
+        run: |
+          # Gleiche Rechnung wie im APK-Build (Commit-Anzahl → 1.0.N), damit am PC
+          # dieselbe Versionsnummer steht wie am Handy.
+          NAME="1.0.$(git rev-list --count HEAD)"
+          echo "name=$NAME" >> $GITHUB_OUTPUT
+          echo "Deploying version $NAME"
+
+      - name: Bake version into www/index.html
+        run: sed -i "s|__APP_VERSION__|${{ steps.ver.outputs.name }}|g" www/index.html
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true   # schaltet Pages beim ersten Lauf selbst frei
+
+      - name: Upload www/ as Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: www
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

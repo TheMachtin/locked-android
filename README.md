@@ -31,7 +31,7 @@ Damit das funktioniert, braucht die App-Registrierung im
 | Plattform | Redirect-URI | wofür |
 |---|---|---|
 | Mobile- und Desktopanwendungen | `locked://auth` | native App |
-| Single-page application | URL der PWA | Browser-Version |
+| Single-page application | `https://themachtin.github.io/locked-android/` | Web-Version am PC |
 
 Die native URI wird über *Plattform hinzufügen → Mobile- und Desktopanwendungen →
 Benutzerdefinierte Redirect-URI* eingetragen. Sie darf **nicht** unter „Single-page
@@ -50,9 +50,16 @@ Zwei Details, die leicht übersehen werden:
 
 ## Build
 
-Jeder Push auf `main` löst automatisch einen APK-Build aus. Ergebnis:
+Jeder Push auf `main` löst zwei Workflows aus:
+
+**APK** (`build-apk.yml`):
 - **Artifact** (90 Tage Verfügbarkeit) unter der Workflow-Run-Seite
 - **Release** unter [Releases](https://github.com/TheMachtin/locked-android/releases) mit APK-Anhang
+
+**Web-Version** (`deploy-pages.yml`): `www/` geht nach GitHub Pages, siehe
+[Am PC benutzen](#am-pc-benutzen). Beide Workflows berechnen die Version gleich
+(Commit-Anzahl → `1.0.N`), Handy und PC zeigen nach einem Push also dieselbe
+Nummer — sichtbar im Tooltip der Kopfzeile.
 
 ## Installation
 
@@ -62,8 +69,50 @@ Jeder Push auf `main` löst automatisch einen APK-Build aus. Ergebnis:
 
 Beim nächsten Update: im Startbanner „Herunterladen" tippen → APK antippen → Installieren.
 
+## Am PC benutzen
+
+Die App ist im Kern eine Web-App — Capacitor ist nur die Android-Hülle. `www/` wird
+deshalb zusätzlich als PWA nach GitHub Pages ausgerollt:
+
+**<https://themachtin.github.io/locked-android/>**
+
+Gleicher Code wie die APK, gleiche OneDrive-Datei, gleicher Drei-Wege-Merge — Handy
+und PC können also parallel laufen. Nativ-only bleiben Reminder-Notifications,
+APK-Update-Check und die Filesystem-Kopie der Daten; am PC hält der Service Worker
+die App offline-fähig, der lokale Stand liegt im localStorage des Browsers.
+
+### Einmalig einzurichten
+
+1. **Pages aktivieren**: der Workflow versucht das beim ersten Lauf selbst
+   (`configure-pages` mit `enablement: true`). Schlägt das fehl, einmal von Hand:
+   Settings → Pages → *Source: GitHub Actions*, dann den Workflow erneut starten.
+2. **Redirect-URI in Azure**: `https://themachtin.github.io/locked-android/` unter
+   *Authentifizierung → Single-page application* eintragen (siehe Tabelle oben).
+   Ohne den Eintrag scheitert der Login mit einem `AADSTS`-Fehler. Welche URI die
+   laufende Instanz sendet, steht in der App unter **Daten → OneDrive-Sync**.
+
+### Alternative: lokal servieren
+
+Ohne Pages tut es auch ein lokaler Server — `file://` reicht nicht, Service Worker
+und MSAL brauchen einen echten Origin:
+
+```bash
+npx serve www          # oder: python3 -m http.server -d www 8000
+```
+
+Die Origin (z. B. `http://localhost:8000/`) muss dann ebenfalls als
+SPA-Redirect-URI in Azure stehen.
+
+### Die alte PWA nicht parallel benutzen
+
+Das Vorgänger-Repo [TheMachtin/locked](https://github.com/TheMachtin/locked) liegt
+auf demselben OneDrive-Pfad, ist aber älter: bei einem Schreibkonflikt (HTTP 412)
+fragt es nur „lokal behalten oder Serverstand laden" und überschreibt die Datei
+danach ohne `If-Match` — der Drei-Wege-Merge aus `merge.js` fehlt dort. Wer beide
+gleichzeitig nutzt, riskiert, Einträge des anderen Geräts zu verlieren.
+
 ## Tech
 
 - **Capacitor 6** — WebView-Wrapper um die bestehende HTML/JS-App
 - **Plugins**: LocalNotifications, Preferences, Network, Filesystem, App
-- **GitHub Actions** — Build + Signing + Release-Upload
+- **GitHub Actions** — APK-Build + Signing + Release-Upload, dazu Pages-Deploy der Web-Version
