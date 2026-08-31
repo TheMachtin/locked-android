@@ -83,9 +83,11 @@ die App offline-fähig, der lokale Stand liegt im localStorage des Browsers.
 
 ### Einmalig einzurichten
 
-1. **Pages aktivieren**: der Workflow versucht das beim ersten Lauf selbst
-   (`configure-pages` mit `enablement: true`). Schlägt das fehl, einmal von Hand:
-   Settings → Pages → *Source: GitHub Actions*, dann den Workflow erneut starten.
+1. **Pages aktivieren**: Settings → Pages → *Source: GitHub Actions*, dann den
+   Workflow einmal neu starten. Das muss von Hand passieren — der `GITHUB_TOKEN`
+   darf die Pages-Site nicht anlegen (`Resource not accessible by integration`),
+   `pages: write` reicht nur fürs Deployen. Solange Pages aus ist, scheitert der
+   Workflow im Schritt *Configure Pages* mit `Not Found`.
 2. **Redirect-URI in Azure**: `https://themachtin.github.io/locked-android/` unter
    *Authentifizierung → Single-page application* eintragen (siehe Tabelle oben).
    Ohne den Eintrag scheitert der Login mit einem `AADSTS`-Fehler. Welche URI die
