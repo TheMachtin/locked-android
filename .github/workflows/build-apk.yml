@@ -11,6 +11,12 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Denselben Release erzeugt auch der Desktop-Workflow. Die gemeinsame
+    # Gruppe verhindert, dass beide gleichzeitig anlegen wollen; die Builds
+    # selbst laufen weiter parallel.
+    concurrency:
+      group: release-${{ github.sha }}
+      cancel-in-progress: false
     env:
       KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
       KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -178,6 +184,8 @@ jobs:
           path: ${{ steps.apk.outputs.path }}
           retention-days: 90
 
+      # Denselben Release erzeugt auch der Desktop-Workflow. Die gemeinsame
+      # Gruppe verhindert, dass beide gleichzeitig anlegen wollen.
       - name: Create/update GitHub Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
