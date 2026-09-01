@@ -20,13 +20,40 @@ const altbestand = () => ({
   days: { '2026-06-15': { keinKG: true } },
 });
 
-test('Migration setzt Stichtag, Einstellungen und Version', () => {
+test('Migration setzt Einstellungen und Version', () => {
   const { data, migriert } = migrate(altbestand(), { now: NOW });
   assert.equal(migriert, true);
   assert.equal(data.version, DATA_VERSION);
-  assert.equal(data.startedAt, '2026-08-31');
   assert.ok(data.settings.models.length > 0);
   assert.ok(data.settings.updatedAt);
+});
+
+test('Der Stichtag wird abgeleitet, nicht gespeichert', () => {
+  const { data } = migrate(altbestand(), { now: NOW });
+  assert.equal('startedAt' in data, false, 'kein festgeschriebenes Datum in der Datei');
+  const { startedAt } = computeAll(data, { now: NOW });
+  assert.equal(startedAt, '2026-08-31', 'ergibt sich aus dem Archiv: der Tag nach dessen Ende');
+});
+
+test('Ohne Archiv zählt alles — auch nachgetragene Tage', () => {
+  // Der eigentliche Alltagsfall: App heute zum ersten Mal gestartet, dann die
+  // letzten beiden Tage nachgetragen. Ohne alte Ära gibt es nichts abzutrennen.
+  const { data } = migrate({ version: 2, events: [] }, { now: NOW });
+  data.events.push(ev('2026-08-29', '08:00', 'HT'), ev('2026-08-30', '09:00', 'NS'));
+  const { startedAt, byDate, totals } = computeAll(data, { now: NOW });
+  assert.equal(startedAt, '2026-08-29');
+  assert.equal(byDate['2026-08-29'].zaehlt, true);
+  assert.equal(byDate['2026-08-30'].zaehlt, true);
+  assert.ok(totals.konto > 0, 'die nachgetragenen Tage landen im Konto');
+});
+
+test('Ein von Hand gesetzter Stichtag schlägt die Ableitung', () => {
+  const { data } = migrate({ version: 2, events: [] }, { now: NOW });
+  data.events.push(ev('2026-08-29', '08:00', 'HT'));
+  data.settings.startedAt = '2026-08-31';
+  const { startedAt, byDate } = computeAll(data, { now: NOW });
+  assert.equal(startedAt, '2026-08-31');
+  assert.equal(byDate['2026-08-29'].zaehlt, false);
 });
 
 test('Migration friert die alte Ära ein', () => {
@@ -41,17 +68,19 @@ test('Migration friert die alte Ära ein', () => {
 test('Migration ist idempotent — der Stichtag verschiebt sich nie', () => {
   const erste = migrate(altbestand(), { now: NOW }).data;
   const punkte = erste.legacy.punkte;
-  const zweite = migrate(erste, { now: new Date('2027-01-01T10:00:00') });
+  const spaeter = new Date('2027-01-01T10:00:00');
+  const zweite = migrate(erste, { now: spaeter });
   assert.equal(zweite.migriert, false);
   assert.equal(zweite.legacyErzeugt, false);
-  assert.equal(zweite.data.startedAt, '2026-08-31');
   assert.equal(zweite.data.legacy.punkte, punkte, 'das Archiv ist unveränderlich');
+  assert.equal(computeAll(zweite.data, { now: spaeter }).startedAt, '2026-08-31',
+    'der abgeleitete Stichtag hängt am Archiv und wandert nicht mit dem Datum mit');
 });
 
 test('Das neue Konto startet bei null', () => {
   const { data } = migrate(altbestand(), { now: NOW });
-  const { totals, byDate } = computeAll(data, { now: NOW });
-  const ersterTag = byDate[data.startedAt];
+  const { totals, byDate, startedAt } = computeAll(data, { now: NOW });
+  const ersterTag = byDate[startedAt];
   assert.ok(Math.abs(totals.konto - ersterTag.netto) < 1e-9,
     'am Stichtag ist das Konto genau der Ertrag dieses einen Tages');
   assert.equal(byDate['2026-06-01'].zaehlt, false);
@@ -104,6 +133,20 @@ test('Nachträglicher Import einer 1.x-Datei ergänzt Events und friert dann ein
   assert.equal(data.events.length, 6);
   assert.ok(data.events.every((e, i, a) => i === 0 || (a[i - 1].date + a[i - 1].time) <= (e.date + e.time)),
     'Events bleiben chronologisch');
+});
+
+test('Ein Import schiebt die schon eingetragenen 2.0-Tage nicht ins Archiv', () => {
+  // Zwei Tage in 2.0 gearbeitet, dann die alte Historie nachgeladen: die zwei
+  // Tage gehören weiter zur neuen Ära.
+  const frisch = leereDaten(NOW);
+  frisch.events.push(ev('2026-08-29', '08:00', 'HT'), ev('2026-08-30', '09:00', 'NS'));
+  const { data, legacyErzeugt } = importLegacyData(frisch, altbestand(), { now: NOW });
+  assert.equal(legacyErzeugt, true);
+  assert.equal(data.legacy.bis, '2026-08-28', 'das Archiv endet vor dem ersten 2.0-Tag');
+  const { startedAt, byDate } = computeAll(data, { now: NOW });
+  assert.equal(startedAt, '2026-08-29');
+  assert.equal(byDate['2026-08-29'].zaehlt, true);
+  assert.equal(byDate['2026-06-01'].zaehlt, false, 'die alte Historie zählt weiterhin nicht');
 });
 
 test('Import erkennt Dubletten', () => {

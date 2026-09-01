@@ -74,7 +74,7 @@ test('Orgasmus-Preis fällt mit der Wartezeit und bleibt zwischen Min und Max', 
 
 test('Durchlauf: Konto läuft mit, Form-Wert klingt ab', () => {
   const now = new Date('2026-03-10T23:59:00');
-  const data = { startedAt: '2026-03-01', events: [ev('2026-03-01', '00:00', 'HT')] };
+  const data = { events: [ev('2026-03-01', '00:00', 'HT')] };
   const { days, totals } = computeAll(data, { now });
   assert.equal(days.length, 10);
   assert.ok(days.every(d => d.verschlossenH > 23));
@@ -87,7 +87,7 @@ test('Durchlauf: Konto läuft mit, Form-Wert klingt ab', () => {
 
 test('Durchlauf: der Form-Wert läuft gegen einen Grenzwert statt zu explodieren', () => {
   const now = new Date('2029-01-01T23:59:00');
-  const data = { startedAt: '2026-01-01', events: [ev('2026-01-01', '00:00', 'HT')] };
+  const data = { events: [ev('2026-01-01', '00:00', 'HT')] };
   const { totals, days } = computeAll(data, { now });
   assert.ok(days.length > 1000);
   // Fixpunkt: tagesnetto / (1 − decay). Bei 34/Tag und 0,97 sind das ~1133.
@@ -96,7 +96,7 @@ test('Durchlauf: der Form-Wert läuft gegen einen Grenzwert statt zu explodieren
 
 test('Durchlauf: vor dem Stichtag zählt nichts ins Konto', () => {
   const now = new Date('2026-03-10T23:59:00');
-  const data = { startedAt: '2026-03-05', events: [ev('2026-03-01', '00:00', 'HT')] };
+  const data = { settings: { startedAt: '2026-03-05' }, events: [ev('2026-03-01', '00:00', 'HT')] };
   const { byDate, totals } = computeAll(data, { now });
   assert.equal(byDate['2026-03-01'].zaehlt, false);
   assert.equal(byDate['2026-03-01'].netto, 0);
@@ -108,7 +108,6 @@ test('Durchlauf: vor dem Stichtag zählt nichts ins Konto', () => {
 test('Durchlauf: zwei Orgasmen am selben Tag kosten beide, der zweite fast den Höchstpreis', () => {
   const now = new Date('2026-03-02T23:59:00');
   const data = {
-    startedAt: '2026-03-01',
     events: [ev('2026-03-01', '00:00', 'HT'), ev('2026-03-02', '10:00', 'OR'), ev('2026-03-02', '13:00', 'OR')],
   };
   const { byDate } = computeAll(data, { now });
@@ -121,14 +120,14 @@ test('Durchlauf: zwei Orgasmen am selben Tag kosten beide, der zweite fast den H
 
 test('Durchlauf: heutige Orgasmen in der Zukunft kosten noch nichts', () => {
   const now = new Date('2026-03-02T09:00:00');
-  const data = { startedAt: '2026-03-01', events: [ev('2026-03-01', '00:00', 'HT'), ev('2026-03-02', '20:00', 'OR')] };
+  const data = { events: [ev('2026-03-01', '00:00', 'HT'), ev('2026-03-02', '20:00', 'OR')] };
   const { byDate } = computeAll(data, { now });
   assert.equal(byDate['2026-03-02'].orgasmen.length, 0);
 });
 
 test('Unbekannte Event-Typen kippen die Berechnung nicht', () => {
   const now = new Date('2026-03-02T23:59:00');
-  const data = { startedAt: '2026-03-01', events: [ev('2026-03-01', '00:00', 'GIBTSNICHT')] };
+  const data = { events: [ev('2026-03-01', '00:00', 'GIBTSNICHT')] };
   const { totals, byDate } = computeAll(data, { now });
   assert.equal(byDate['2026-03-01'].verschlossenH, 0, 'unbekannt gilt als offen');
   assert.equal(byDate['2026-03-01'].kosten, 0, 'und als punkteneutral');
@@ -189,7 +188,7 @@ test('Regeneration folgt der Registry: umbenannt und mit anderem Fenster', () =>
 test('Der allererste Tag zählt erst ab dem ersten Eintrag', () => {
   const now = new Date('2026-03-02T00:00:00');
   // Erster Käfig um 20:00 — die 20 Stunden davor sind unbekannt, nicht "offen".
-  const data = { startedAt: '2026-03-01', events: [ev('2026-03-01', '20:00', 'HT')] };
+  const data = { events: [ev('2026-03-01', '20:00', 'HT')] };
   const { byDate } = computeAll(data, { now });
   const d = byDate['2026-03-01'];
   assert.equal(d.offenH, 0, 'keine Strafstunden für Zeit ohne Datengrundlage');
@@ -199,7 +198,7 @@ test('Der allererste Tag zählt erst ab dem ersten Eintrag', () => {
 
 test('Ab dem zweiten Tag zählt der Tag wieder ab Mitternacht', () => {
   const now = new Date('2026-03-03T00:00:00');
-  const data = { startedAt: '2026-03-01', events: [ev('2026-03-01', '20:00', 'HT'), ev('2026-03-02', '06:00', 'KK')] };
+  const data = { events: [ev('2026-03-01', '20:00', 'HT'), ev('2026-03-02', '06:00', 'KK')] };
   const { byDate } = computeAll(data, { now });
   const d = byDate['2026-03-02'];
   assert.equal(d.verschlossenH, 6, 'der Käfig läuft aus dem Vortag durch');

@@ -41,7 +41,7 @@ function renderJahrFilter(days) {
 }
 
 export function render() {
-  const { days, totals, settings } = calc();
+  const { days, totals, settings, startedAt } = calc();
   renderJahrFilter(days);
 
   const gefiltert = days.filter(passtZumJahr);
@@ -56,7 +56,8 @@ export function render() {
     + (sub ? `<div class="l" style="text-transform:none;letter-spacing:0;font-size:11px;margin-top:2px">${sub}</div>` : '')
     + '</div>';
   $('dashKpis').innerHTML =
-      kachel(fmtInt(totals.konto), 'Kontostand', jahrFilter === 'all' ? 'seit ' + fmtDateShort(STATE.data.startedAt || '—') : 'gesamt')
+      kachel(fmtInt(totals.konto), 'Kontostand',
+        jahrFilter !== 'all' ? 'gesamt' : (startedAt ? 'seit ' + fmtDateShort(startedAt) : 'alles gezählt'))
     + kachel(fmtInt(totals.form), 'Form', 'Trend zuletzt')
     + kachel(fmtNum(t.avgNetto, 1), 'Ø pro Tag')
     + kachel(fmtInt(t.stundenVerschlossen), 'Std verschlossen')

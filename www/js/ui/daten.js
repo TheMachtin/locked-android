@@ -48,7 +48,7 @@ export function render() {
   const commit = APP_COMMIT.startsWith('__') ? null : APP_COMMIT;
   $('versionInfo').innerHTML = `<b>Locked v${escapeHtml(v)}</b> · ${platformName()}`
     + (commit ? ` · Commit <code>${escapeHtml(commit)}</code>` : '')
-    + (STATE.data.startedAt ? `<br>Punktekonto seit ${fmtDateShort(STATE.data.startedAt)}` : '')
+    + (calc().startedAt ? `<br>Punktekonto seit ${fmtDateShort(calc().startedAt)}` : '')
     + (STATE.data.legacy ? ` · Archiv bis ${fmtDateShort(STATE.data.legacy.bis)}` : '');
 
   $('fsaHint').textContent = window.showOpenFilePicker

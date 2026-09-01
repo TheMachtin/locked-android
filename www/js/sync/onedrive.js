@@ -162,8 +162,9 @@ export function sanityCheck(data) {
   }
   if (data.settings && !Array.isArray(data.settings.models)) issues.push('settings.models ist kein Array');
   if (data.legacy && typeof data.legacy.punkte !== 'number') issues.push('legacy.punkte ist keine Zahl');
-  if (data.startedAt && !/^\d{4}-\d{2}-\d{2}$/.test(data.startedAt)) {
-    issues.push(`startedAt ist kein Datum: ${data.startedAt}`);
+  const stichtag = data.settings && data.settings.startedAt;
+  if (stichtag && !/^\d{4}-\d{2}-\d{2}$/.test(stichtag)) {
+    issues.push(`settings.startedAt ist kein Datum: ${stichtag}`);
   }
   return issues;
 }
