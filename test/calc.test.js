@@ -1,301 +1,207 @@
-/**
- * Tests für den Berechnungskern (www/calc.js).
- * Ausführen: npm test
- *
- * "now" wird überall injiziert, damit die Fälle rund um den laufenden Tag
- * reproduzierbar bleiben — sonst hinge das Ergebnis an der Uhrzeit des Laufs.
- */
-const test = require('node:test');
-const assert = require('node:assert');
-const C = require('../www/calc.js');
+import test from 'node:test';
+import assert from 'node:assert/strict';
 
-/** Date aus lokaler Zeit — nicht new Date("...Z"), das wäre UTC. */
-const at = (y, mo, d, h = 12, mi = 0) => new Date(y, mo - 1, d, h, mi, 0);
-const ev = (date, time, type, extra) => Object.assign({ date, time, type }, extra || {});
+import { computeAll, computeDayHours, scoreDay, lockPhaseStart, currentOrgasmPrice, regenState, expiredRegenEvents }
+  from '../www/js/core/calc.js';
+import { normalizeSettings, modelMap, defaultSettings, orgasmPrice } from '../www/js/core/settings.js';
 
-// --------------------------------------------------------------- Datum/Zeit
-test('timeToMin rechnet HH:MM in Minuten', () => {
-  assert.strictEqual(C.timeToMin('00:00'), 0);
-  assert.strictEqual(C.timeToMin('05:06'), 306);
-  assert.strictEqual(C.timeToMin('23:59'), 1439);
+const ev = (date, time, type, extra) => ({ date, time, type, ...extra });
+const S = () => normalizeSettings(null);
+const ctxOf = (s) => ({ settings: s, map: modelMap(s) });
+
+test('Tagesstunden: Zustand läuft aus dem Vortag weiter', () => {
+  const s = S();
+  const { hours, endModel } = computeDayHours(
+    [ev('2026-03-02', '08:00', 'KK'), ev('2026-03-02', '10:00', 'HT')], 'NS', 1440, ctxOf(s));
+  assert.equal(hours.NS, 8);
+  assert.equal(hours.KK, 2);
+  assert.equal(hours.HT, 14);
+  assert.equal(endModel, 'HT');
 });
 
-test('isoOf nutzt lokale Zeit, nicht UTC', () => {
-  // 00:30 lokal — toISOString() läge in UTC+X noch im Vortag
-  assert.strictEqual(C.isoOf(at(2026, 8, 17, 0, 30)), '2026-08-17');
-  assert.strictEqual(C.isoOf(at(2026, 1, 1, 23, 59)), '2026-01-01');
+test('Tagesstunden: heute zählt nur bis zur Grenze, spätere Events setzen den Folgetag', () => {
+  const s = S();
+  const { hours, endModel } = computeDayHours(
+    [ev('2026-03-02', '20:00', 'KK')], 'HT', 12 * 60, ctxOf(s));
+  assert.equal(hours.HT, 12);
+  assert.equal(hours.KK ?? 0, 0);
+  assert.equal(endModel, 'KK', 'das spätere Event bestimmt trotzdem den Startzustand von morgen');
 });
 
-test('isoDateAdd überschreitet Monats- und Jahresgrenzen', () => {
-  assert.strictEqual(C.isoDateAdd('2026-08-17', 1), '2026-08-18');
-  assert.strictEqual(C.isoDateAdd('2026-08-31', 1), '2026-09-01');
-  assert.strictEqual(C.isoDateAdd('2026-12-31', 1), '2027-01-01');
-  assert.strictEqual(C.isoDateAdd('2026-01-01', -1), '2025-12-31');
-  // über die Sommerzeit-Umstellung (DE: 29.03.2026)
-  assert.strictEqual(C.isoDateAdd('2026-03-28', 1), '2026-03-29');
-  assert.strictEqual(C.isoDateAdd('2026-03-29', 1), '2026-03-30');
+test('Tageswertung: Einnahmen mal Multiplikator, Kosten unmultipliziert', () => {
+  const s = S();
+  const r = scoreDay({ HT: 24 }, [], 50, ctxOf(s), true);
+  assert.equal(r.verschlossenH, 24);
+  assert.equal(r.offenH, 0);
+  assert.equal(r.mult, 2, 'Deckel bei 2,0 ist nach 50 Tagen erreicht');
+  assert.equal(r.bonus, 5);
+  assert.equal(r.einnahmen, (24 * 0.5 + 5) * 2);
+  assert.equal(r.kosten, 0);
 });
 
-test('isoWeek liefert ISO-Kalenderwochen', () => {
-  assert.strictEqual(C.isoWeek('2026-01-01'), '2026-W01');
-  assert.strictEqual(C.isoWeek('2026-08-17'), '2026-W34');
+test('Tageswertung: offene Stunden kosten, Bonus entfällt', () => {
+  const s = S();
+  const r = scoreDay({ HT: 12, KK: 12 }, [], 0, ctxOf(s), true);
+  assert.equal(r.stundenKosten, 12, 'KK kostet 1 Punkt je Stunde');
+  assert.equal(r.bonus, 0);
+  assert.equal(r.netto, 12 * 0.5 - 12);
 });
 
-// --------------------------------------------------------- computeDayHours
-test('computeDayHours füllt ohne Events den ganzen Tag mit dem Startmodell', () => {
-  const { hours, endModel } = C.computeDayHours([], 'HT');
-  assert.strictEqual(hours.HT, 24);
-  assert.strictEqual(hours.KK, 0);
-  assert.strictEqual(endModel, 'HT');
+test('Tageswertung: kurze Öffnung behält den Bonus', () => {
+  const s = S();
+  const r = scoreDay({ HT: 23.5, CLEAN: 0.5 }, [], 0, ctxOf(s), true);
+  assert.equal(r.durchgehend, true, 'unter der Schwelle von 1 h');
+  assert.equal(r.stundenKosten, 0, 'Reinigung kostet nichts');
+  assert.equal(r.bonus, 5);
 });
 
-test('computeDayHours teilt den Tag am Event auf', () => {
-  const { hours, endModel } = C.computeDayHours([ev('2026-08-17', '06:00', 'HT')], 'KK');
-  assert.strictEqual(hours.KK, 6);
-  assert.strictEqual(hours.HT, 18);
-  assert.strictEqual(endModel, 'HT');
+test('Der Streak-Multiplikator ist gedeckelt und wächst nicht exponentiell', () => {
+  const s = S();
+  const werte = [0, 10, 50, 100, 365, 3650].map(n => scoreDay({ HT: 24 }, [], n, ctxOf(s), true).mult);
+  assert.deepEqual(werte, [1, 1.2, 2, 2, 2, 2]);
 });
 
-test('computeDayHours ignoriert Orgasmus-Events beim Modellwechsel', () => {
-  const { hours, endModel } = C.computeDayHours(
-    [ev('2026-08-17', '10:00', 'OR'), ev('2026-08-17', '12:00', 'NS')], 'HT');
-  assert.strictEqual(hours.HT, 12);
-  assert.strictEqual(hours.NS, 12);
-  assert.strictEqual(endModel, 'NS');
+test('Orgasmus-Preis fällt mit der Wartezeit und bleibt zwischen Min und Max', () => {
+  const or = defaultSettings().models.find(m => m.id === 'OR');
+  const p0 = orgasmPrice(or, 0, 1);
+  const p7 = orgasmPrice(or, 7, 1);
+  const p30 = orgasmPrice(or, 30, 1);
+  assert.equal(p0, 60);
+  assert.equal(p7, 37.5, 'nach einer Halbwertszeit die halbe Spanne');
+  assert.ok(p30 < p7 && p30 > or.priceMin);
+  assert.equal(orgasmPrice(or, Infinity, 1), or.priceMin, 'ohne Vorgänger der Mindestpreis');
 });
 
-test('computeDayHours begrenzt auf endMin (laufender Tag)', () => {
-  // Käfig 05:06 angelegt, jetzt ist 15:00 → nur bis 15:00 zählen
-  const { hours } = C.computeDayHours([ev('2026-08-17', '05:06', 'HT')], 'KK', 15 * 60);
-  assert.strictEqual(Math.round(hours.KK * 100) / 100, 5.1);
-  assert.strictEqual(Math.round(hours.HT * 100) / 100, 9.9);
-  assert.strictEqual(hours.KK + hours.HT, 15); // nichts über die Grenze hinaus
+test('Durchlauf: Konto läuft mit, Form-Wert klingt ab', () => {
+  const now = new Date('2026-03-10T23:59:00');
+  const data = { startedAt: '2026-03-01', events: [ev('2026-03-01', '00:00', 'HT')] };
+  const { days, totals } = computeAll(data, { now });
+  assert.equal(days.length, 10);
+  assert.ok(days.every(d => d.verschlossenH > 23));
+  // Konto ist die Summe der Nettos
+  const summe = days.reduce((s, d) => s + d.netto, 0);
+  assert.ok(Math.abs(totals.konto - summe) < 1e-9);
+  // Form liegt unter dem Konto, weil ältere Tage abklingen
+  assert.ok(totals.form < totals.konto);
 });
 
-test('computeDayHours: Events nach der Grenze zählen nicht, setzen aber das Folgemodell', () => {
-  const { hours, endModel } = C.computeDayHours([ev('2026-08-17', '22:00', 'NS')], 'HT', 15 * 60);
-  assert.strictEqual(hours.HT, 15);
-  assert.strictEqual(hours.NS, 0);
-  assert.strictEqual(endModel, 'NS', 'der Folgetag muss mit NS starten');
+test('Durchlauf: der Form-Wert läuft gegen einen Grenzwert statt zu explodieren', () => {
+  const now = new Date('2029-01-01T23:59:00');
+  const data = { startedAt: '2026-01-01', events: [ev('2026-01-01', '00:00', 'HT')] };
+  const { totals, days } = computeAll(data, { now });
+  assert.ok(days.length > 1000);
+  // Fixpunkt: tagesnetto / (1 − decay). Bei 34/Tag und 0,97 sind das ~1133.
+  assert.ok(totals.form > 1000 && totals.form < 1200, `Form war ${totals.form}`);
 });
 
-test('computeDayHours mit endMin 0 zählt nichts (Zukunft)', () => {
-  const { hours } = C.computeDayHours([ev('2026-08-17', '06:00', 'HT')], 'KK', 0);
-  assert.strictEqual(Object.values(hours).reduce((a, b) => a + b, 0), 0);
+test('Durchlauf: vor dem Stichtag zählt nichts ins Konto', () => {
+  const now = new Date('2026-03-10T23:59:00');
+  const data = { startedAt: '2026-03-05', events: [ev('2026-03-01', '00:00', 'HT')] };
+  const { byDate, totals } = computeAll(data, { now });
+  assert.equal(byDate['2026-03-01'].zaehlt, false);
+  assert.equal(byDate['2026-03-01'].netto, 0);
+  assert.ok(byDate['2026-03-01'].verschlossenH > 23, 'Stunden werden trotzdem erfasst');
+  assert.equal(byDate['2026-03-05'].zaehlt, true);
+  assert.equal(totals.kalendertage, 6);
 });
 
-// ------------------------------------------------------------- computeAll
-test('computeAll liefert bei leeren Daten leere Struktur', () => {
-  const r = C.computeAllFrom({ events: [], days: {} }, { now: at(2026, 8, 17) });
-  assert.deepStrictEqual(r.days, []);
-  assert.strictEqual(r.totals.tage, 0);
-});
-
-test('computeAll überspannt Lücken zwischen Events lückenlos', () => {
-  const r = C.computeAllFrom(
-    { events: [ev('2026-08-10', '09:00', 'HT')], days: {} },
-    { now: at(2026, 8, 17, 12, 0) });
-  const dates = r.days.map(d => d.date);
-  assert.strictEqual(dates[0], '2026-08-10');
-  assert.strictEqual(dates[dates.length - 1], '2026-08-17');
-  assert.strictEqual(dates.length, 8);
-});
-
-test('computeAll nimmt den heutigen Tag auch ohne Event mit (UTC-Falle)', () => {
-  // 00:30 lokal: das UTC-Datum wäre in DE noch der Vortag gewesen
-  const r = C.computeAllFrom(
-    { events: [ev('2026-08-16', '09:00', 'HT')], days: {} },
-    { now: at(2026, 8, 17, 0, 30) });
-  assert.ok(r.byDate['2026-08-17'], 'der laufende Tag fehlt in der Berechnung');
-});
-
-test('computeAll: Modell läuft über den Tageswechsel weiter', () => {
-  const r = C.computeAllFrom(
-    { events: [ev('2026-08-15', '20:00', 'NS')], days: {} },
-    { now: at(2026, 8, 17, 12, 0) });
-  assert.strictEqual(r.byDate['2026-08-16'].hours.NS, 24, 'Folgetag komplett NS');
-  assert.strictEqual(r.byDate['2026-08-16'].prevEndModel, 'NS');
-});
-
-test('computeAll: laufender Tag zählt nur bis jetzt', () => {
-  const r = C.computeAllFrom(
-    { events: [ev('2026-08-16', '00:00', 'HT')], days: {} },
-    { now: at(2026, 8, 17, 6, 0) });
-  assert.strictEqual(r.byDate['2026-08-16'].stundenVerschlossen, 24);
-  assert.strictEqual(r.byDate['2026-08-17'].stundenVerschlossen, 6);
-});
-
-test('Streaks wachsen nach vortag * 1.07 + basis und brechen beim Orgasmus', () => {
-  const r = C.computeAllFrom(
-    { events: [ev('2026-08-10', '00:00', 'HT'), ev('2026-08-13', '10:00', 'OR')], days: {} },
-    { now: at(2026, 8, 15, 12, 0) });
-  const of = d => r.byDate[d].ofStreak;
-  assert.strictEqual(Math.round(of('2026-08-10') * 1000) / 1000, 3);          // Basis
-  assert.strictEqual(Math.round(of('2026-08-11') * 1000) / 1000, 6.21);       // 3*1.07+3
-  assert.strictEqual(of('2026-08-13'), 0, 'Orgasmus setzt die Streak zurück');
-  assert.strictEqual(Math.round(of('2026-08-14') * 1000) / 1000, 3);          // startet neu
-});
-
-test('Punkte setzen sich aus Streaks, Stunden und Abzügen zusammen', () => {
-  const r = C.computeAllFrom(
-    { events: [ev('2026-08-10', '00:00', 'HT'), ev('2026-08-10', '20:00', 'OR')], days: {} },
-    { now: at(2026, 8, 10, 23, 59) });
-  const d = r.byDate['2026-08-10'];
-  assert.strictEqual(d.hadOrgasm, true);
-  assert.strictEqual(d.orgasmusfrei, false);
-  assert.strictEqual(d.ofStreak, 0);
-  // Stunden bis 23:59 = 23.983… → *0.5, minus 10 für den Orgasmus
-  const erwartet = d.stundenVerschlossen * C.POINTS.hourLocked + C.POINTS.orgasm;
-  assert.ok(Math.abs(d.punkte - erwartet) < 1e-9, `${d.punkte} != ${erwartet}`);
-});
-
-test('keinKG greift erst über 12 h offen und kostet 5 Punkte', () => {
-  const kurz = C.computeAllFrom(
-    { events: [ev('2026-08-10', '00:00', 'KK'), ev('2026-08-10', '10:00', 'HT')], days: {} },
-    { now: at(2026, 8, 11, 12, 0) }).byDate['2026-08-10'];
-  assert.strictEqual(kurz.keinKG, false, '10 h offen ist noch kein "nicht verschlossen"');
-
-  const lang = C.computeAllFrom(
-    { events: [ev('2026-08-10', '00:00', 'KK'), ev('2026-08-10', '13:00', 'HT')], days: {} },
-    { now: at(2026, 8, 11, 12, 0) }).byDate['2026-08-10'];
-  assert.strictEqual(lang.keinKG, true, '13 h offen zählt als "nicht verschlossen"');
-});
-
-test('Overrides schlagen die Auto-Ableitung — auch der Wert false', () => {
+test('Durchlauf: zwei Orgasmen am selben Tag kosten beide, der zweite fast den Höchstpreis', () => {
+  const now = new Date('2026-03-02T23:59:00');
   const data = {
-    events: [ev('2026-08-10', '10:00', 'OR')],
-    days: { '2026-08-10': { orgasmusfrei: true, hoursLocked: 8 } },
+    startedAt: '2026-03-01',
+    events: [ev('2026-03-01', '00:00', 'HT'), ev('2026-03-02', '10:00', 'OR'), ev('2026-03-02', '13:00', 'OR')],
   };
-  const d = C.computeAllFrom(data, { now: at(2026, 8, 11, 12, 0) }).byDate['2026-08-10'];
-  assert.strictEqual(d.orgasmusfrei, true, 'Override gewinnt gegen das OR-Event');
-  assert.strictEqual(d.stundenVerschlossen, 8, 'hoursLocked schlägt die Ableitung');
-  assert.ok(d.ofStreak > 0, 'Streak läuft trotz Orgasmus weiter');
-
-  const aus = C.computeAllFrom(
-    { events: [], days: { '2026-08-10': { orgasmusfrei: false } } },
-    { now: at(2026, 8, 11, 12, 0) }).byDate['2026-08-10'];
-  assert.strictEqual(aus.orgasmusfrei, false, 'false darf nicht als "nicht gesetzt" gelten');
+  const { byDate } = computeAll(data, { now });
+  const d = byDate['2026-03-02'];
+  assert.equal(d.orgasmen.length, 2);
+  assert.ok(d.orgasmen[1].price > 55, 'drei Stunden Abstand → nahe am Höchstpreis');
+  assert.ok(d.orgasmKosten > 70);
+  assert.ok(d.netto < 0);
 });
 
-test('Tage mit reiner Flag-Markierung gehen nicht verloren', () => {
-  const r = C.computeAllFrom(
-    { events: [], days: { '2026-08-10': { keinKG: true } } },
-    { now: at(2026, 8, 12, 12, 0) });
-  assert.ok(r.byDate['2026-08-10']);
-  assert.strictEqual(r.byDate['2026-08-10'].tracked, true);
+test('Durchlauf: heutige Orgasmen in der Zukunft kosten noch nichts', () => {
+  const now = new Date('2026-03-02T09:00:00');
+  const data = { startedAt: '2026-03-01', events: [ev('2026-03-01', '00:00', 'HT'), ev('2026-03-02', '20:00', 'OR')] };
+  const { byDate } = computeAll(data, { now });
+  assert.equal(byDate['2026-03-02'].orgasmen.length, 0);
 });
 
-// ---------------------------------------------------------------- Totals
-test('Totals zählen Orgasmen inklusive automatisch erzeugter', () => {
-  const r = C.computeAllFrom({
-    events: [
-      ev('2026-08-10', '10:00', 'OR'),
-      ev('2026-08-10', '22:00', 'OR'),
-      ev('2026-08-11', '12:00', 'OR', { auto_inactivity: true }),
-    ], days: {},
-  }, { now: at(2026, 8, 12, 12, 0) });
-  assert.strictEqual(r.totals.orgasmen, 3);
-  assert.strictEqual(r.totals.orgasmenAuto, 1);
-  assert.strictEqual(r.totals.tageMitOrgasmus, 2, 'zwei Tage, drei Orgasmen');
+test('Unbekannte Event-Typen kippen die Berechnung nicht', () => {
+  const now = new Date('2026-03-02T23:59:00');
+  const data = { startedAt: '2026-03-01', events: [ev('2026-03-01', '00:00', 'GIBTSNICHT')] };
+  const { totals, byDate } = computeAll(data, { now });
+  assert.equal(byDate['2026-03-01'].verschlossenH, 0, 'unbekannt gilt als offen');
+  assert.equal(byDate['2026-03-01'].kosten, 0, 'und als punkteneutral');
+  assert.ok(Number.isFinite(totals.konto));
 });
 
-test('Totals: Punktestand hängt am letzten Tag *mit Eintrag*, nicht am letzten Tag', () => {
-  // Dokumentiert bewusst das heutige Verhalten: Tage ohne eigenen Eintrag sammeln
-  // sehr wohl Punkte (cumPunkte läuft weiter, Streak und Stunden zählen), gelten
-  // aber nicht als "tracked". totals.punkte bleibt deshalb auf dem Stand des
-  // letzten Tages mit Eintrag stehen und hinkt dem tatsächlichen Stand hinterher.
-  const r = C.computeAllFrom(
-    { events: [ev('2026-08-10', '00:00', 'HT')], days: {} },
-    { now: at(2026, 8, 12, 12, 0) });
-  const letzterTag = r.days[r.days.length - 1];
-  const letzterMitEintrag = r.days.filter(d => d.tracked).slice(-1)[0];
-
-  assert.strictEqual(r.totals.punkte, letzterMitEintrag.cumPunkte);
-  assert.strictEqual(letzterMitEintrag.date, '2026-08-10');
-  assert.ok(letzterTag.cumPunkte > r.totals.punkte,
-    'der laufende Stand liegt über dem angezeigten Punktestand');
-  assert.strictEqual(r.totals.kalendertage, r.days.length);
+test('Verschlossen-Phase läuft über Mitternacht und über Modellwechsel', () => {
+  const s = S();
+  const events = [ev('2026-03-01', '20:00', 'HT'), ev('2026-03-03', '09:00', 'NS')];
+  const ref = new Date('2026-03-04T12:00:00').getTime();
+  const phase = lockPhaseStart(events, s, ref);
+  assert.equal(phase.model, 'NS');
+  assert.equal(new Date(phase.ms).toISOString().slice(0, 10), '2026-03-01');
 });
 
-test('Totals: längste Streak wird samt Enddatum festgehalten', () => {
-  const r = C.computeAllFrom(
-    { events: [ev('2026-08-10', '00:00', 'HT'), ev('2026-08-14', '10:00', 'OR')], days: {} },
-    { now: at(2026, 8, 20, 12, 0) });
-  assert.strictEqual(r.totals.bestOfStreak.days, 6, '15.–20.08. ist die längere Serie');
-  assert.strictEqual(r.totals.bestOfStreak.end, '2026-08-20');
+test('Verschlossen-Phase endet beim Öffnen', () => {
+  const s = S();
+  const events = [ev('2026-03-01', '20:00', 'HT'), ev('2026-03-03', '09:00', 'KK')];
+  assert.equal(lockPhaseStart(events, s, new Date('2026-03-04T12:00:00').getTime()), null);
 });
 
-test('groupByDay sortiert die Events eines Tages nach Uhrzeit', () => {
-  const by = C.groupByDay([
-    ev('2026-08-10', '22:00', 'NS'),
-    ev('2026-08-10', '06:00', 'HT'),
-    ev('2026-08-11', '09:00', 'KK'),
-  ]);
-  assert.deepStrictEqual(by['2026-08-10'].map(e => e.time), ['06:00', '22:00']);
-  assert.strictEqual(by['2026-08-11'].length, 1);
+test('Aktueller Orgasmus-Preis richtet sich nach dem letzten Eintrag', () => {
+  const s = S();
+  const data = { events: [ev('2026-03-01', '12:00', 'OR')] };
+  const p = currentOrgasmPrice(data, s, new Date('2026-03-08T12:00:00').getTime());
+  assert.equal(p.abstandTage, 7);
+  assert.equal(Math.round(p.price * 10) / 10, 37.5);
 });
 
-// -------------------------------------------------- verschlossene Phase
-test('lockPhaseStart: ohne Modell-Event läuft kein Zähler', () => {
-  assert.strictEqual(C.lockPhaseStart([], at(2026, 8, 19, 6, 0).getTime()), null);
-  assert.strictEqual(
-    C.lockPhaseStart([ev('2026-08-19', '05:00', 'OR')], at(2026, 8, 19, 6, 0).getTime()),
-    null, 'ein Orgasmus verschließt nichts');
+test('Regeneration: Fenster, Sperrfrist und Zeitüberschreitung', () => {
+  const s = S();
+  const data = { events: [ev('2026-03-01', '10:00', 'REG')] };
+  assert.equal(regenState(data, s, new Date('2026-03-01T15:00:00')).state, 'active');
+  assert.equal(regenState(data, s, new Date('2026-03-02T00:00:00')).state, 'cooldown');
+  assert.equal(regenState(data, s, new Date('2026-03-08T00:00:00')).state, 'available');
+
+  const nach = expiredRegenEvents(data, s, new Date('2026-03-02T00:00:00'));
+  assert.equal(nach.length, 1);
+  assert.equal(nach[0].type, 'KK');
+  assert.equal(nach[0].time, '22:00', '12 Stunden nach 10:00');
 });
 
-test('lockPhaseStart: nach KK ist nicht verschlossen — auch am neuen Kalendertag', () => {
-  // Der Fall aus der Praxis: seit vorgestern 21:00 offen, jetzt 06:00 morgens.
-  // Früher sprang der Zähler an Mitternacht auf "6 h verschlossen".
-  const evs = [ev('2026-08-17', '21:00', 'KK')];
-  assert.strictEqual(C.lockPhaseStart(evs, at(2026, 8, 19, 6, 0).getTime()), null);
+test('Regeneration folgt der Registry: umbenannt und mit anderem Fenster', () => {
+  const s = normalizeSettings({
+    models: [
+      { id: 'HT', kind: 'model', label: 'Käfig', rate: 0.5, locked: true },
+      { id: 'PAUSE', kind: 'model', label: 'Auszeit', rate: 0, locked: false, regen: true, windowH: 3, cooldownD: 1 },
+      { id: 'OFFEN', kind: 'model', label: 'Offen', rate: -1, locked: false, isOpen: true },
+    ],
+  });
+  const data = { events: [ev('2026-03-01', '10:00', 'PAUSE')] };
+  assert.equal(regenState(data, s, new Date('2026-03-01T12:00:00')).state, 'active');
+  const nach = expiredRegenEvents(data, s, new Date('2026-03-01T20:00:00'));
+  assert.equal(nach[0].type, 'OFFEN', 'trägt den konfigurierten offenen Zustand ein');
+  assert.equal(nach[0].time, '13:00');
 });
 
-test('lockPhaseStart: Phase läuft über Mitternacht weiter', () => {
-  const evs = [ev('2026-08-17', '21:00', 'KK'), ev('2026-08-17', '22:30', 'HT')];
-  const p = C.lockPhaseStart(evs, at(2026, 8, 19, 6, 0).getTime());
-  assert.strictEqual(p.ms, at(2026, 8, 17, 22, 30).getTime());
-  assert.strictEqual(p.model, 'HT');
-  assert.strictEqual(C.calendarDaysBetween(p.ms, at(2026, 8, 19, 6, 0).getTime()), 2);
+test('Der allererste Tag zählt erst ab dem ersten Eintrag', () => {
+  const now = new Date('2026-03-02T00:00:00');
+  // Erster Käfig um 20:00 — die 20 Stunden davor sind unbekannt, nicht "offen".
+  const data = { startedAt: '2026-03-01', events: [ev('2026-03-01', '20:00', 'HT')] };
+  const { byDate } = computeAll(data, { now });
+  const d = byDate['2026-03-01'];
+  assert.equal(d.offenH, 0, 'keine Strafstunden für Zeit ohne Datengrundlage');
+  assert.equal(d.verschlossenH, 4);
+  assert.ok(d.netto > 0, `wäre sonst ${d.netto}`);
 });
 
-test('lockPhaseStart: Modellwechsel unterbricht die Phase nicht', () => {
-  const evs = [
-    ev('2026-08-15', '08:00', 'KK'),
-    ev('2026-08-15', '09:00', 'HT'),
-    ev('2026-08-16', '10:00', 'NS'),   // umgeschnallt, aber durchgehend verschlossen
-    ev('2026-08-17', '11:00', 'REG'),  // Regeneration zählt als verschlossen
-  ];
-  const p = C.lockPhaseStart(evs, at(2026, 8, 18, 12, 0).getTime());
-  assert.strictEqual(p.ms, at(2026, 8, 15, 9, 0).getTime());
-  assert.strictEqual(p.model, 'REG');
-});
-
-test('lockPhaseStart: ein KK beendet die Phase, danach beginnt sie neu', () => {
-  const evs = [
-    ev('2026-08-15', '09:00', 'HT'),
-    ev('2026-08-17', '07:00', 'KK'),
-    ev('2026-08-17', '19:00', 'PC'),
-  ];
-  const p = C.lockPhaseStart(evs, at(2026, 8, 18, 6, 0).getTime());
-  assert.strictEqual(p.ms, at(2026, 8, 17, 19, 0).getTime(), 'nur die neue Phase zählt');
-});
-
-test('lockPhaseStart: erste Phase ohne vorheriges KK', () => {
-  const evs = [ev('2026-08-15', '09:00', 'HT')];
-  const p = C.lockPhaseStart(evs, at(2026, 8, 16, 9, 0).getTime());
-  assert.strictEqual(p.ms, at(2026, 8, 15, 9, 0).getTime());
-});
-
-test('lockPhaseStart: Events nach dem Bezugszeitpunkt bleiben unbeachtet', () => {
-  const evs = [ev('2026-08-15', '09:00', 'HT'), ev('2026-08-15', '20:00', 'KK')];
-  const p = C.lockPhaseStart(evs, at(2026, 8, 15, 12, 0).getTime());
-  assert.strictEqual(p.ms, at(2026, 8, 15, 9, 0).getTime(), 'um 12:00 war noch verschlossen');
-  assert.strictEqual(C.lockPhaseStart(evs, at(2026, 8, 15, 21, 0).getTime()), null);
-});
-
-test('calendarDaysBetween zählt Tagesgrenzen, auch über die Zeitumstellung', () => {
-  assert.strictEqual(C.calendarDaysBetween(at(2026, 8, 19, 23, 0), at(2026, 8, 20, 1, 0)), 1);
-  assert.strictEqual(C.calendarDaysBetween(at(2026, 8, 19, 1, 0), at(2026, 8, 19, 23, 0)), 0);
-  // DE-Sommerzeit beginnt am 29.03.2026
-  assert.strictEqual(C.calendarDaysBetween(at(2026, 3, 28, 20, 0), at(2026, 3, 30, 6, 0)), 2);
+test('Ab dem zweiten Tag zählt der Tag wieder ab Mitternacht', () => {
+  const now = new Date('2026-03-03T00:00:00');
+  const data = { startedAt: '2026-03-01', events: [ev('2026-03-01', '20:00', 'HT'), ev('2026-03-02', '06:00', 'KK')] };
+  const { byDate } = computeAll(data, { now });
+  const d = byDate['2026-03-02'];
+  assert.equal(d.verschlossenH, 6, 'der Käfig läuft aus dem Vortag durch');
+  assert.equal(d.offenH, 18);
 });

@@ -1,132 +1,89 @@
-/**
- * Tests für den Sync-Merge (www/merge.js).
- * Der interessante Teil ist die Unterscheidung "gelöscht" vs. "neu angelegt" —
- * die geht nur mit gemeinsamer Basis.
- */
-const test = require('node:test');
-const assert = require('node:assert');
-const M = require('../www/merge.js');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { mergeData, mergeEvents, mergeMap, mergeSettings, eventKey } from '../www/js/core/merge.js';
 
 const ev = (date, time, type) => ({ date, time, type });
-const keys = list => list.map(M.eventKey).sort();
+const A = ev('2026-03-01', '08:00', 'HT');
+const B = ev('2026-03-01', '20:00', 'KK');
+const C = ev('2026-03-02', '09:00', 'NS');
 
-test('ohne Konflikt bleibt alles erhalten', () => {
-  const base = { events: [ev('2026-08-10', '08:00', 'HT')], days: {}, notes: {} };
-  const r = M.mergeData(base, base, base);
-  assert.strictEqual(r.data.events.length, 1);
+test('Ohne Basis wird vereinigt — nichts geht verloren', () => {
+  const { events } = mergeEvents(null, [A], [B]);
+  assert.equal(events.length, 2);
 });
 
-test('Events beider Geräte werden vereinigt', () => {
-  const base   = { events: [ev('2026-08-10', '08:00', 'HT')], days: {}, notes: {} };
-  const local  = { events: [ev('2026-08-10', '08:00', 'HT'), ev('2026-08-11', '09:00', 'NS')], days: {}, notes: {} };
-  const remote = { events: [ev('2026-08-10', '08:00', 'HT'), ev('2026-08-12', '10:00', 'KK')], days: {}, notes: {} };
-  const r = M.mergeData(base, local, remote);
-  assert.deepStrictEqual(keys(r.data.events),
-    keys([ev('2026-08-10','08:00','HT'), ev('2026-08-11','09:00','NS'), ev('2026-08-12','10:00','KK')]));
-  assert.strictEqual(r.stats.uebernommen, 1, 'ein Event kam vom anderen Gerät');
+test('Mit Basis wird eine Löschung als Löschung erkannt', () => {
+  const { events, stats } = mergeEvents([A, B], [A], [A, B]);
+  assert.deepEqual(events.map(eventKey), [eventKey(A)]);
+  assert.equal(stats.entfernt, 1);
 });
 
-test('lokale Löschung kehrt nicht zurück', () => {
-  const base   = { events: [ev('2026-08-10','08:00','HT'), ev('2026-08-11','09:00','NS')], days: {}, notes: {} };
-  const local  = { events: [ev('2026-08-10','08:00','HT')], days: {}, notes: {} };   // NS gelöscht
-  const remote = { events: [ev('2026-08-10','08:00','HT'), ev('2026-08-11','09:00','NS')], days: {}, notes: {} };
-  const r = M.mergeData(base, local, remote);
-  assert.deepStrictEqual(keys(r.data.events), keys([ev('2026-08-10','08:00','HT')]));
-  assert.strictEqual(r.stats.entfernt, 1);
+test('Neuanlagen beider Seiten kommen zusammen', () => {
+  const { events, stats } = mergeEvents([A], [A, B], [A, C]);
+  assert.equal(events.length, 3);
+  assert.equal(stats.hinzu, 1);
 });
 
-test('Löschung auf dem anderen Gerät wird übernommen', () => {
-  const base   = { events: [ev('2026-08-10','08:00','HT'), ev('2026-08-11','09:00','NS')], days: {}, notes: {} };
-  const local  = { events: [ev('2026-08-10','08:00','HT'), ev('2026-08-11','09:00','NS')], days: {}, notes: {} };
-  const remote = { events: [ev('2026-08-10','08:00','HT')], days: {}, notes: {} };
-  const r = M.mergeData(base, local, remote);
-  assert.deepStrictEqual(keys(r.data.events), keys([ev('2026-08-10','08:00','HT')]));
+test('Bei beidseitiger Änderung einer Markierung gewinnt lokal', () => {
+  const konflikte = [];
+  const out = mergeMap({ x: 1 }, { x: 2 }, { x: 3 }, k => konflikte.push(k));
+  assert.equal(out.x, 2);
+  assert.deepEqual(konflikte, ['x']);
 });
 
-test('geänderte Uhrzeit gewinnt gegen den alten Stand', () => {
-  const base   = { events: [ev('2026-08-10','08:00','HT')], days: {}, notes: {} };
-  const local  = { events: [ev('2026-08-10','09:30','HT')], days: {}, notes: {} };  // korrigiert
-  const remote = { events: [ev('2026-08-10','08:00','HT')], days: {}, notes: {} };
-  const r = M.mergeData(base, local, remote);
-  assert.deepStrictEqual(keys(r.data.events), keys([ev('2026-08-10','09:30','HT')]));
+test('Einstellungen: der jüngere Stand gewinnt als Ganzes', () => {
+  const alt = { models: [{ id: 'A' }], updatedAt: '2026-01-01T00:00:00Z' };
+  const neu = { models: [{ id: 'B' }], updatedAt: '2026-06-01T00:00:00Z' };
+  assert.equal(mergeSettings(alt, neu), neu);
+  assert.equal(mergeSettings(neu, alt), neu);
+  assert.equal(mergeSettings(null, alt), alt);
+  assert.equal(mergeSettings(alt, null), alt);
 });
 
-test('ohne Basis wird konservativ vereinigt (nichts geht verloren)', () => {
-  const local  = { events: [ev('2026-08-10','08:00','HT')], days: {}, notes: {} };
-  const remote = { events: [ev('2026-08-11','09:00','NS')], days: {}, notes: {} };
-  const r = M.mergeData(null, local, remote);
-  assert.strictEqual(r.data.events.length, 2);
-  assert.strictEqual(r.stats.basisBekannt, false);
+test('Einstellungen überleben den Merge — sonst fiele die Registry auf Standard zurück', () => {
+  const settings = { models: [{ id: 'X', label: 'Mein Käfig' }], updatedAt: '2026-06-01T00:00:00Z' };
+  const { data } = mergeData(
+    { events: [A] },
+    { events: [A], settings },
+    { events: [A, B] });
+  assert.deepEqual(data.settings, settings);
 });
 
-test('Ergebnis ist chronologisch sortiert', () => {
-  const local  = { events: [ev('2026-08-12','10:00','KK')], days: {}, notes: {} };
-  const remote = { events: [ev('2026-08-10','08:00','HT'), ev('2026-08-11','09:00','NS')], days: {}, notes: {} };
-  const r = M.mergeData(null, local, remote);
-  assert.deepStrictEqual(r.data.events.map(e => e.date),
-    ['2026-08-10', '2026-08-11', '2026-08-12']);
+test('Das Archiv überlebt den Merge und wird nie überschrieben', () => {
+  const legacy = { punkte: 12345, formel: 'locked-1.x' };
+  const nurRemote = mergeData(null, { events: [] }, { events: [], legacy });
+  assert.deepEqual(nurRemote.data.legacy, legacy);
+
+  const beide = mergeData(null, { events: [], legacy }, { events: [], legacy: { punkte: 999 } });
+  assert.equal(beide.data.legacy.punkte, 12345, 'der lokale Schnappschuss bleibt stehen');
 });
 
-// ------------------------------------------------------------- Flags (days)
-test('Flags: jede Seite bringt ihre eigenen Tage ein', () => {
-  const base   = { events: [], days: {}, notes: {} };
-  const local  = { events: [], days: { '2026-08-10': { keinKG: true } }, notes: {} };
-  const remote = { events: [], days: { '2026-08-11': { orgasmusfrei: false } }, notes: {} };
-  const r = M.mergeData(base, local, remote);
-  assert.deepStrictEqual(r.data.days, {
-    '2026-08-10': { keinKG: true },
-    '2026-08-11': { orgasmusfrei: false },
-  });
-  assert.deepStrictEqual(r.stats.konflikte, []);
+test('Der Stichtag bleibt der frühere', () => {
+  const { data } = mergeData(null,
+    { events: [], startedAt: '2026-08-31' },
+    { events: [], startedAt: '2026-09-15' });
+  assert.equal(data.startedAt, '2026-08-31');
 });
 
-test('Flags: unveränderte Seite überschreibt die geänderte nicht', () => {
-  const base   = { events: [], days: { '2026-08-10': { hoursLocked: 8 } }, notes: {} };
-  const local  = { events: [], days: { '2026-08-10': { hoursLocked: 8 } }, notes: {} };
-  const remote = { events: [], days: { '2026-08-10': { hoursLocked: 12 } }, notes: {} };
-  const r = M.mergeData(base, local, remote);
-  assert.deepStrictEqual(r.data.days['2026-08-10'], { hoursLocked: 12 });
+test('meta: der spätere Verwurf gewinnt', () => {
+  const { data } = mergeData(null,
+    { events: [], meta: { escalationDismissedAt: '2026-03-01T10:00:00Z' } },
+    { events: [], meta: { escalationDismissedAt: '2026-03-05T10:00:00Z' } });
+  assert.equal(data.meta.escalationDismissedAt, '2026-03-05T10:00:00Z');
 });
 
-test('Flags: bei beidseitiger Änderung gewinnt lokal und wird gemeldet', () => {
-  const base   = { events: [], days: { '2026-08-10': { hoursLocked: 8 } }, notes: {} };
-  const local  = { events: [], days: { '2026-08-10': { hoursLocked: 10 } }, notes: {} };
-  const remote = { events: [], days: { '2026-08-10': { hoursLocked: 12 } }, notes: {} };
-  const r = M.mergeData(base, local, remote);
-  assert.deepStrictEqual(r.data.days['2026-08-10'], { hoursLocked: 10 });
-  assert.deepStrictEqual(r.stats.konflikte, ['days:2026-08-10']);
-});
-
-test('Flags: lokal entfernter Override bleibt entfernt', () => {
-  const base   = { events: [], days: { '2026-08-10': { keinKG: true } }, notes: {} };
-  const local  = { events: [], days: {}, notes: {} };
-  const remote = { events: [], days: { '2026-08-10': { keinKG: true } }, notes: {} };
-  const r = M.mergeData(base, local, remote);
-  assert.strictEqual('2026-08-10' in r.data.days, false);
-});
-
-test('Notizen werden genauso zusammengeführt', () => {
-  const base   = { events: [], days: {}, notes: {} };
-  const local  = { events: [], days: {}, notes: { '2026-08-10': 'lokal' } };
-  const remote = { events: [], days: {}, notes: { '2026-08-11': 'remote' } };
-  const r = M.mergeData(base, local, remote);
-  assert.deepStrictEqual(r.data.notes, { '2026-08-10': 'lokal', '2026-08-11': 'remote' });
-});
-
-test('realistischer Fall: zwei Geräte, je ein neuer Eintrag, eine Korrektur', () => {
-  const base = { events: [ev('2026-08-10','08:00','HT'), ev('2026-08-10','20:00','OR')],
-                 days: {}, notes: {} };
-  // Handy: Orgasmus-Zeit korrigiert + neuer Eintrag
-  const local = { events: [ev('2026-08-10','08:00','HT'), ev('2026-08-10','21:15','OR'),
-                           ev('2026-08-11','07:00','NS')], days: {}, notes: {} };
-  // Browser: anderer neuer Eintrag
-  const remote = { events: [ev('2026-08-10','08:00','HT'), ev('2026-08-10','20:00','OR'),
-                            ev('2026-08-12','06:30','KK')], days: {}, notes: {} };
-  const r = M.mergeData(base, local, remote);
-  assert.deepStrictEqual(keys(r.data.events), keys([
-    ev('2026-08-10','08:00','HT'),
-    ev('2026-08-10','21:15','OR'),   // Korrektur erhalten
-    ev('2026-08-11','07:00','NS'),   // vom Handy
-    ev('2026-08-12','06:30','KK'),   // vom Browser
-  ]));
+test('Ein vollständiger Datensatz verliert beim Merge kein Feld', () => {
+  const lokal = {
+    version: 3, startedAt: '2026-08-31',
+    events: [A], days: { '2026-03-01': { note: 'x' } }, notes: { '2026-03-02': 'y' },
+    meta: { escalationDismissedAt: '2026-03-01T00:00:00Z' },
+    settings: { models: [{ id: 'A' }], updatedAt: '2026-08-31T00:00:00Z' },
+    legacy: { punkte: 1 },
+  };
+  const { data } = mergeData(null, lokal, { events: [B] });
+  for (const key of Object.keys(lokal)) {
+    assert.ok(key in data, `${key} fehlt nach dem Merge`);
+  }
+  assert.equal(data.events.length, 2);
 });

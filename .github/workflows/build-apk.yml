@@ -34,17 +34,15 @@ jobs:
         run: |
           # Anzahl der Commits als versionCode; Kurz-Hash als Suffix
           CODE=$(git rev-list --count HEAD)
-          NAME="1.0.${CODE}"
+          NAME="2.0.${CODE}"
           HASH=$(git rev-parse --short HEAD)
           echo "code=$CODE" >> $GITHUB_OUTPUT
           echo "name=$NAME" >> $GITHUB_OUTPUT
           echo "hash=$HASH" >> $GITHUB_OUTPUT
           echo "Building version $NAME (code $CODE)"
 
-      - name: Bake version into www/index.html
-        run: |
-          sed -i "s|__APP_VERSION__|${{ steps.ver.outputs.name }}|g" www/index.html || true
-          sed -i "s|__APP_COMMIT__|${{ steps.ver.outputs.hash }}|g" www/index.html || true
+      - name: Version eintragen
+        run: ./scripts/bake-version.sh "${{ steps.ver.outputs.name }}" "${{ steps.ver.outputs.hash }}"
 
       - name: Install npm dependencies
         run: npm install

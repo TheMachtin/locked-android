@@ -1,62 +1,47 @@
-// Service Worker — Offline-fähigkeit + PWA-Install
-// - Static Assets werden gecached (Network-first, fallback Cache)
-// - Microsoft Graph / Login wird NIE gecached (frische Daten nötig)
-// - MSAL/SheetJS liegen lokal unter vendor/ (kein CDN)
+// Service Worker — Offline-Fähigkeit und PWA-Installation.
+// Netz zuerst, Cache als Rückfall. Microsoft Graph und Login werden nie
+// gecacht: veraltete Token oder Daten wären schlimmer als ein Fehler.
 
-const CACHE = 'locked-static-v5';
+const CACHE = 'locked-static-v6';
 const PRECACHE = [
-  './',
-  './index.html',
-  './calc.js',
-  './merge.js',
+  './', './index.html', './css/app.css', './manifest.webmanifest',
+  './js/main.js', './js/state.js', './js/platform.js',
+  './js/core/time.js', './js/core/settings.js', './js/core/calc.js',
+  './js/core/legacy.js', './js/core/merge.js', './js/core/migrate.js', './js/core/escalation.js',
+  './js/sync/auth.js', './js/sync/onedrive.js', './js/sync/files.js',
+  './js/ui/format.js', './js/ui/toast.js', './js/ui/charts.js',
+  './js/ui/eintrag.js', './js/ui/dashboard.js', './js/ui/einstellungen.js', './js/ui/daten.js',
   './vendor/msal-browser.min.js',
-  './manifest.webmanifest',
-  './favicon.png',
-  './icon-192.png',
-  './icon-512.png',
-  './icon-192-maskable.png',
-  './icon-512-maskable.png',
+  './favicon.png', './icon-192.png', './icon-512.png',
+  './icon-192-maskable.png', './icon-512-maskable.png',
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE)
-      .then(c => c.addAll(PRECACHE).catch(err => console.warn('precache partial', err)))
-  );
-  // skipWaiting() NICHT automatisch — App fragt User erst
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE).catch(err => console.warn('precache partial', err))));
+  // Kein skipWaiting() — die App fragt erst.
 });
 
-self.addEventListener('message', (e) => {
-  if (e.data === 'skipWaiting') self.skipWaiting();
-});
+self.addEventListener('message', (e) => { if (e.data === 'skipWaiting') self.skipWaiting(); });
 
 self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
+  e.waitUntil(caches.keys()
+    .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+    .then(() => self.clients.claim()));
 });
 
-function isApiRequest(url) {
+function istApi(url) {
   return url.hostname === 'graph.microsoft.com'
       || url.hostname.endsWith('login.microsoftonline.com')
       || url.hostname.endsWith('login.live.com')
-      || url.hostname.endsWith('login.microsoft.com');
+      || url.hostname.endsWith('login.microsoft.com')
+      || url.hostname === 'api.github.com';
 }
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  if (req.method !== 'GET') {
-    // POST/PUT immer durchs Netz (Saves zu OneDrive)
-    return;
-  }
+  if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (isApiRequest(url)) {
-    // API ungecached
-    return;
-  }
-  // Network-first: frische Version, bei Fehlschlag Cache
+  if (istApi(url)) return;
   event.respondWith(
     fetch(req)
       .then(res => {
@@ -66,6 +51,5 @@ self.addEventListener('fetch', (event) => {
         }
         return res;
       })
-      .catch(() => caches.match(req).then(cached => cached || new Response('Offline', { status: 503, statusText: 'Offline' })))
-  );
+      .catch(() => caches.match(req).then(c => c || new Response('Offline', { status: 503 }))));
 });
