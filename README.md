@@ -141,7 +141,28 @@ Alle drei müssen unter [App-Registrierungen → Authentifizierung](https://port
 eingetragen sein. `http://localhost` erlaubt dort ausdrücklich beliebige Ports —
 die Desktop-App sucht sich beim Anmelden einen freien.
 
-Zwei Details, die leicht übersehen werden:
+### Die Falle in der neuen Azure-Oberfläche
+
+Auf der Seite **Authentication (Preview)** legt der Knopf *+ Umleitungs-URI
+hinzufügen* keine einzelne URI an: das Panel schickt die schon vorhandenen
+benutzerdefinierten URIs mit. Ist `locked://auth` bereits registriert, steht es
+dort vorausgefüllt im Feld und wird beim Speichern ein zweites Mal übermittelt.
+Azure lehnt das ab mit
+
+> Umleitungs-URIs müssen eindeutig identifizierbare Werte aufweisen.
+
+Die Meldung klingt nach einem Konflikt mit der URI, die man gerade eintippt —
+gemeint ist aber die doppelt gesendete bestehende. Zwei Wege daran vorbei:
+
+- über den Link *„To switch to the old experience"* im Banner oben auf die alte
+  Oberfläche wechseln und die URI dort hinzufügen, oder
+- in der Tabelle in der Zeile *Mobilgerät- und Desktopanwendungen* auf
+  **Bearbeiten** gehen (nicht auf *+ Umleitungs-URI hinzufügen*) und die neue URI
+  als zusätzliche Zeile ergänzen.
+
+Die angebotenen Häkchen (`nativeclient`, `LiveSDK`, `msal…://auth`) bleiben leer.
+
+Zwei weitere Details, die leicht übersehen werden:
 
 - Android und Desktop tauschen den Token **nicht** per `fetch()`. Ein `fetch()`
   aus der WebView schickt einen `Origin`-Header mit, den Azure bei
