@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { migrate, importLegacyData, leereDaten, DATA_VERSION } from '../www/js/core/migrate.js';
-import { computeLegacy, freezeLegacy } from '../www/js/core/legacy.js';
+import { computeLegacy, freezeLegacy, refreezeLegacy } from '../www/js/core/legacy.js';
 import { computeAll } from '../www/js/core/calc.js';
 
 const ev = (date, time, type, extra) => ({ date, time, type, ...extra });
@@ -178,4 +178,34 @@ test('freezeLegacy läuft nur, solange es kein Archiv gibt', () => {
   const erst = freezeLegacy(data, '2026-08-31');
   assert.ok(erst);
   assert.equal(freezeLegacy({ ...data, legacy: erst }, '2026-08-31'), null);
+});
+
+test('Stichtag verschieben rechnet das Archiv neu — kein Tag zählt doppelt', () => {
+  const { data } = migrate(altbestand(), { now: NOW });
+  const vorher = data.legacy;
+  assert.equal(vorher.bis, '2026-08-30', 'Archiv endet am Tag vor dem Stichtag');
+
+  // Zwei Tage zurück: der 29. und 30.08. sollen in die neue Ära wechseln.
+  const zurueck = refreezeLegacy(data, '2026-08-29');
+  assert.equal(zurueck.bis, '2026-08-28');
+  assert.ok(zurueck.punkte < vorher.punkte, 'kürzere alte Ära, weniger Punkte');
+
+  // Mit dem passenden Stichtag entsteht weder Lücke noch Überlappung.
+  const neu = { ...data, legacy: zurueck, settings: { ...data.settings, startedAt: '2026-08-29' } };
+  const { startedAt, byDate } = computeAll(neu, { now: NOW });
+  assert.equal(startedAt, '2026-08-29');
+  assert.equal(byDate['2026-08-29'].zaehlt, true, 'der Tag nach dem Archiv zählt neu');
+  assert.equal(byDate['2026-08-28'].zaehlt, false, 'der letzte Archivtag zählt nicht auch noch');
+});
+
+test('Ein Stichtag vor allen Einträgen lässt das Archiv entfallen', () => {
+  const { data } = migrate(altbestand(), { now: NOW });
+  assert.equal(refreezeLegacy(data, '2026-01-01'), null, 'davor liegt nichts mehr');
+});
+
+test('refreezeLegacy rechnet auch dann, wenn schon ein Archiv da ist', () => {
+  // freezeLegacy verweigert das bewusst (einmaliger Umstieg), refreeze nicht.
+  const { data } = migrate(altbestand(), { now: NOW });
+  assert.equal(freezeLegacy(data, '2026-08-15'), null);
+  assert.ok(refreezeLegacy(data, '2026-08-15'));
 });

@@ -203,14 +203,6 @@ export function stichtagOf(data, settings) {
   return null;   // alles zählt
 }
 
-/** Frühestmöglicher Stichtag: hinter dem Archiv, damit keine Tage doppelt zählen. */
-export function fruehesterStichtag(data) {
-  const legacy = data && data.legacy;
-  if (!legacy || !ISO_DATUM.test(legacy.bis || '')) return null;
-  const d = new Date(legacy.bis + 'T12:00:00');
-  d.setDate(d.getDate() + 1);
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-}
 
 // =========================== ZUGRIFF ===========================
 /** Nachschlagetabelle id → Modell. Unbekannte IDs liefern undefined. */
