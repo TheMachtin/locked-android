@@ -19,11 +19,12 @@
     "@capacitor/filesystem": "^6.0.1",
     "@capacitor/local-notifications": "^6.1.0",
     "@capacitor/network": "^6.0.3",
-    "@capacitor/preferences": "^6.0.3"
+    "@capacitor/preferences": "^6.0.3",
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
-    "@capacitor/cli": "^6.1.2",
     "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^6.1.2",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8"
   },

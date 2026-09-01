@@ -141,7 +141,28 @@ Alle drei müssen unter [App-Registrierungen → Authentifizierung](https://port
 eingetragen sein. `http://localhost` erlaubt dort ausdrücklich beliebige Ports —
 die Desktop-App sucht sich beim Anmelden einen freien.
 
-Zwei Details, die leicht übersehen werden:
+### Die Falle in der neuen Azure-Oberfläche
+
+Auf der Seite **Authentication (Preview)** legt der Knopf *+ Umleitungs-URI
+hinzufügen* keine einzelne URI an: das Panel schickt die schon vorhandenen
+benutzerdefinierten URIs mit. Ist `locked://auth` bereits registriert, steht es
+dort vorausgefüllt im Feld und wird beim Speichern ein zweites Mal übermittelt.
+Azure lehnt das ab mit
+
+> Umleitungs-URIs müssen eindeutig identifizierbare Werte aufweisen.
+
+Die Meldung klingt nach einem Konflikt mit der URI, die man gerade eintippt —
+gemeint ist aber die doppelt gesendete bestehende. Zwei Wege daran vorbei:
+
+- über den Link *„To switch to the old experience"* im Banner oben auf die alte
+  Oberfläche wechseln und die URI dort hinzufügen, oder
+- in der Tabelle in der Zeile *Mobilgerät- und Desktopanwendungen* auf
+  **Bearbeiten** gehen (nicht auf *+ Umleitungs-URI hinzufügen*) und die neue URI
+  als zusätzliche Zeile ergänzen.
+
+Die angebotenen Häkchen (`nativeclient`, `LiveSDK`, `msal…://auth`) bleiben leer.
+
+Zwei weitere Details, die leicht übersehen werden:
 
 - Android und Desktop tauschen den Token **nicht** per `fetch()`. Ein `fetch()`
   aus der WebView schickt einen `Origin`-Header mit, den Azure bei
@@ -171,6 +192,34 @@ Die Desktop-Pakete sind **nicht signiert** — ein Zertifikat kostet Geld und
 bringt für eine App, die nur ihr Autor installiert, nichts. Windows zeigt beim
 ersten Start den SmartScreen-Hinweis: „Weitere Informationen" → „Trotzdem
 ausführen".
+
+## Updates
+
+Jede Hülle hat ihren eigenen Weg:
+
+| Plattform | Weg | Auslöser |
+|---|---|---|
+| Android | Banner beim Start, lädt die APK und öffnet den Installer | eigene Prüfung gegen die GitHub-API |
+| Desktop (Installer) | `electron-updater` lädt im Hintergrund, Banner „Neu starten" | `latest.yml` am Release |
+| Desktop (portabel) | keiner — neue `.exe` von Hand holen | — |
+| Web | Service Worker, Banner „Aktualisieren" | neuer Deploy auf Pages |
+
+Am Desktop wird **geladen** ohne zu fragen, **installiert** aber erst auf Klick:
+ein Neustart mitten im Eintippen wäre eine unangenehme Überraschung. Wer den
+Knopf ignoriert, bekommt das Update beim nächsten regulären Beenden.
+
+Zwei Voraussetzungen, die leicht verlorengehen:
+
+- Am Release müssen neben den Paketen auch `latest.yml` (Windows) und
+  `latest-linux.yml` (Linux) hängen — ohne sie findet der Updater nichts. Der
+  Build erzeugt sie, weil in der `package.json` ein `publish`-Ziel steht, und
+  `build-desktop.yml` lädt sie ausdrücklich mit hoch.
+- `electron-updater` gehört zu den **dependencies**, nicht zu den
+  devDependencies: es läuft im ausgelieferten Hauptprozess mit.
+
+Die portable Fassung ist bewusst ausgenommen — eine laufende Einzeldatei kann
+sich nicht selbst ersetzen. Erkannt wird sie an `PORTABLE_EXECUTABLE_DIR`, das
+electron-builder dort setzt.
 
 ### Einmalig einzurichten
 
