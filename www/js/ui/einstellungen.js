@@ -14,9 +14,10 @@
 
 import { STATE, calc, mutateSettings, settings as getSettings } from '../state.js';
 import { showToast, confirmAction } from './toast.js';
-import { fmtNum, escapeHtml } from './format.js';
+import { fmtNum, escapeHtml, fmtDateShort as fmtDate } from './format.js';
 import {
   KIND_MODEL, KIND_ORGASM, idFromLabel, defaultSettings, PALETTE, orgasmPrice,
+  stichtagOf, fruehesterStichtag,
 } from '../core/settings.js';
 
 const $ = id => document.getElementById(id);
@@ -242,6 +243,57 @@ function renderVorschau() {
   </div>`;
 }
 
+// =========================== STICHTAG ===========================
+/**
+ * Ab wann das Konto zählt.
+ *
+ * Normalerweise abgeleitet: ohne Archiv zählt alles (auch nachgetragene Tage),
+ * mit Archiv beginnt die neue Ära dort, wo die eingefrorene endet. Das Feld ist
+ * für den Fall da, dass man es anders will — leer heißt „wieder ableiten".
+ *
+ * Vor das Archiv zurück geht es nicht: dieselben Tage stünden sonst zweimal in
+ * der Wertung, einmal nach alter und einmal nach neuer Formel.
+ */
+function renderStichtag() {
+  const s = getSettings();
+  const gesetzt = !!s.startedAt;
+  const wirksam = stichtagOf(STATE.data, s);
+  const min = fruehesterStichtag(STATE.data);
+  const herkunft = gesetzt ? 'von Hand gesetzt'
+    : (wirksam ? 'abgeleitet: der Tag nach dem Archiv' : 'abgeleitet: alles zählt');
+
+  $('stichtagBox').innerHTML = `
+    <div class="setting">
+      <div>
+        <div class="name">Konto zählt ab</div>
+        <div class="desc">${herkunft}. Leeres Feld = wieder ableiten.
+          ${min ? `Nicht vor ${fmtDate(min)} — davor liegt das Archiv.` : ''}</div>
+      </div>
+      <input type="date" id="stichtagInput" value="${wirksam || ''}" ${min ? `min="${min}"` : ''}>
+    </div>
+    ${gesetzt ? '<button class="btn ghost full" id="stichtagReset" type="button">Wieder ableiten</button>' : ''}`;
+
+  $('stichtagInput').addEventListener('change', e => {
+    const wert = e.target.value;
+    if (wert && min && wert < min) {
+      showToast(`Nicht vor ${fmtDate(min)} — davor liegt das Archiv`, true);
+      renderStichtag();
+      return;
+    }
+    mutateSettings(s2 => {
+      if (wert) s2.startedAt = wert; else delete s2.startedAt;
+    });
+    render();
+    showToast(wert ? `Konto zählt ab ${fmtDate(wert)}` : 'Stichtag wieder abgeleitet');
+  });
+  const reset = $('stichtagReset');
+  if (reset) reset.addEventListener('click', () => {
+    mutateSettings(s2 => { delete s2.startedAt; });
+    render();
+    showToast('Stichtag wieder abgeleitet');
+  });
+}
+
 // =========================== AUFBAU ===========================
 export function initEinstellungen() {
   $('btnNeuesModell').addEventListener('click', () => neuesModell(KIND_MODEL));
@@ -264,4 +316,5 @@ export function render() {
   renderModelle();
   renderZahlen();
   renderVorschau();
+  renderStichtag();
 }

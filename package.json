@@ -4,7 +4,7 @@
   "description": "Locked — persönliches Tracking als Android-, Desktop- und Web-App",
   "private": true,
   "scripts": {
-    "test": "node --test test/*.test.js",
+    "test": "node --test",
     "sync": "cap sync android",
     "build:apk": "cap sync android && cd android && ./gradlew assembleRelease",
     "start": "electron .",

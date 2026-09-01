@@ -22,7 +22,6 @@ export const DATA_VERSION = 3;
 export function leereDaten(now) {
   return {
     version: DATA_VERSION,
-    startedAt: todayIso(now),
     events: [],
     days: {},
     notes: {},
@@ -46,16 +45,24 @@ export function migrate(raw, opts) {
   data.notes  = (data.notes && typeof data.notes === 'object') ? data.notes : {};
   data.meta   = (data.meta && typeof data.meta === 'object') ? data.meta : {};
 
-  const schonMigriert = (data.version >= DATA_VERSION) && !!data.settings && !!data.startedAt;
+  const schonMigriert = (data.version >= DATA_VERSION) && !!data.settings;
   if (schonMigriert) {
     data.settings = { ...normalizeSettings(data.settings), updatedAt: data.settings.updatedAt };
+    // Altlast aus einer frühen 2.0-Fassung, die den Stichtag noch festschrieb.
+    // Gelesen wird er längst nicht mehr (siehe stichtagOf); er soll nur nicht
+    // als toter Schlüssel in der Datei stehen bleiben und Fragen aufwerfen.
+    delete data.startedAt;
     return { data, migriert: false, legacyErzeugt: false };
   }
 
   // Stichtag: heute. Ein angebrochener Tag gehört ganz in die neue Ära — sonst
   // stünde er halb in der alten Formel und halb in der neuen.
-  const stichtag = data.startedAt || todayIso(now);
-  data.startedAt = stichtag;
+  //
+  // Gespeichert wird er *nicht*: er ergibt sich aus dem Archiv (siehe
+  // stichtagOf). Gibt es nichts einzufrieren, gibt es auch keine alte Ära —
+  // dann zählt alles, und nachgetragene Tage zählen mit.
+  const stichtag = todayIso(now);
+  delete data.startedAt;
   data.version = DATA_VERSION;
   if (!data.settings) {
     data.settings = { ...defaultSettings(), updatedAt: new Date(now).toISOString() };
@@ -77,11 +84,19 @@ export function migrate(raw, opts) {
  * Events werden vereinigt (Dubletten über date|time|typ erkannt), das Archiv
  * anschließend aus dem *vollständigen* Bestand eingefroren — sonst fehlte im
  * Archiv genau das, was gerade erst dazugekommen ist.
+ *
+ * Der Schnitt liegt am frühesten Tag, für den es *schon vor dem Import* einen
+ * 2.0-Eintrag gab. Wer die App zwei Tage benutzt und dann seine alte Historie
+ * nachlädt, soll diese zwei Tage im neuen Konto behalten, statt sie rückwirkend
+ * ins Archiv geschoben zu bekommen. Ohne solche Einträge ist es schlicht heute.
  */
 export function importLegacyData(current, incoming, opts) {
   const now = (opts && opts.now) || new Date();
   const ziel = { ...current };
   const alt = (incoming && typeof incoming === 'object') ? incoming : {};
+
+  const bestand = (ziel.events || []).map(e => e.date).sort();
+  const stichtag = bestand.length ? bestand[0] : todayIso(now);
 
   const vorhanden = new Set((ziel.events || []).map(eventKey));
   const neu = (alt.events || []).filter(e =>
@@ -90,16 +105,11 @@ export function importLegacyData(current, incoming, opts) {
     .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   ziel.days  = { ...(alt.days  || {}), ...(ziel.days  || {}) };
   ziel.notes = { ...(alt.notes || {}), ...(ziel.notes || {}) };
-
-  // Der Stichtag darf nicht vor den importierten Daten liegen, sonst zählte die
-  // alte Historie plötzlich im neuen Konto mit.
-  const letzterAlt = ziel.events.length ? ziel.events[ziel.events.length - 1].date : null;
-  const stichtag = ziel.startedAt || todayIso(now);
-  ziel.startedAt = (letzterAlt && letzterAlt > stichtag) ? letzterAlt : stichtag;
+  delete ziel.startedAt;
 
   let legacyErzeugt = false;
   if (!ziel.legacy) {
-    const snap = freezeLegacy(ziel, ziel.startedAt);
+    const snap = freezeLegacy(ziel, stichtag);
     if (snap) { ziel.legacy = snap; legacyErzeugt = true; }
   }
   return { data: ziel, uebernommen: neu.length, legacyErzeugt };

@@ -5,7 +5,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Der Release-Upload braucht Schreibrecht auf contents.
 permissions:
   contents: write
 
@@ -17,12 +16,10 @@ jobs:
         include:
           - os: windows-latest
             ziel: --win
-            artefakte: |
-              dist/*.exe
+            muster: dist/*.exe
           - os: ubuntu-latest
             ziel: --linux
-            artefakte: |
-              dist/*.AppImage
+            muster: dist/*.AppImage
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -39,8 +36,7 @@ jobs:
         shell: bash
         run: |
           # Dieselbe Rechnung wie im APK- und im Pages-Build: Commit-Anzahl → 2.0.N.
-          NAME="2.0.$(git rev-list --count HEAD)"
-          echo "name=$NAME" >> $GITHUB_OUTPUT
+          echo "name=2.0.$(git rev-list --count HEAD)" >> $GITHUB_OUTPUT
           echo "hash=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Abhängigkeiten installieren
@@ -55,30 +51,53 @@ jobs:
         run: ./scripts/bake-version.sh "${{ steps.ver.outputs.name }}" "${{ steps.ver.outputs.hash }}"
 
       - name: Paket bauen
-        # Ohne Signatur — ein Code-Signing-Zertifikat kostet Geld und ist für eine
-        # App, die nur ihr Autor installiert, nicht nötig. Windows zeigt beim
-        # ersten Start den SmartScreen-Hinweis; „Weitere Informationen" →
-        # „Trotzdem ausführen".
+        # Ohne Signatur — ein Code-Signing-Zertifikat kostet Geld und bringt für
+        # eine App, die nur ihr Autor installiert, nichts. Windows zeigt beim
+        # ersten Start SmartScreen: „Weitere Informationen" → „Trotzdem ausführen".
         run: npx electron-builder ${{ matrix.ziel }} --publish never
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Artefakte hochladen
         uses: actions/upload-artifact@v4
         with:
           name: locked-desktop-${{ runner.os }}
-          path: ${{ matrix.artefakte }}
+          path: ${{ matrix.muster }}
           if-no-files-found: error
           retention-days: 90
 
+  release:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Der APK-Workflow legt denselben Release an. Ohne gemeinsame Gruppe würden
+    # beide gleichzeitig zu erzeugen versuchen und einer davon scheitern. Der
+    # Schlüssel hängt am Commit, blockiert also nur die Läufe, die sich
+    # tatsächlich denselben Release teilen.
+    concurrency:
+      group: release-${{ github.sha }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Version bestimmen
+        id: ver
+        run: echo "name=2.0.$(git rev-list --count HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Artefakte einsammeln
+        uses: actions/download-artifact@v4
+        with:
+          pattern: locked-desktop-*
+          merge-multiple: true
+          path: pakete
+
       - name: An den Release hängen
-        # Der APK-Workflow legt den Release unter demselben Tag an; softprops
-        # ergänzt ihn, statt einen zweiten zu erzeugen.
+        # Ohne name/body: den Titel setzt der APK-Workflow, hier kommen nur
+        # Dateien dazu. Wer zuerst da ist, legt den Release an.
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.name }}
-          name: Locked ${{ steps.ver.outputs.name }}
-          files: ${{ matrix.artefakte }}
+          files: pakete/*
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

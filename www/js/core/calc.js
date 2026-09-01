@@ -19,7 +19,8 @@
 
 import { isoOf, isoDateAdd, minutesOf, timeToMin, eventMs, eventSortKey } from './time.js';
 import {
-  normalizeSettings, modelMap, resolveModel, openModelId, orgasmPrice, KIND_MODEL, KIND_ORGASM,
+  normalizeSettings, modelMap, resolveModel, openModelId, orgasmPrice, stichtagOf,
+  KIND_MODEL, KIND_ORGASM,
 } from './settings.js';
 
 // =========================== EVENTS ===========================
@@ -119,7 +120,7 @@ export function scoreDay(hours, orgasmen, streakTage, ctx, vollstaendig) {
 /**
  * Alle Tageskennzahlen über die gesamte Event-Spanne.
  *
- * @param {object} data   { events, days, settings, startedAt }
+ * @param {object} data   { events, days, settings, legacy }
  * @param {object} [opts] { now?: Date }
  */
 export function computeAll(data, opts) {
@@ -132,16 +133,16 @@ export function computeAll(data, opts) {
 
   const allDates = Object.keys(byDay).sort();
   if (!allDates.length) {
-    return { days: [], byDate: {}, totals: emptyTotals(), settings, ctx };
+    return { days: [], byDate: {}, totals: emptyTotals(), settings, ctx, startedAt: null };
   }
 
   const today = isoOf(now);
   const start = allDates[0];
   const lastDate = allDates[allDates.length - 1];
   const end = lastDate > today ? lastDate : today;
-  // Ohne Stichtag zählt alles — so verhält sich eine frische Installation, die
-  // nie eine alte Ära hatte.
-  const startedAt = (data && data.startedAt) || start;
+  // Ohne Stichtag zählt alles — genau so verhält sich eine frische Installation,
+  // die nie eine alte Ära hatte, und genau so zählen nachgetragene Tage mit.
+  const startedAt = stichtagOf(data, settings) || start;
 
   let cursor = start;
   let prevEndModel = openId;
@@ -208,7 +209,7 @@ export function computeAll(data, opts) {
     cursor = isoDateAdd(cursor, 1);
   }
 
-  return { days, byDate, totals: computeTotals(days), settings, ctx };
+  return { days, byDate, totals: computeTotals(days), settings, ctx, startedAt };
 }
 
 // =========================== AGGREGATE ===========================

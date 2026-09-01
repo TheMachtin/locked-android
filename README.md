@@ -121,7 +121,7 @@ Keine Build-Kette, kein Framework: ES-Module, die der Browser direkt lädt.
 Derselbe Ordner geht unverändert in die APK, in den Installer und nach Pages.
 
 ```bash
-npm test          # 61 Tests, nur Node-Builtins
+npm test          # 65 Tests, nur Node-Builtins
 npm start         # Desktop-App lokal starten
 npm run build:win # Windows-Installer (auf Windows)
 npx serve www     # Web-Version lokal
@@ -188,13 +188,31 @@ ausführen".
 ```jsonc
 {
   "version": 3,
-  "startedAt": "2026-08-31",     // ab hier zählt das Konto
   "events":   [ { "date": "…", "time": "HH:MM", "type": "HT" } ],
-  "settings": { "models": [ … ], "points": { … }, "rules": { … }, "updatedAt": "…" },
+  "settings": { "models": [ … ], "points": { … }, "rules": { … },
+                "startedAt": "…",        // optional, nur wenn von Hand gesetzt
+                "updatedAt": "…" },
   "legacy":   { "punkte": …, "von": "…", "bis": "…" },   // fehlt bei Neuinstallation
   "days": {}, "notes": {}, "meta": {}
 }
 ```
+
+### Der Stichtag wird abgeleitet
+
+Ab wann das Konto zählt, steht normalerweise **nirgends** — es ergibt sich:
+
+| Lage | Konto zählt ab |
+|---|---|
+| kein Archiv | dem ersten Eintrag, also **alles** |
+| Archiv vorhanden | dem Tag nach dessen Ende |
+| `settings.startedAt` gesetzt | diesem Datum |
+
+Ein festes Datum beim ersten Start wäre falsch: wer die App heute installiert und
+die letzten beiden Tage nachträgt, will diese Tage gewertet haben — ohne alte Ära
+gibt es ja nichts, wovon zu trennen wäre. Umgekehrt darf der Stichtag nie *vor*
+das Archiv rutschen, sonst stünden dieselben Tage zweimal in der Wertung, einmal
+nach alter und einmal nach neuer Formel. Das Feld im Tab **Regeln** setzt ihn von
+Hand und lässt sich wieder leeren.
 
 Gespeichert werden nur **Ereignisse und Regeln**, nie Punkte. Jede Regeländerung
 rechnet die Historie automatisch neu — es ist nicht möglich, damit Daten

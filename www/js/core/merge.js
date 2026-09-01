@@ -134,9 +134,8 @@ export function mergeData(base, local, remote) {
   // Das Archiv ist unveränderlich: einmal eingefroren, nie wieder überschrieben.
   const legacy = l.legacy || r.legacy;
   if (legacy) data.legacy = legacy;
-  // Der Stichtag wurde einmal gesetzt; der frühere ist der echte.
-  const started = [l.startedAt, r.startedAt].filter(Boolean).sort();
-  if (started.length) data.startedAt = started[0];
+  // Der Stichtag steckt in den Einstellungen (falls von Hand gesetzt) und folgt
+  // damit derselben Regel: die zuletzt bearbeitete Fassung gewinnt.
   const settings = mergeSettings(l.settings, r.settings);
   if (settings) data.settings = settings;
   if (bk.items.length) data.bookings = bk.items;

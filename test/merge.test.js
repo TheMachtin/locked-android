@@ -59,11 +59,11 @@ test('Das Archiv überlebt den Merge und wird nie überschrieben', () => {
   assert.equal(beide.data.legacy.punkte, 12345, 'der lokale Schnappschuss bleibt stehen');
 });
 
-test('Der Stichtag bleibt der frühere', () => {
+test('Der Stichtag folgt den Einstellungen: die jüngere Bearbeitung gewinnt', () => {
   const { data } = mergeData(null,
-    { events: [], startedAt: '2026-08-31' },
-    { events: [], startedAt: '2026-09-15' });
-  assert.equal(data.startedAt, '2026-08-31');
+    { events: [], settings: { startedAt: '2026-08-31', updatedAt: '2026-08-31T00:00:00Z' } },
+    { events: [], settings: { startedAt: '2026-09-15', updatedAt: '2026-09-15T00:00:00Z' } });
+  assert.equal(data.settings.startedAt, '2026-09-15');
 });
 
 test('meta: der spätere Verwurf gewinnt', () => {
@@ -75,7 +75,7 @@ test('meta: der spätere Verwurf gewinnt', () => {
 
 test('Ein vollständiger Datensatz verliert beim Merge kein Feld', () => {
   const lokal = {
-    version: 3, startedAt: '2026-08-31',
+    version: 3,
     events: [A], days: { '2026-03-01': { note: 'x' } }, notes: { '2026-03-02': 'y' },
     meta: { escalationDismissedAt: '2026-03-01T00:00:00Z' },
     settings: { models: [{ id: 'A' }], updatedAt: '2026-08-31T00:00:00Z' },

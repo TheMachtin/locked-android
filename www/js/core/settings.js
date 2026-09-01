@@ -63,6 +63,8 @@ export function defaultSettings() {
   };
 }
 
+const ISO_DATUM = /^\d{4}-\d{2}-\d{2}$/;
+
 // =========================== NORMALISIERUNG ===========================
 const num = (v, fallback) => (typeof v === 'number' && isFinite(v) ? v : fallback);
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -161,7 +163,7 @@ export function normalizeSettings(raw) {
 
   const p = (src.points && typeof src.points === 'object') ? src.points : {};
   const r = (src.rules && typeof src.rules === 'object') ? src.rules : {};
-  return {
+  const out = {
     models,
     points: {
       bonusDurchgehend: clamp(num(p.bonusDurchgehend, DEFAULT_POINTS.bonusDurchgehend), -1000, 1000),
@@ -175,6 +177,39 @@ export function normalizeSettings(raw) {
       inactivityAutoDays:     clamp(num(r.inactivityAutoDays,     DEFAULT_RULES.inactivityAutoDays), 1, 365),
     },
   };
+  // Der Stichtag ist normalerweise *abgeleitet* (siehe stichtagOf) und steht nur
+  // dann hier, wenn er von Hand gesetzt wurde. Ein leeres Feld heißt „wieder
+  // ableiten", nicht „ab dem Jahr null".
+  if (ISO_DATUM.test(src.startedAt || '')) out.startedAt = src.startedAt;
+  return out;
+}
+
+/**
+ * Ab wann das Punktekonto zählt.
+ *
+ * Ohne Archiv gibt es keine alte Ära, von der zu trennen wäre — dann zählt
+ * alles, was eingetragen ist, auch nachgetragene Tage. Mit Archiv beginnt die
+ * neue Ära genau dort, wo die eingefrorene endet. Ein von Hand gesetzter Wert
+ * schlägt beides.
+ */
+export function stichtagOf(data, settings) {
+  if (settings && settings.startedAt) return settings.startedAt;
+  const legacy = data && data.legacy;
+  if (legacy && ISO_DATUM.test(legacy.bis || '')) {
+    const d = new Date(legacy.bis + 'T12:00:00');
+    d.setDate(d.getDate() + 1);
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  }
+  return null;   // alles zählt
+}
+
+/** Frühestmöglicher Stichtag: hinter dem Archiv, damit keine Tage doppelt zählen. */
+export function fruehesterStichtag(data) {
+  const legacy = data && data.legacy;
+  if (!legacy || !ISO_DATUM.test(legacy.bis || '')) return null;
+  const d = new Date(legacy.bis + 'T12:00:00');
+  d.setDate(d.getDate() + 1);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
 // =========================== ZUGRIFF ===========================

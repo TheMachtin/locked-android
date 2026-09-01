@@ -213,7 +213,7 @@ function renderHero() {
 function breakdownHtml(d, s) {
   if (!d.zaehlt) {
     return `<div class="breakdown"><div class="row hint">Dieser Tag liegt vor dem Stichtag
-      (${fmtDateShort(STATE.data.startedAt)}) und zählt nicht ins Konto. Stunden und
+      (${fmtDateShort(calc().startedAt)}) und zählt nicht ins Konto. Stunden und
       Orgasmen werden trotzdem erfasst.</div></div>`;
   }
   const zeilen = [];
