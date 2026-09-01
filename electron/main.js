@@ -5,6 +5,9 @@
  * Browser nicht kann: eine Datei neben der Konfiguration, den Microsoft-Login
  * über einen Loopback-Port und die Fenstergröße über Neustarts hinweg.
  *
+ * Updates holt `electron-updater` aus denselben GitHub-Releases, an denen auch
+ * APK und AppImage hängen — siehe initUpdater().
+ *
  * Ausgeliefert wird über ein eigenes `app://`-Schema statt über `file://`.
  * ES-Module unterliegen unter `file://` der Same-Origin-Regel und würden
  * blockiert; außerdem braucht `localStorage` eine echte Herkunft, sonst wäre
@@ -12,6 +15,9 @@
  */
 
 import { app, BrowserWindow, shell, ipcMain, net, protocol } from 'electron';
+// electron-updater ist CommonJS; als ESM-Hauptprozess kommt es nur über den
+// Default-Export herein.
+import electronUpdater from 'electron-updater';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -77,6 +83,42 @@ async function erstelleFenster() {
 
   await win.loadURL(`${ORIGIN}/index.html`);
   return win;
+}
+
+// =========================== UPDATES ===========================
+const { autoUpdater } = electronUpdater;
+
+/**
+ * Automatische Updates aus dem GitHub-Release.
+ *
+ * Geladen wird im Hintergrund; installiert erst, wenn der Nutzer im Fenster auf
+ * „Neu starten" tippt (oder beim nächsten Beenden von allein). Ein Update, das
+ * ungefragt neu startet, könnte einen halb getippten Eintrag verschlucken.
+ *
+ * Zwei Fälle bleiben bewusst außen vor:
+ *   - Entwicklungsmodus: es gibt kein app-update.yml, autoUpdater würde nur werfen.
+ *   - portable .exe: eine laufende Einzeldatei kann sich nicht selbst ersetzen.
+ *     electron-builder setzt dort PORTABLE_EXECUTABLE_DIR, daran ist sie erkennbar.
+ */
+function initUpdater(win) {
+  if (!app.isPackaged || process.env.PORTABLE_EXECUTABLE_DIR) return;
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.logger = null;
+
+  const melde = (kind, daten) => {
+    if (win.isDestroyed()) return;
+    win.webContents.send('update:event', { kind, ...(daten || {}) });
+  };
+  autoUpdater.on('update-available',   i => melde('available', { version: i && i.version }));
+  autoUpdater.on('download-progress',  p => melde('progress', { percent: Math.round((p && p.percent) || 0) }));
+  autoUpdater.on('update-downloaded',  i => melde('ready', { version: i && i.version }));
+  // Ein fehlgeschlagener Update-Check darf die App nicht behelligen — sie
+  // funktioniert ohne ihn vollständig. Nur die Oberfläche erfährt davon.
+  autoUpdater.on('error', e => melde('error', { message: String((e && e.message) || e) }));
+
+  autoUpdater.checkForUpdates().catch(e => melde('error', { message: String((e && e.message) || e) }));
 }
 
 // =========================== DATEIAUSLIEFERUNG ===========================
@@ -182,6 +224,10 @@ function registriereIpc() {
     if (/^https?:/i.test(url)) shell.openExternal(url);
   });
   ipcMain.handle('app:version', () => app.getVersion());
+  ipcMain.handle('update:install', () => {
+    // isSilent=false zeigt den Installer, isForceRunAfter=true startet danach neu.
+    autoUpdater.quitAndInstall(false, true);
+  });
 }
 
 // =========================== START ===========================
@@ -198,7 +244,8 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     registriereProtokoll();
     registriereIpc();
-    await erstelleFenster();
+    const win = await erstelleFenster();
+    initUpdater(win);
     app.on('activate', async () => {
       if (BrowserWindow.getAllWindows().length === 0) await erstelleFenster();
     });

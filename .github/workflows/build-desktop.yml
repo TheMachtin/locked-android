@@ -16,10 +16,18 @@ jobs:
         include:
           - os: windows-latest
             ziel: --win
-            muster: dist/*.exe
+            # latest.yml und die Blockmaps gehören dazu: ohne sie findet
+            # electron-updater keine neue Fassung. Die Blockmap erlaubt ihm,
+            # nur die geänderten Blöcke zu laden statt der ganzen 80 MB.
+            muster: |
+              dist/*.exe
+              dist/latest.yml
+              dist/*.blockmap
           - os: ubuntu-latest
             ziel: --linux
-            muster: dist/*.AppImage
+            muster: |
+              dist/*.AppImage
+              dist/latest-linux.yml
     runs-on: ${{ matrix.os }}
 
     steps:

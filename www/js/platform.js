@@ -170,8 +170,10 @@ function versionAsInt(v) {
 
 /**
  * Neue Version im GitHub-Release?
- * Nur für Android — der Desktop aktualisiert sich über electron-updater, die
- * Web-App über den Service Worker. Ein APK-Link wäre dort irreführend.
+ *
+ * Nur für Android: die Prüfung endet in einem APK-Download. Der Desktop lässt
+ * `electron-updater` im Hauptprozess arbeiten (siehe `onDesktopUpdate`), die
+ * Web-App den Service Worker.
  */
 export async function checkForAppUpdate() {
   if (!IS_NATIVE) return null;
@@ -185,6 +187,21 @@ export async function checkForAppUpdate() {
     const apk = (rel.assets || []).find(a => a.name.toLowerCase().endsWith('.apk'));
     return { version: latest, url: apk ? apk.browser_download_url : rel.html_url };
   } catch (e) { console.warn('Update-Prüfung fehlgeschlagen', e); return null; }
+}
+
+/**
+ * Update-Meldungen der Desktop-Hülle abonnieren.
+ * Ereignisse: `available` · `progress` (percent) · `ready` (version) · `error`.
+ * Auf Android und im Browser passiert nichts — dort gibt es andere Wege.
+ */
+export function onDesktopUpdate(handler) {
+  if (!IS_ELECTRON || !window.locked.onUpdate) return;
+  window.locked.onUpdate(handler);
+}
+
+/** Das geladene Desktop-Update installieren; die App startet dabei neu. */
+export function installDesktopUpdate() {
+  if (IS_ELECTRON && window.locked.installUpdate) return window.locked.installUpdate();
 }
 
 /** APK herunterladen und den Installer öffnen. */

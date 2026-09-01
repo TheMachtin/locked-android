@@ -193,6 +193,34 @@ bringt für eine App, die nur ihr Autor installiert, nichts. Windows zeigt beim
 ersten Start den SmartScreen-Hinweis: „Weitere Informationen" → „Trotzdem
 ausführen".
 
+## Updates
+
+Jede Hülle hat ihren eigenen Weg:
+
+| Plattform | Weg | Auslöser |
+|---|---|---|
+| Android | Banner beim Start, lädt die APK und öffnet den Installer | eigene Prüfung gegen die GitHub-API |
+| Desktop (Installer) | `electron-updater` lädt im Hintergrund, Banner „Neu starten" | `latest.yml` am Release |
+| Desktop (portabel) | keiner — neue `.exe` von Hand holen | — |
+| Web | Service Worker, Banner „Aktualisieren" | neuer Deploy auf Pages |
+
+Am Desktop wird **geladen** ohne zu fragen, **installiert** aber erst auf Klick:
+ein Neustart mitten im Eintippen wäre eine unangenehme Überraschung. Wer den
+Knopf ignoriert, bekommt das Update beim nächsten regulären Beenden.
+
+Zwei Voraussetzungen, die leicht verlorengehen:
+
+- Am Release müssen neben den Paketen auch `latest.yml` (Windows) und
+  `latest-linux.yml` (Linux) hängen — ohne sie findet der Updater nichts. Der
+  Build erzeugt sie, weil in der `package.json` ein `publish`-Ziel steht, und
+  `build-desktop.yml` lädt sie ausdrücklich mit hoch.
+- `electron-updater` gehört zu den **dependencies**, nicht zu den
+  devDependencies: es läuft im ausgelieferten Hauptprozess mit.
+
+Die portable Fassung ist bewusst ausgenommen — eine laufende Einzeldatei kann
+sich nicht selbst ersetzen. Erkannt wird sie an `PORTABLE_EXECUTABLE_DIR`, das
+electron-builder dort setzt.
+
 ### Einmalig einzurichten
 
 1. **Signatur für Android**: Actions → *Bootstrap Signing Keystore* → *Run

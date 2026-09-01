@@ -19,7 +19,9 @@ import { loadFromCloud, autosave, setSaveStateHandler } from './sync/onedrive.js
 import { lastRealInteractionMs } from './core/escalation.js';
 import { settings as getSettings } from './state.js';
 import {
-  IS_NATIVE, IS_ELECTRON, initPersistence, loadNativeFile, setupBackButton, scheduleReminder, checkForAppUpdate, downloadAndInstallApk,
+  IS_NATIVE, IS_ELECTRON, initPersistence, loadNativeFile, setupBackButton,
+  scheduleReminder, checkForAppUpdate, downloadAndInstallApk,
+  onDesktopUpdate, installDesktopUpdate,
 } from './platform.js';
 
 const $ = id => document.getElementById(id);
@@ -129,6 +131,36 @@ async function pruefeAppUpdate() {
     });
 }
 
+/**
+ * Desktop-Update: der Hauptprozess lädt im Hintergrund und meldet sich hier.
+ * Installiert wird erst auf Klick — ein Neustart mitten im Eintippen wäre eine
+ * unangenehme Überraschung.
+ */
+function initDesktopUpdates() {
+  onDesktopUpdate(ev => {
+    if (ev.kind === 'error') { console.warn('Update:', ev.message); return; }
+    if (ev.kind === 'available') {
+      zeigeBanner('desktopUpdateBanner',
+        `<span class="msg">Neue Version <b>${escapeHtml(ev.version || '')}</b> wird geladen…</span>`);
+      return;
+    }
+    if (ev.kind === 'progress') {
+      const b = $('desktopUpdateBanner');
+      const msg = b && b.querySelector('.msg');
+      if (msg) msg.innerHTML = `Neue Version wird geladen… <b>${ev.percent} %</b>`;
+      return;
+    }
+    if (ev.kind === 'ready') {
+      const b = $('desktopUpdateBanner');
+      if (b) b.remove();
+      zeigeBanner('desktopUpdateBanner',
+        `<span class="msg">Version <b>${escapeHtml(ev.version || '')}</b> ist bereit</span>`
+        + '<button class="btn primary" type="button" style="padding:8px 14px">Neu starten</button>',
+        (btn) => { btn.textContent = 'Starte neu…'; installDesktopUpdate(); });
+    }
+  });
+}
+
 function initServiceWorker() {
   if (IS_NATIVE || IS_ELECTRON || !('serviceWorker' in navigator)) return;
   navigator.serviceWorker.register('sw.js').then(reg => {
@@ -199,6 +231,7 @@ async function start() {
     return false;
   });
   initServiceWorker();
+  initDesktopUpdates();
   pruefeAppUpdate();
   reminderNeu();
 

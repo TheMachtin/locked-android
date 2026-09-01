@@ -16,4 +16,9 @@ contextBridge.exposeInMainWorld('locked', {
   writeData:  (text) => ipcRenderer.invoke('data:write', text),
   openExternal: (url) => ipcRenderer.invoke('shell:open', url),
   appVersion: () => ipcRenderer.invoke('app:version'),
+  // Update-Meldungen aus dem Hauptprozess. Nur der Nutzdaten-Teil geht durch,
+  // nicht das IpcRendererEvent — sonst reichte die Brücke interne Objekte ins
+  // Fenster durch.
+  onUpdate: (cb) => ipcRenderer.on('update:event', (_e, daten) => cb(daten)),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
 });
