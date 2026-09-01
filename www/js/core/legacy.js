@@ -150,15 +150,7 @@ export function computeLegacy(data, bis) {
   return snap;
 }
 
-/**
- * Den Schnappschuss erzeugen — genau einmal.
- * Gibt null zurück, wenn schon einer da ist oder es nichts einzufrieren gibt;
- * der Aufrufer schreibt das Ergebnis dann nach `data.legacy`.
- */
-export function freezeLegacy(data, stichtag) {
-  if (!data || data.legacy) return null;
-  const snap = computeLegacy(data, stichtag);
-  if (!snap) return null;
+function schnappschuss(snap, stichtag) {
   return {
     ...snap,
     formel: 'locked-1.x',
@@ -166,4 +158,32 @@ export function freezeLegacy(data, stichtag) {
     stichtag,
     dauerTage: isoDaysBetween(snap.von, snap.bis) + 1,
   };
+}
+
+/**
+ * Den Schnappschuss erzeugen — genau einmal, automatisch beim Umstieg.
+ * Gibt null zurück, wenn schon einer da ist oder es nichts einzufrieren gibt;
+ * der Aufrufer schreibt das Ergebnis dann nach `data.legacy`.
+ */
+export function freezeLegacy(data, stichtag) {
+  if (!data || data.legacy) return null;
+  const snap = computeLegacy(data, stichtag);
+  return snap ? schnappschuss(snap, stichtag) : null;
+}
+
+/**
+ * Den Schnappschuss auf einen anderen Stichtag neu berechnen.
+ *
+ * „Unveränderlich" heißt: der Sync fasst das Archiv nicht an und keine
+ * Regeländerung rechnet es neu. Es heißt nicht, dass der Schnitt an der
+ * falschen Stelle liegen bleiben muss — verschiebt man ihn bewusst, muss das
+ * Archiv mitgehen, sonst zählten die dazwischen liegenden Tage doppelt (einmal
+ * nach alter, einmal nach neuer Formel) oder fielen ganz heraus.
+ *
+ * Gibt `null` zurück, wenn vor dem neuen Stichtag nichts mehr liegt — dann
+ * gehört gar kein Archiv mehr in die Datei.
+ */
+export function refreezeLegacy(data, stichtag) {
+  const snap = computeLegacy(data, stichtag);
+  return snap ? schnappschuss(snap, stichtag) : null;
 }

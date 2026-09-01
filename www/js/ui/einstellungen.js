@@ -12,13 +12,15 @@
  * entfernen — sonst zeigten alte Tage auf einen Typ, den es nicht mehr gibt.
  */
 
-import { STATE, calc, mutateSettings, settings as getSettings } from '../state.js';
+import { STATE, calc, mutate, mutateSettings, settings as getSettings } from '../state.js';
 import { showToast, confirmAction } from './toast.js';
 import { fmtNum, escapeHtml, fmtDateShort as fmtDate } from './format.js';
 import {
   KIND_MODEL, KIND_ORGASM, idFromLabel, defaultSettings, PALETTE, orgasmPrice,
-  stichtagOf, fruehesterStichtag,
+  stichtagOf,
 } from '../core/settings.js';
+import { refreezeLegacy } from '../core/legacy.js';
+import { isoDateAdd } from '../core/time.js';
 
 const $ = id => document.getElementById(id);
 let offen = null;      // ID des gerade aufgeklappten Modells
@@ -247,51 +249,69 @@ function renderVorschau() {
 /**
  * Ab wann das Konto zählt.
  *
- * Normalerweise abgeleitet: ohne Archiv zählt alles (auch nachgetragene Tage),
- * mit Archiv beginnt die neue Ära dort, wo die eingefrorene endet. Das Feld ist
- * für den Fall da, dass man es anders will — leer heißt „wieder ableiten".
+ * Ohne Eintrag abgeleitet: gibt es kein Archiv, zählt alles (auch nachgetragene
+ * Tage); gibt es eines, beginnt die neue Ära dort, wo die eingefrorene endet.
  *
- * Vor das Archiv zurück geht es nicht: dieselben Tage stünden sonst zweimal in
- * der Wertung, einmal nach alter und einmal nach neuer Formel.
+ * Wird der Stichtag von Hand verschoben und existiert ein Archiv, muss dieses
+ * mitgehen: sonst zählten die dazwischen liegenden Tage doppelt — einmal nach
+ * alter, einmal nach neuer Formel — oder fielen zwischen beiden Ären heraus.
+ * Der Stichtag bestimmt also, wo das Archiv endet, nicht umgekehrt.
  */
 function renderStichtag() {
   const s = getSettings();
   const gesetzt = !!s.startedAt;
   const wirksam = stichtagOf(STATE.data, s);
-  const min = fruehesterStichtag(STATE.data);
+  const legacy = STATE.data.legacy;
   const herkunft = gesetzt ? 'von Hand gesetzt'
-    : (wirksam ? 'abgeleitet: der Tag nach dem Archiv' : 'abgeleitet: alles zählt');
+    : (legacy ? 'abgeleitet: der Tag nach dem Archiv' : 'abgeleitet: alles zählt');
 
   $('stichtagBox').innerHTML = `
     <div class="setting">
       <div>
         <div class="name">Konto zählt ab</div>
         <div class="desc">${herkunft}. Leeres Feld = wieder ableiten.
-          ${min ? `Nicht vor ${fmtDate(min)} — davor liegt das Archiv.` : ''}</div>
+          ${legacy ? `Das Archiv (bis ${fmtDate(legacy.bis)}) wird beim Verschieben neu berechnet, damit kein Tag doppelt zählt.` : ''}</div>
       </div>
-      <input type="date" id="stichtagInput" value="${wirksam || ''}" ${min ? `min="${min}"` : ''}>
+      <input type="date" id="stichtagInput" value="${wirksam || ''}">
     </div>
     ${gesetzt ? '<button class="btn ghost full" id="stichtagReset" type="button">Wieder ableiten</button>' : ''}`;
 
-  $('stichtagInput').addEventListener('change', e => {
-    const wert = e.target.value;
-    if (wert && min && wert < min) {
-      showToast(`Nicht vor ${fmtDate(min)} — davor liegt das Archiv`, true);
-      renderStichtag();
-      return;
-    }
+  $('stichtagInput').addEventListener('change', e => setzeStichtag(e.target.value));
+  const reset = $('stichtagReset');
+  if (reset) reset.addEventListener('click', () => setzeStichtag(''));
+}
+
+function setzeStichtag(wert) {
+  const legacy = STATE.data.legacy;
+  // Ohne Wert fällt der Stichtag auf die Ableitung zurück — bei vorhandenem
+  // Archiv also auf den Tag nach dessen Ende. Da bleibt das Archiv, wie es ist.
+  const ziel = wert || (legacy ? isoDateAdd(legacy.bis, 1) : null);
+  const verschiebt = legacy && ziel && ziel !== isoDateAdd(legacy.bis, 1);
+
+  if (verschiebt) {
+    const neu = refreezeLegacy(STATE.data, ziel);
+    const vorher = Math.round(legacy.punkte).toLocaleString('de-DE');
+    const nachher = neu ? Math.round(neu.punkte).toLocaleString('de-DE') : '—';
+    const text = neu
+      ? `Das Archiv endet dann am ${fmtDate(neu.bis)} statt am ${fmtDate(legacy.bis)}.\n\n`
+        + `Seine Punktzahl ändert sich von ${vorher} auf ${nachher}.\n\n`
+        + `Die Tage dazwischen wechseln die Ära — gerechnet wird nichts doppelt.`
+      : `Vor dem ${fmtDate(ziel)} liegt dann nichts mehr. Das Archiv (${vorher} Punkte) entfällt und alles zählt ins neue Konto.`;
+    if (!confirmAction(text)) { renderStichtag(); return; }
+
+    mutate(data => {
+      if (neu) data.legacy = neu; else delete data.legacy;
+      data.settings = { ...data.settings };
+      if (wert) data.settings.startedAt = wert; else delete data.settings.startedAt;
+      data.settings.updatedAt = new Date().toISOString();
+    });
+  } else {
     mutateSettings(s2 => {
       if (wert) s2.startedAt = wert; else delete s2.startedAt;
     });
-    render();
-    showToast(wert ? `Konto zählt ab ${fmtDate(wert)}` : 'Stichtag wieder abgeleitet');
-  });
-  const reset = $('stichtagReset');
-  if (reset) reset.addEventListener('click', () => {
-    mutateSettings(s2 => { delete s2.startedAt; });
-    render();
-    showToast('Stichtag wieder abgeleitet');
-  });
+  }
+  render();
+  showToast(wert ? `Konto zählt ab ${fmtDate(wert)}` : 'Stichtag wieder abgeleitet');
 }
 
 // =========================== AUFBAU ===========================
