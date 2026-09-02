@@ -2,14 +2,14 @@
 // Netz zuerst, Cache als Rückfall. Microsoft Graph und Login werden nie
 // gecacht: veraltete Token oder Daten wären schlimmer als ein Fehler.
 
-const CACHE = 'locked-static-v6';
+const CACHE = 'locked-static-v7';
 const PRECACHE = [
   './', './index.html', './css/app.css', './manifest.webmanifest',
   './js/main.js', './js/state.js', './js/platform.js',
   './js/core/time.js', './js/core/settings.js', './js/core/calc.js',
   './js/core/legacy.js', './js/core/merge.js', './js/core/migrate.js', './js/core/escalation.js',
-  './js/sync/auth.js', './js/sync/onedrive.js', './js/sync/files.js',
-  './js/ui/format.js', './js/ui/toast.js', './js/ui/charts.js',
+  './js/sync/auth.js', './js/sync/onedrive.js', './js/sync/files.js', './js/sync/refresh.js',
+  './js/ui/format.js', './js/ui/toast.js', './js/ui/charts.js', './js/ui/pull.js',
   './js/ui/eintrag.js', './js/ui/dashboard.js', './js/ui/einstellungen.js', './js/ui/daten.js',
   './vendor/msal-browser.min.js',
   './favicon.png', './icon-192.png', './icon-512.png',

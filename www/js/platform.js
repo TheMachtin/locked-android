@@ -157,6 +157,19 @@ export function onAppUrlOpen(handler) {
   App.addListener('appUrlOpen', ev => handler(ev && ev.url));
 }
 
+/**
+ * Rückkehr aus dem Hintergrund.
+ *
+ * `visibilitychange` feuert in der Android-WebView nicht überall zuverlässig,
+ * Capacitor meldet den Wechsel dagegen sicher. Beide Wege sind angebunden; der
+ * Aufrufer entprellt, damit die Doppelmeldung nichts kostet.
+ */
+export function onAppResume(handler) {
+  const App = CAP().App;
+  if (!IS_NATIVE || !App || !App.addListener) return;
+  App.addListener('appStateChange', st => { if (st && st.isActive) handler(); });
+}
+
 // =========================== VERSION UND UPDATE ===========================
 export const APP_VERSION = '__APP_VERSION__';
 export const APP_COMMIT  = '__APP_COMMIT__';

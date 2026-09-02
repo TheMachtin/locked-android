@@ -14,7 +14,11 @@
 <div class="app">
   <header>
     <h1>Locked</h1>
-    <span class="meta" id="meta">keine Datei</span>
+    <div class="head-right">
+      <span class="meta" id="meta">keine Datei</span>
+      <button class="iconbtn" id="refreshBtn" type="button"
+              title="Mit OneDrive abgleichen" aria-label="Aktualisieren"><span class="ic">&#8635;</span></button>
+    </div>
   </header>
 
   <div class="tabs">
@@ -253,6 +257,8 @@
     <button class="btn primary" id="quickSave" type="button">Speichern</button>
   </div>
 </div>
+
+<div class="pull" id="pull" aria-hidden="true"><span class="ic">&#8635;</span></div>
 
 <div class="toast" id="toast"><span class="toast-text">Eingetragen</span></div>
 

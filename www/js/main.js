@@ -16,12 +16,17 @@ import * as einstellungen from './ui/einstellungen.js';
 import * as daten from './ui/daten.js';
 import { initAuth, setAuthHandlers, isSignedIn, AUTH } from './sync/auth.js';
 import { loadFromCloud, autosave, setSaveStateHandler } from './sync/onedrive.js';
+import {
+  refresh, lastSyncAt, isRefreshing, markSynced, setRefreshStateHandler,
+} from './sync/refresh.js';
+import { initPullToRefresh } from './ui/pull.js';
+import { pad2 } from './core/time.js';
 import { lastRealInteractionMs } from './core/escalation.js';
 import { settings as getSettings } from './state.js';
 import {
   IS_NATIVE, IS_ELECTRON, initPersistence, loadNativeFile, setupBackButton,
   scheduleReminder, checkForAppUpdate, downloadAndInstallApk,
-  onDesktopUpdate, installDesktopUpdate,
+  onDesktopUpdate, installDesktopUpdate, onAppResume,
 } from './platform.js';
 
 const $ = id => document.getElementById(id);
@@ -56,14 +61,37 @@ function renderAktiv() {
 
 // =========================== KOPFZEILE ===========================
 let saveState = 'idle';
+
+/**
+ * Wann zuletzt abgeglichen wurde — als Uhrzeit, nicht als „vor 5 Minuten".
+ * Eine absolute Zeit muss nicht mitticken und lässt sich mit dem eigenen
+ * Gefühl abgleichen: „ich war um zwei am PC" beantwortet die Frage sofort.
+ */
+function abgleichLabel() {
+  const ms = lastSyncAt();
+  if (!ms) return AUTH.account.username || 'angemeldet';
+  const d = new Date(ms);
+  const uhr = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const heute = d.toDateString() === new Date().toDateString();
+  return heute ? `abgeglichen ${uhr}` : `abgeglichen ${d.getDate()}.${d.getMonth() + 1}. ${uhr}`;
+}
+
+function updateRefreshBtn() {
+  const b = $('refreshBtn');
+  if (!b) return;
+  b.classList.toggle('laedt', isRefreshing());
+  b.disabled = isRefreshing();
+}
+
 function updateMeta() {
   const el = $('meta');
   let txt;
   if (isSignedIn()) {
-    txt = saveState === 'saving' ? 'speichere…'
+    txt = isRefreshing() ? 'gleiche ab…'
+      : saveState === 'saving' ? 'speichere…'
       : saveState === 'saved' ? '✓ gespeichert'
       : saveState === 'error' ? '⚠ Fehler'
-      : (AUTH.account.username || 'angemeldet');
+      : abgleichLabel();
   } else if (STATE.fileHandle) {
     txt = `${STATE.fileHandle.name}${STATE.dirty ? ' •' : ''}`;
   } else {
@@ -73,6 +101,8 @@ function updateMeta() {
   el.textContent = txt;
 }
 
+setRefreshStateHandler(() => { updateRefreshBtn(); updateMeta(); });
+
 setSaveStateHandler((zustand) => {
   saveState = zustand;
   updateMeta();
@@ -80,6 +110,31 @@ setSaveStateHandler((zustand) => {
     setTimeout(() => { if (saveState === 'saved') { saveState = 'idle'; updateMeta(); } }, 1500);
   }
 });
+
+// =========================== ABGLEICH ===========================
+/** Cloud-Stand laden und den Zeitpunkt merken — außer das Laden ging schief. */
+async function ladenUndMerken() {
+  const r = await loadFromCloud({ silent: true, onMessage: (m, bad) => showToast(m, bad) });
+  if (!r || !r.fehler) markSynced();
+  return r;
+}
+
+/**
+ * Rückkehr in den Vordergrund.
+ *
+ * Die Lücke, die man am Handy nicht sieht: die App war „ja schon offen", also
+ * lief kein Start-Load — und zeigte den Stand von vorhin, während am PC längst
+ * etwas eingetragen war. Der Mindestabstand hält kurzes Wegtippen davon ab,
+ * jedes Mal Funkverkehr auszulösen. Still ist nur das „alles aktuell"; was
+ * hereinkommt, wird auch hier gemeldet.
+ */
+const RUECKKEHR_MIN_MS = 30000;
+function refreshBeiRueckkehr() {
+  if (!isSignedIn() || document.visibilityState === 'hidden') return;
+  const zuletzt = lastSyncAt();
+  if (zuletzt && Date.now() - zuletzt < RUECKKEHR_MIN_MS) return;
+  refresh({ silent: true });
+}
 
 // =========================== BENACHRICHTIGUNGEN ===========================
 async function reminderNeu() {
@@ -196,9 +251,7 @@ async function start() {
   registerSaver(autosave);
   setAuthHandlers({
     change: () => { daten.renderAuth(); updateMeta(); },
-    signedIn: async () => {
-      await loadFromCloud({ silent: true, onMessage: (m, bad) => showToast(m, bad) });
-    },
+    signedIn: async () => { await ladenUndMerken(); },
   });
 
   loadLocal();
@@ -221,9 +274,7 @@ async function start() {
   if (nativ) { setData(nativ); STATE.dirty = false; }
 
   await initAuth();
-  if (isSignedIn()) {
-    await loadFromCloud({ silent: true, onMessage: (m, bad) => showToast(m, bad) });
-  }
+  if (isSignedIn()) await ladenUndMerken();
 
   setupBackButton(() => {
     if (aktiverTab !== 'eintrag') { switchTab('eintrag'); return true; }
@@ -238,11 +289,29 @@ async function start() {
   // Laufende Zähler (Regen-Countdown, Stunden, „jetzt"-Marke) jede Minute.
   setInterval(() => { if (aktiverTab === 'eintrag') eintrag.render(); }, 60000);
 
+  // Drei Wege in den Vordergrund: Capacitor meldet es nativ am sichersten,
+  // `visibilitychange` deckt PWA und WebView ab, `focus` den Desktop. Der
+  // Mindestabstand in refreshBeiRueckkehr macht die Überschneidung folgenlos.
+  onAppResume(refreshBeiRueckkehr);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshBeiRueckkehr();
+  });
+  window.addEventListener('focus', refreshBeiRueckkehr);
+
+  // Ohne OneDrive gibt es nichts zu holen — dann bleibt die Geste aus, statt
+  // jedes Hochziehen mit derselben Fehlermeldung zu beantworten. Der Knopf in
+  // der Kopfzeile sagt in dem Fall, warum.
+  initPullToRefresh({ onRefresh: () => refresh(), kannZiehen: isSignedIn });
+
+  updateRefreshBtn();
+
   window.addEventListener('online', () => {
     if (STATE.dirty && isSignedIn()) { showToast('Wieder online — speichere…'); autosave(); }
   });
   window.addEventListener('offline', () => showToast('Offline — Änderungen bleiben lokal gemerkt'));
 }
+
+$('refreshBtn').addEventListener('click', () => { refresh(); });
 
 $('quickSave').addEventListener('click', async () => {
   try {
