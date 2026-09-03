@@ -1,5 +1,5 @@
   :root {
-    --bg: #2b241b; --panel: #3a3024; --panel-2: #463b2d; --line: #5a4b39;
+    --bg: #25281b; --panel: #313524; --panel-2: #3c412d; --line: #4c5239;
     --text: #f3ead9; --muted: #b9a98e;
     --accent: #84cc16; --accent-strong: #65a30d; --accent-dim: #3f5212;
     --bad: #c2553f; --danger: #dc2626; --danger-dim: #4a1414;
@@ -181,7 +181,7 @@
   .qb.danger { border-color: var(--danger); background: var(--danger-dim); color: #fecaca; }
   .qb.danger:hover { background: var(--danger); color: #1a0808; }
   .qb.regen { border-color: var(--warm); background: rgba(200,144,96,0.12); color: var(--warm); }
-  .qb.regen.regen-available:hover { background: var(--warm); color: #2b241b; }
+  .qb.regen.regen-available:hover { background: var(--warm); color: #25281b; }
   .qb.regen.regen-active { background: rgba(200,144,96,0.25); color: var(--warm); cursor: not-allowed; }
   .qb.regen.regen-cooldown { opacity: 0.45; cursor: not-allowed; background: var(--panel-2);
     border-color: var(--line); color: var(--muted); }

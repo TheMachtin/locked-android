@@ -39,7 +39,7 @@ jobs:
         run: |
           # Gleiche Rechnung wie im APK-Build (Commit-Anzahl → 1.0.N), damit am PC
           # dieselbe Versionsnummer steht wie am Handy.
-          NAME="2.0.$(git rev-list --count HEAD)"
+          NAME="2.1.$(git rev-list --count HEAD)"
           HASH=$(git rev-parse --short HEAD)
           echo "name=$NAME" >> $GITHUB_OUTPUT
           echo "hash=$HASH" >> $GITHUB_OUTPUT

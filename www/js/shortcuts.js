@@ -41,6 +41,38 @@ export function setEntryHook(fn) { onNachEintrag = fn; }
 const WIEDERHOLFENSTER_MS = 4000;
 let zuletzt = { url: null, ms: 0 };
 
+// =========================== SICHTBARKEIT ===========================
+/**
+ * Seit wann die App ununterbrochen sichtbar ist — 0, wenn gerade nicht.
+ *
+ * Ein Kommando von der Uhr weckt die App aus dem Hintergrund und soll sie
+ * danach dorthin zurückschicken (`minimizeApp()`). Lief sie aber schon eine
+ * Weile im Vordergrund — man sieht sich gerade das Dashboard an —, wäre genau
+ * dasselbe Minimieren ein Rauswurf aus der eigenen Nutzung. Die Uhr weckt die
+ * Activity in beiden Fällen kurz auf; `document.visibilityState` allein
+ * unterscheidet die Fälle deshalb nicht zuverlässig, ihre *Dauer* schon: ein
+ * Kommando, das die App gerade erst geweckt hat, trifft auf `sichtbarSeitMs`
+ * von vor einem Wimpernschlag, ein Kommando während laufender Nutzung auf
+ * einen deutlich älteren Zeitstempel.
+ */
+let sichtbarSeitMs = 0;
+const BEREITS_OFFEN_MS = 1200;
+
+function trackSichtbarkeit() {
+  if (typeof document === 'undefined') return;
+  const aktualisieren = () => {
+    if (document.visibilityState === 'visible') { if (!sichtbarSeitMs) sichtbarSeitMs = Date.now(); }
+    else sichtbarSeitMs = 0;
+  };
+  aktualisieren();
+  document.addEventListener('visibilitychange', aktualisieren);
+}
+
+/** War die App schon eine Weile offen, bevor dieses Kommando ankam? */
+function warBereitsOffen() {
+  return sichtbarSeitMs > 0 && (Date.now() - sichtbarSeitMs) > BEREITS_OFFEN_MS;
+}
+
 /**
  * Ein Kommando ausführen.
  * @returns {Promise<boolean>} ob die URL überhaupt eins war
@@ -104,7 +136,9 @@ function mitPreis(plan) {
  */
 async function abschluss(meldung, cmd) {
   await notifyNow(meldung);
-  if (IS_NATIVE && !cmd.zeigen) minimizeApp();
+  // Wer gerade in der App war, soll drinbleiben — nur ein Kommando, das sie
+  // erst geweckt hat, schickt sie zurück, wo sie herkam.
+  if (IS_NATIVE && !cmd.zeigen && !warBereitsOffen()) minimizeApp();
 }
 
 // =========================== KURZBEFEHLE UND UHR ===========================
@@ -159,6 +193,7 @@ function syncUhr(settings) {
  * laufen.
  */
 export async function initShortcuts() {
+  trackSichtbarkeit();
   onAppUrlOpen(url => {
     runCommand(url).catch(e => console.error('Kommando fehlgeschlagen', e));
   });

@@ -44,7 +44,7 @@ jobs:
         shell: bash
         run: |
           # Dieselbe Rechnung wie im APK- und im Pages-Build: Commit-Anzahl → 2.0.N.
-          echo "name=2.0.$(git rev-list --count HEAD)" >> $GITHUB_OUTPUT
+          echo "name=2.1.$(git rev-list --count HEAD)" >> $GITHUB_OUTPUT
           echo "hash=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Abhängigkeiten installieren
@@ -90,7 +90,7 @@ jobs:
 
       - name: Version bestimmen
         id: ver
-        run: echo "name=2.0.$(git rev-list --count HEAD)" >> $GITHUB_OUTPUT
+        run: echo "name=2.1.$(git rev-list --count HEAD)" >> $GITHUB_OUTPUT
 
       - name: Artefakte einsammeln
         uses: actions/download-artifact@v4

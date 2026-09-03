@@ -6,8 +6,8 @@ ein Quellcode (`www/`), drei Hüllen.
 | Plattform | Bezug | Installation |
 |---|---|---|
 | Android | APK aus dem [neuesten Release](https://github.com/TheMachtin/locked-android/releases) | antippen → „Von unbekannter Quelle zulassen" |
-| Windows | `Locked-Setup-2.0.N.exe` aus demselben Release | ausführen; portable Variante liegt daneben |
-| Linux | `Locked-2.0.N.AppImage` | ausführbar machen und starten |
+| Windows | `Locked-Setup-2.1.N.exe` aus demselben Release | ausführen; portable Variante liegt daneben |
+| Linux | `Locked-2.1.N.AppImage` | ausführbar machen und starten |
 | Browser | <https://themachtin.github.io/locked-android/> | Edge/Chrome → „App installieren" |
 
 Alle Installationen teilen sich dieselbe OneDrive-Datei und führen parallele
@@ -371,7 +371,7 @@ Welche URI die laufende Installation sendet, steht in der App unter
 ## Build
 
 Jeder Push auf `main` löst drei Workflows aus, die dieselbe Versionsnummer
-berechnen (Commit-Anzahl → `2.0.N`) und sie über `scripts/bake-version.sh`
+berechnen (Commit-Anzahl → `2.1.N`) und sie über `scripts/bake-version.sh`
 eintragen — Handy, PC und Web zeigen nach einem Push also dieselbe Nummer:
 
 | Workflow | Ergebnis |
