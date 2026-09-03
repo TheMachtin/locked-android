@@ -257,6 +257,47 @@ export function shortcutModels(settings, max) {
   return liste;
 }
 
+/** Wie viele Knöpfe die Kachel der Uhr trägt. Mehr als sechs werden auf einem
+ *  runden Zifferblatt zu klein zum Treffen. */
+export const MAX_TILE_BUTTONS = 6;
+
+/**
+ * Zwei Buchstaben für einen Namen: „Holy Trainer" → „HT", „Neosteel" → „NE".
+ *
+ * Auf einem Kachel-Knopf und unter einem Launcher-Symbol ist für mehr kein
+ * Platz. Die Regel steht hier und nicht zweimal in Java, damit Uhr und
+ * Startbildschirm dasselbe Kürzel zeigen.
+ */
+export function initialen(label) {
+  const sauber = w => String(w).replace(/[^\p{L}\p{N}]/gu, '');
+  const worte = String(label || '').trim().split(/\s+/).map(sauber).filter(Boolean);
+  if (worte.length >= 2) return (worte[0][0] + worte[1][0]).toUpperCase();
+  const eins = worte[0] || '';
+  return (eins.slice(0, 2) || '•').toUpperCase();
+}
+
+/**
+ * Was die Uhr wissen muss — und mehr nicht.
+ *
+ * Die Modelle mit Farbe und Kürzel, damit die Kachel sie zeichnen kann, und der
+ * gerade getragene Zustand, damit dort etwas Wahres steht, bevor man tippt.
+ * Keine Einträge, keine Punkte, keine Historie: die Uhr ist eine Fernbedienung.
+ */
+export function watchPayload(data, settings, max, now) {
+  const refMs = (now || new Date()).getTime();
+  const st = currentStateAt((data && data.events) || [], settings, refMs);
+  const m = resolveModel(settings, modelMap(settings), st.type);
+  return {
+    models: shortcutModels(settings, max || MAX_TILE_BUTTONS).map(x => ({
+      id: x.id,
+      label: x.label,
+      kurz: initialen(x.label),
+      color: x.color,
+    })),
+    jetzt: { id: m.id, label: m.label, seit: st.time || '' },
+  };
+}
+
 /** Die fertige Adresse für ein Modell — genau das, was in die Automation gehört. */
 export function commandUrl(id) {
   return `${CMD_URL}?m=${encodeURIComponent(id)}`;

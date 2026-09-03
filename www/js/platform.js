@@ -179,6 +179,23 @@ export async function setLauncherShortcuts(items) {
   catch (e) { console.warn('Shortcuts konnten nicht gesetzt werden', e); return false; }
 }
 
+// =========================== UHR ===========================
+/**
+ * Modell-Registry und aktuellen Zustand an die Uhr geben.
+ *
+ * Der Datenkanal von Play Services hält das Element vor — die Uhr bekommt es
+ * auch, wenn sie beim Ändern außer Reichweite war. Ohne Uhr-App passiert nichts;
+ * das Element liegt dann eben ungelesen da.
+ *
+ * @param {string} json  fertig serialisiert (siehe core/command.js → watchPayload)
+ */
+export async function publishToWatch(json) {
+  const W = CAP().WearBridge;
+  if (!IS_NATIVE || !W || !W.publish) return false;
+  try { await W.publish({ json }); return true; }
+  catch (e) { console.warn('Uhr-Abgleich fehlgeschlagen', e); return false; }
+}
+
 // =========================== ZURÜCK-TASTE ===========================
 /** Android-Zurück: erst eine Ebene zurück, dann in den Hintergrund. Ohne
  *  Listener beendet die Taste die App sofort. */

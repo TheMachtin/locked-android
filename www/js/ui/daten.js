@@ -80,9 +80,10 @@ function renderShortcuts() {
         + ' Ereignisse mit Preis stehen bewusst nicht dabei: ein Kurzbefehl fragt nicht nach.'
       : '<b>Am Telefon:</b> die App legt aus den ersten Modellen selbst Kurzbefehle an'
         + ' (langer Druck auf das App-Symbol).',
-    '<b>Von der Uhr:</b> Samsung hat dafür keinen eigenen Weg — eine Automations-App mit'
-      + ' Wear-Begleiter (MacroDroid, Tasker) löst die Adresse aus. Die Bestätigung kommt'
-      + ' als Benachrichtigung zurück aufs Handgelenk.',
+    '<b>Von der Uhr:</b> die Kachel der Galaxy Watch schickt dasselbe Kommando und braucht'
+      + ' keine dieser Adressen — sie bekommt die Modelle über den Datenkanal. Ohne Uhr-App'
+      + ' löst eine Automations-App mit Wear-Begleiter (MacroDroid, Tasker) die Adresse aus.'
+      + ' Die Bestätigung kommt so oder so als Benachrichtigung zurück aufs Handgelenk.',
     'Nach dem Eintrag geht die App von allein wieder in den Hintergrund;'
       + ' <code>&amp;app=1</code> am Ende der Adresse hält sie offen.',
     `Im Browser dieselbe Anweisung als Parameter: <code>${escapeHtml(webCommandUrl(basis, beispiel))}</code>`,

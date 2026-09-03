@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   parseCommand, resolveCommandModel, planCommand, currentStateAt,
   shortcutModels, commandUrl, webCommandUrl, MAX_SHORTCUTS, CMD_PARAMS,
+  initialen, watchPayload, MAX_TILE_BUTTONS,
 } from '../www/js/core/command.js';
 import { normalizeSettings } from '../www/js/core/settings.js';
 
@@ -185,6 +186,32 @@ test('Der offene Zustand bekommt immer einen Platz', () => {
 test('Archivierte Modelle stehen nicht im Launcher', () => {
   const s = normalizeSettings({ models: S.models.map(m => (m.id === 'HT' ? { ...m, archived: true } : m)) });
   assert.ok(!shortcutModels(s).some(m => m.id === 'HT'));
+});
+
+// =========================== UHR ===========================
+test('Zwei Buchstaben stehen für einen Namen', () => {
+  assert.equal(initialen('Holy Trainer'), 'HT');
+  assert.equal(initialen('Neosteel'), 'NE');
+  assert.equal(initialen('Nicht verschlossen'), 'NV');
+  assert.equal(initialen('Cobra Variante A'), 'CV');
+  assert.equal(initialen('  '), '•', 'ein leerer Name lässt den Knopf nicht leer');
+});
+
+test('Die Uhr bekommt Modelle und den aktuellen Zustand', () => {
+  const data = { events: [{ date: '2026-09-03', time: '08:00', type: 'HT' }] };
+  const p = watchPayload(data, S, MAX_TILE_BUTTONS, JETZT);
+  assert.ok(p.models.length <= MAX_TILE_BUTTONS);
+  assert.deepEqual(p.models[0], { id: 'HT', label: 'Holy Trainer', kurz: 'HT', color: '#84cc16' });
+  assert.ok(!p.models.some(m => m.id === 'OR'),
+    'was Punkte kostet, gehört nicht auf einen Knopf ohne Rückfrage');
+  assert.ok(p.models.some(m => m.id === 'KK'), 'der Weg heraus ist immer dabei');
+  assert.deepEqual(p.jetzt, { id: 'HT', label: 'Holy Trainer', seit: '08:00' });
+});
+
+test('Ohne Historie meldet die Uhr den offenen Zustand', () => {
+  const p = watchPayload({ events: [] }, S, MAX_TILE_BUTTONS, JETZT);
+  assert.equal(p.jetzt.id, 'KK');
+  assert.equal(p.jetzt.seit, '', 'nichts vorzuweisen ist besser als eine erfundene Uhrzeit');
 });
 
 test('Die Web-App kennt alle Parameter, die sie aufräumen muss', () => {

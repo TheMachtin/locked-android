@@ -5,12 +5,14 @@ import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;
 import app.locked.themachtin.plugins.AppInstallerPlugin;
 import app.locked.themachtin.plugins.ShortcutsPlugin;
+import app.locked.themachtin.plugins.WearBridgePlugin;
 
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(AppInstallerPlugin.class);
         registerPlugin(ShortcutsPlugin.class);
+        registerPlugin(WearBridgePlugin.class);
         vergissWiederhergestelltesKommando();
         super.onCreate(savedInstanceState);
     }

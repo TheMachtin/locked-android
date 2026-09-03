@@ -22,10 +22,12 @@ import { showToast } from './ui/toast.js';
 import { fmtInt } from './ui/format.js';
 import { KIND_ORGASM } from './core/settings.js';
 import {
-  parseCommand, planCommand, shortcutModels, commandUrl, CMD_PARAM, CMD_PARAMS, MAX_SHORTCUTS,
+  parseCommand, planCommand, shortcutModels, commandUrl, initialen, watchPayload,
+  CMD_PARAM, CMD_PARAMS, MAX_SHORTCUTS, MAX_TILE_BUTTONS,
 } from './core/command.js';
 import {
   IS_NATIVE, onAppUrlOpen, launchUrl, minimizeApp, notifyNow, setLauncherShortcuts,
+  publishToWatch,
 } from './platform.js';
 import { autosave } from './sync/onedrive.js';
 
@@ -105,23 +107,49 @@ async function abschluss(meldung, cmd) {
   if (IS_NATIVE && !cmd.zeigen) minimizeApp();
 }
 
-// =========================== LAUNCHER-SHORTCUTS ===========================
-let letzteKennung = '';
+// =========================== KURZBEFEHLE UND UHR ===========================
+let letzterLauncher = '';
+let letzteUhr = '';
+
+/**
+ * Startbildschirm und Uhr der Registry nachziehen.
+ *
+ * Beides hängt am selben Auslöser (jede Änderung am Zustand), aber an
+ * getrennten Merkern: die Launcher-Liste ändert sich nur, wenn ein Modell
+ * dazukommt oder umbenannt wird — die Uhr auch dann, wenn ein Eintrag den
+ * getragenen Zustand ändert. Ein gemeinsamer Merker würde entweder die eine
+ * Seite verschlafen oder die andere unnötig neu setzen.
+ */
+export function syncGeraete(settings) {
+  if (!IS_NATIVE) return;
+  syncLauncherShortcuts(settings);
+  syncUhr(settings);
+}
 
 /** Die Kurzbefehle des Launchers der Registry nachziehen. */
 export function syncLauncherShortcuts(settings) {
   if (!IS_NATIVE) return;
   const liste = shortcutModels(settings, MAX_SHORTCUTS);
   const kennung = JSON.stringify(liste.map(m => [m.id, m.label, m.color]));
-  if (kennung === letzteKennung) return;
-  letzteKennung = kennung;
+  if (kennung === letzterLauncher) return;
+  letzterLauncher = kennung;
   setLauncherShortcuts(liste.map(m => ({
     id: m.id,
     label: m.label,
     kurz: m.label.length > 12 ? m.label.slice(0, 11) + '…' : m.label,
+    initialen: initialen(m.label),
     url: commandUrl(m.id),
     color: m.color,
   })));
+}
+
+/** Registry und aktuellen Zustand an die Uhr geben. */
+function syncUhr(settings) {
+  const json = JSON.stringify(watchPayload(STATE.data, settings, MAX_TILE_BUTTONS));
+  // Der Inhalt *ist* der Merker: was gleich bleibt, muss nicht gesendet werden.
+  if (json === letzteUhr) return;
+  letzteUhr = json;
+  publishToWatch(json);
 }
 
 // =========================== AUFBAU ===========================
@@ -135,8 +163,8 @@ export async function initShortcuts() {
     runCommand(url).catch(e => console.error('Kommando fehlgeschlagen', e));
   });
 
-  syncLauncherShortcuts(getSettings());
-  subscribe(() => syncLauncherShortcuts(getSettings()));
+  syncGeraete(getSettings());
+  subscribe(() => syncGeraete(getSettings()));
 
   // Web und Desktop: der Befehl steht in der Adresse. Danach wird er entfernt —
   // sonst trüge ein Neuladen (oder ein Lesezeichen auf die aktuelle Seite) ihn

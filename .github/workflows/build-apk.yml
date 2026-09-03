@@ -71,7 +71,22 @@ jobs:
           mkdir -p android/app/src/main/java/app/locked/themachtin/plugins
           cp native/java/AppInstallerPlugin.java android/app/src/main/java/app/locked/themachtin/plugins/
           cp native/java/ShortcutsPlugin.java android/app/src/main/java/app/locked/themachtin/plugins/
+          cp native/java/WearCommandService.java android/app/src/main/java/app/locked/themachtin/plugins/
+          cp native/java/WearBridgePlugin.java android/app/src/main/java/app/locked/themachtin/plugins/
           cp native/java/MainActivity.java android/app/src/main/java/app/locked/themachtin/MainActivity.java
+          # Uhr-Modul: eigenes APK, gleiche Anwendungs-ID, gleicher Schlüssel
+          rm -rf android/wear
+          cp -r native/wear android/wear
+          # Mit führendem Zeilenumbruch: Capacitors settings.gradle endet ohne einen,
+          # sonst klebt das include an der letzten Zeile („apply from: …include ':wear'").
+          grep -q "include ':wear'" android/settings.gradle || printf "\ninclude ':wear'\n" >> android/settings.gradle
+          # Datenkanal zur Uhr braucht Play Services auch auf der Telefon-Seite
+          grep -q "play-services-wearable" android/app/build.gradle || cat >> android/app/build.gradle << 'GRADLE_EOF'
+
+          dependencies {
+              implementation 'com.google.android.gms:play-services-wearable:18.1.0'
+          }
+          GRADLE_EOF
           # FileProvider Paths-XML
           mkdir -p android/app/src/main/res/xml
           cp native/xml/file_provider_paths.xml android/app/src/main/res/xml/
@@ -94,6 +109,17 @@ jobs:
                     '                android:resource="@xml/file_provider_paths" />\n'
                     '        </provider>\n')
               c = c.replace('</application>', fp + '    </application>', 1)
+          # Nachrichten der Uhr (siehe native/java/WearCommandService.java)
+          if 'WearCommandService' not in c:
+              svc = ('        <service\n'
+                     '            android:name="app.locked.themachtin.plugins.WearCommandService"\n'
+                     '            android:exported="true">\n'
+                     '            <intent-filter>\n'
+                     '                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />\n'
+                     '                <data android:scheme="wear" android:host="*" android:pathPrefix="/locked" />\n'
+                     '            </intent-filter>\n'
+                     '        </service>\n')
+              c = c.replace('</application>', svc + '    </application>', 1)
           # Eigenes Schema: locked://auth ist der OAuth-Rücksprung aus dem
           # System-Browser, locked://log das Kommando eines Shortcuts oder einer
           # Automation (siehe www/js/core/command.js).
@@ -112,7 +138,7 @@ jobs:
           c = add_filter(c, 'auth')
           c = add_filter(c, 'log')
           with open(p, 'w') as f: f.write(c)
-          for needle in ('REQUEST_INSTALL_PACKAGES', 'FileProvider',
+          for needle in ('REQUEST_INSTALL_PACKAGES', 'FileProvider', 'WearCommandService',
                          'android:host="auth"', 'android:host="log"'):
               assert needle in c, f'Manifest-Patch fehlgeschlagen: {needle}'
           print('Manifest patched OK')
@@ -123,6 +149,9 @@ jobs:
           # applicationId & version in android/app/build.gradle setzen
           sed -i "s|versionCode 1|versionCode ${{ steps.ver.outputs.code }}|" android/app/build.gradle
           sed -i "s|versionName \"1.0\"|versionName \"${{ steps.ver.outputs.name }}\"|" android/app/build.gradle
+          # Uhr trägt dieselbe Nummer — sonst rät man später, welche zu welcher passt
+          sed -i "s|versionCode 1|versionCode ${{ steps.ver.outputs.code }}|" android/wear/build.gradle
+          sed -i "s|versionName \"1.0\"|versionName \"${{ steps.ver.outputs.name }}\"|" android/wear/build.gradle
           # App-Name
           sed -i 's|<string name="app_name">.*</string>|<string name="app_name">Locked</string>|' android/app/src/main/res/values/strings.xml || true
           sed -i 's|<string name="title_activity_main">.*</string>|<string name="title_activity_main">Locked</string>|' android/app/src/main/res/values/strings.xml || true
@@ -171,10 +200,10 @@ jobs:
           chmod +x gradlew
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "Signed release build"
-            ./gradlew assembleRelease --no-daemon
+            ./gradlew :app:assembleRelease --no-daemon
           else
             echo "⚠ Kein KEYSTORE_BASE64 Secret gesetzt — baue Debug-APK"
-            ./gradlew assembleDebug --no-daemon
+            ./gradlew :app:assembleDebug --no-daemon
           fi
 
       - name: Locate APK
@@ -191,6 +220,31 @@ jobs:
           path: ${{ steps.apk.outputs.path }}
           retention-days: 90
 
+      # Getrennt und *nach* dem Hochladen der Telefon-APK: bricht das Uhr-Modul,
+      # ist der Fehler laut, aber die APK fürs Telefon liegt trotzdem am Lauf.
+      - name: Build Wear APK
+        working-directory: android
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            ./gradlew :wear:assembleRelease --no-daemon
+          else
+            ./gradlew :wear:assembleDebug --no-daemon
+          fi
+
+      - name: Locate Wear APK
+        id: wear
+        run: |
+          APK=$(find android/wear/build/outputs -name "*.apk" | head -1)
+          echo "path=$APK" >> $GITHUB_OUTPUT
+          echo "Found Wear APK: $APK"
+
+      - name: Upload Wear APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: locked-wear-${{ steps.ver.outputs.name }}
+          path: ${{ steps.wear.outputs.path }}
+          retention-days: 90
+
       # Denselben Release erzeugt auch der Desktop-Workflow. Die gemeinsame
       # Gruppe verhindert, dass beide gleichzeitig anlegen wollen.
       - name: Create/update GitHub Release
@@ -201,8 +255,12 @@ jobs:
           name: v${{ steps.ver.outputs.name }}
           body: |
             Automatischer Build vom Commit ${{ steps.ver.outputs.hash }}.
-            APK zum Download unten.
-          files: ${{ steps.apk.outputs.path }}
+
+            - `app-release.apk` — fürs Telefon (antippen, installieren)
+            - `wear-release.apk` — für die Galaxy Watch, siehe README → „Die Kachel auf die Uhr"
+          files: |
+            ${{ steps.apk.outputs.path }}
+            ${{ steps.wear.outputs.path }}
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
