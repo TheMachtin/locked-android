@@ -136,23 +136,25 @@ export async function exportXlsx(calcResult) {
 
   const modelIds = s.models.filter(m => m.kind !== KIND_ORGASM).map(m => m.id);
   const dayRows = [[
-    'Datum', 'Zählt', 'Verschlossen h', 'Offen h', 'Multiplikator', 'Bonus',
+    'Datum', 'Zählt', 'Verschlossen h', 'Offen h', 'Unterbrechung h', 'Multiplikator', 'Bonus',
     'Einnahmen', 'Stundenkosten', 'Orgasmuskosten', 'Netto', 'Konto', 'Form',
     'Orgasmen', ...modelIds.map(id => `h ${id}`),
   ]];
   for (const d of calcResult.days) {
     dayRows.push([
-      d.date, d.zaehlt ? 'x' : '', r2(d.verschlossenH), r2(d.offenH), r2(d.mult), r2(d.bonus),
+      d.date, d.zaehlt ? 'x' : '', r2(d.verschlossenH), r2(d.offenH), r2(d.pauseH),
+      r2(d.mult), r2(d.bonus),
       r2(d.einnahmen), r2(d.stundenKosten), r2(d.orgasmKosten), r2(d.netto), r2(d.konto), r2(d.form),
       d.orgasmen.length, ...modelIds.map(id => r2(d.hours[id] || 0)),
     ]);
   }
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dayRows), 'Tage');
 
-  const mRows = [['ID', 'Art', 'Bezeichnung', 'Punkte/h', 'Verschlossen', 'Offen-Zustand',
-    'Regeneration', 'Archiviert', 'Preis min', 'Preis max', 'Halbwertszeit T']];
+  const mRows = [['ID', 'Art', 'Bezeichnung', 'Punkte/h', 'Verschlossen', 'Unterbrechung',
+    'Offen-Zustand', 'Regeneration', 'Archiviert', 'Preis min', 'Preis max', 'Halbwertszeit T']];
   for (const m of s.models) {
-    mRows.push([m.id, m.kind, m.label, m.rate ?? '', m.locked ? 'x' : '', m.isOpen ? 'x' : '',
+    mRows.push([m.id, m.kind, m.label, m.rate ?? '', m.locked ? 'x' : '', m.pause ? 'x' : '',
+      m.isOpen ? 'x' : '',
       m.regen ? 'x' : '', m.archived ? 'x' : '', m.priceMin ?? '', m.priceMax ?? '', m.halflifeDays ?? '']);
   }
   mRows.push([]);

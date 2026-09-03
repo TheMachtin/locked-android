@@ -87,12 +87,19 @@ export function computeDayHours(dayEvents, startModel, endMin, ctx, startMin) {
  */
 export function scoreDay(hours, orgasmen, streakTage, ctx, vollstaendig) {
   const P = ctx.settings.points;
-  let verdienstBasis = 0, stundenKosten = 0, verschlossenH = 0, offenH = 0;
+  let verdienstBasis = 0, stundenKosten = 0, verschlossenH = 0, offenH = 0, pauseH = 0;
 
   for (const [id, h] of Object.entries(hours)) {
     if (!h) continue;
     const m = resolveModel(ctx.settings, ctx.map, id);
-    if (m.locked) verschlossenH += h; else offenH += h;
+    // Eine Unterbrechung (Reinigung) landet in keinem der beiden Töpfe: sie ist
+    // keine verschlossene Zeit, aber auch keine Öffnung. Der Preis dafür steht
+    // im Stundensatz — 0 Punkte je Stunde, während der Käfig 0,5 gebracht hätte.
+    // Damit ist eine lange "Reinigung" von allein teuer und braucht keinen
+    // zusätzlichen Deckel.
+    if (m.locked) verschlossenH += h;
+    else if (m.pause) pauseH += h;
+    else offenH += h;
     if (m.rate >= 0) verdienstBasis += h * m.rate;
     else stundenKosten += h * -m.rate;
   }
@@ -104,7 +111,7 @@ export function scoreDay(hours, orgasmen, streakTage, ctx, vollstaendig) {
   const orgasmKosten = orgasmen.reduce((s, o) => s + o.price, 0);
 
   return {
-    verschlossenH, offenH,
+    verschlossenH, offenH, pauseH,
     verdienstBasis, bonus, mult, einnahmen,
     stundenKosten, orgasmKosten,
     kosten: stundenKosten + orgasmKosten,
@@ -219,7 +226,7 @@ export function emptyTotals() {
     konto: 0, form: 0,
     einnahmen: 0, kosten: 0,
     avgNetto: 0, avgStdTag: 0,
-    stundenVerschlossen: 0, stundenOffen: 0,
+    stundenVerschlossen: 0, stundenOffen: 0, stundenPause: 0,
     hoursByModel: {},
     tageDurchgehend: 0, tageMitOrgasmus: 0,
     orgasmen: 0, orgasmenAuto: 0, orgasmKosten: 0,
@@ -247,6 +254,7 @@ export function computeTotals(days) {
     }
     t.stundenVerschlossen += d.verschlossenH;
     t.stundenOffen        += d.offenH;
+    t.stundenPause        += d.pauseH;
     t.einnahmen           += d.einnahmen;
     t.kosten              += d.kosten;
     t.orgasmKosten        += d.orgasmKosten;
@@ -293,6 +301,12 @@ export function computeTotals(days) {
  * kommen. Die Phase läuft dadurch über Mitternacht weiter, und ein offener Tag
  * lässt keinen Zähler ab 00:00 neu starten. Modellwechsel innerhalb der Phase
  * (Holy Trainer → Neosteel) unterbrechen sie nicht.
+ *
+ * Unterbrechungen (`pause`, etwa die Reinigung) beenden sie ebenfalls nicht.
+ * Sie behaupten nicht, der Käfig sei ab und bleibe es — sie sagen nur, dass
+ * gerade nichts über den Verschluss auszusagen ist. Der Zähler springt deshalb
+ * nicht auf null, weil jemand zehn Minuten am Waschbecken stand; `paused`
+ * meldet der Oberfläche, dass die Pause noch läuft.
  */
 export function lockPhaseStart(events, settings, refMs) {
   const ctx = { settings, map: modelMap(settings) };
@@ -302,14 +316,28 @@ export function lockPhaseStart(events, settings, refMs) {
     .filter(x => x.m.kind === KIND_MODEL && isFinite(x.t) && x.t <= ref)
     .sort((a, b) => a.t - b.t);
   if (!evs.length) return null;                 // Startzustand ist offen
-  const last = evs[evs.length - 1];
+
+  // Der letzte Eintrag, der überhaupt etwas über den Verschluss aussagt.
+  let idx = evs.length - 1;
+  while (idx >= 0 && evs[idx].m.pause) idx--;
+  if (idx < 0) return null;                     // nur Unterbrechungen: davor war offen
+  const last = evs[idx];
   if (!last.m.locked) return null;
+
   let start = last;
-  for (let i = evs.length - 2; i >= 0; i--) {
+  for (let i = idx - 1; i >= 0; i--) {
+    if (evs[i].m.pause) continue;
     if (!evs[i].m.locked) break;
     start = evs[i];
   }
-  return { ms: start.t, model: last.e.type };
+  const laufend = evs[evs.length - 1];
+  return {
+    ms: start.t,
+    model: last.e.type,
+    paused: !!laufend.m.pause,
+    pauseModel: laufend.m.pause ? laufend.e.type : null,
+    pauseSince: laufend.m.pause ? laufend.t : null,
+  };
 }
 
 /** Zeitpunkt des letzten Orgasmus vor `refMs`, oder null. */

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 
 import {
   normalizeSettings, defaultSettings, idFromLabel, openModelId,
-  lockedIds, resolveModel, modelMap, orgasmPrice,
+  lockedIds, pauseIds, lockKind, applyLockKind, resolveModel, modelMap, orgasmPrice,
+  SETTINGS_SCHEMA,
 } from '../www/js/core/settings.js';
 
 test('Standardregistry ist gültig und deckt die alten Typen ab', () => {
@@ -14,6 +15,71 @@ test('Standardregistry ist gültig und deckt die alten Typen ab', () => {
   }
   assert.equal(openModelId(s), 'KK');
   assert.deepEqual([...lockedIds(s)].sort(), ['HT', 'NS', 'PC', 'REG']);
+});
+
+test('Die Reinigung ist eine Unterbrechung, kein offener Zustand', () => {
+  const s = normalizeSettings(null);
+  assert.deepEqual([...pauseIds(s)], ['CLEAN']);
+  assert.equal(lockKind(s.models.find(m => m.id === 'CLEAN')), 'pause');
+  assert.ok(!lockedIds(s).has('CLEAN'), 'sie ist auch keine verschlossene Zeit');
+  assert.notEqual(openModelId(s), 'CLEAN');
+});
+
+test('Verschlossen und Unterbrechung schließen sich aus', () => {
+  const s = normalizeSettings({ models: [
+    { id: 'A', label: 'A', rate: 0.5, locked: true, pause: true },
+    { id: 'B', label: 'B', isOpen: true, pause: true, locked: true },
+  ] });
+  const a = s.models.find(m => m.id === 'A');
+  assert.equal(lockKind(a), 'locked', 'verschlossen schlägt die Unterbrechung');
+  const b = s.models.find(m => m.id === 'B');
+  assert.equal(lockKind(b), 'open', 'der offene Zustand ist weder das eine noch das andere');
+});
+
+test('Der offene Zustand wird nicht aus den Unterbrechungen gewählt', () => {
+  const s = normalizeSettings({ models: [
+    { id: 'A', label: 'Käfig', rate: 0.5, locked: true },
+    { id: 'P', label: 'Pause', rate: 0, pause: true },
+    { id: 'O', label: 'Ohne', rate: -1 },
+  ] });
+  assert.equal(openModelId(s), 'O');
+  assert.equal(lockKind(s.models.find(m => m.id === 'P')), 'pause', 'die Pause bleibt eine Pause');
+});
+
+test('Schema-Nachzug: die Reinigung aus einer alten Datei wird zur Unterbrechung — einmal', () => {
+  const alt = { models: [
+    { id: 'HT', kind: 'model', label: 'Holy Trainer', rate: 0.5, locked: true },
+    { id: 'CLEAN', kind: 'model', label: 'Reinigung', rate: 0, locked: false },
+    { id: 'KK', kind: 'model', label: 'Nicht verschlossen', rate: -1, isOpen: true },
+  ] };
+  const nachgezogen = normalizeSettings(alt);
+  assert.equal(lockKind(nachgezogen.models.find(m => m.id === 'CLEAN')), 'pause');
+  assert.equal(nachgezogen.schema, SETTINGS_SCHEMA, 'die Fassung steht danach in der Datei');
+
+  // Wer sie danach von Hand wieder auf offen stellt, behält das.
+  const vonHand = JSON.parse(JSON.stringify(nachgezogen));
+  applyLockKind(vonHand.models.find(m => m.id === 'CLEAN'), 'open');
+  assert.equal(lockKind(normalizeSettings(vonHand).models.find(m => m.id === 'CLEAN')), 'open',
+    'der Nachzug läuft nicht bei jedem Start erneut');
+});
+
+test('Schema-Nachzug fasst nur die Reinigung an', () => {
+  const s = normalizeSettings({ models: [
+    { id: 'HT', kind: 'model', label: 'Holy Trainer', rate: 0.5, locked: true },
+    { id: 'AUS', kind: 'model', label: 'Auszeit', rate: 0 },
+    { id: 'KK', kind: 'model', label: 'Nicht verschlossen', rate: -1, isOpen: true },
+  ] });
+  assert.equal(lockKind(s.models.find(m => m.id === 'AUS')), 'open');
+});
+
+test('Eine neuere Fassung wird nicht heruntergestuft', () => {
+  const s = normalizeSettings({ schema: 99, models: [
+    { id: 'CLEAN', kind: 'model', label: 'Reinigung', rate: 0 },
+    { id: 'KK', kind: 'model', label: 'Offen', rate: -1, isOpen: true },
+  ] });
+  assert.equal(s.schema, 99);
+  assert.equal(lockKind(s.models.find(m => m.id === 'CLEAN')), 'open',
+    'ihr Nachzug ist dort längst gelaufen — hier wäre er ein Rückschritt');
 });
 
 test('Doppelte IDs werden entdoppelt', () => {

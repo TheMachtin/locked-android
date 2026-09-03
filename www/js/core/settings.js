@@ -6,12 +6,17 @@
  * PC rechnen deshalb zwingend gleich, und ein neuer Käfig ist ein Eintrag im
  * Einstellungs-Tab statt eines Releases.
  *
- * Zwei Eigenschaften tragen Bedeutung, die das Programm kennen muss und die
+ * Drei Eigenschaften tragen Bedeutung, die das Programm kennen muss und die
  * darum nicht am Namen hängen (der Name ist frei änderbar):
  *   - `isOpen`  : der Zustand "nicht verschlossen". Er ist der Startzustand der
  *                 Historie und das Ziel automatischer Einträge. Genau einer.
  *   - `regen`   : trägt die Regenerations-Mechanik (Fenster + Sperrfrist).
  *                 Höchstens einer, darf auch fehlen.
+ *   - `pause`   : eine Unterbrechung (Reinigung). Sie ist keine verschlossene
+ *                 Zeit, beendet die verschlossene Phase aber auch nicht.
+ *
+ * `locked` und `pause` schließen sich aus; zusammen mit "keins von beidem"
+ * (offen) ergeben sie die drei Verschluss-Zustände, siehe `lockKind()`.
  */
 
 import { pad2 } from './time.js';
@@ -31,7 +36,8 @@ export const DEFAULT_MODELS = [
   { id: 'PC',    kind: KIND_MODEL,  label: 'Penicap',            color: '#bef264', rate: 0.5,  locked: true },
   { id: 'REG',   kind: KIND_MODEL,  label: 'Regeneration',       color: '#c89060', rate: 0.5,  locked: true,
     regen: true, windowH: 12, cooldownD: 5 },
-  { id: 'CLEAN', kind: KIND_MODEL,  label: 'Reinigung',          color: '#8aa0b8', rate: 0,    locked: false },
+  { id: 'CLEAN', kind: KIND_MODEL,  label: 'Reinigung',          color: '#8aa0b8', rate: 0,    locked: false,
+    pause: true },
   { id: 'KK',    kind: KIND_MODEL,  label: 'Nicht verschlossen', color: '#7a6a52', rate: -1,   locked: false,
     isOpen: true },
   { id: 'OR',    kind: KIND_ORGASM, label: 'Orgasmus',           color: '#dc2626',
@@ -55,8 +61,20 @@ export const DEFAULT_RULES = {
   inactivityAutoDays: 4,
 };
 
+/**
+ * Fassung des Einstellungs-Schemas.
+ *
+ * Modelle sind Daten und liegen in der synchronisierten Datei — eine neue
+ * Bedeutung im Programm erreicht einen bestehenden Stand deshalb nur, wenn sie
+ * beim Laden nachgezogen wird. Der Nachzug läuft genau einmal je Datei und
+ * hinterlässt die Fassung, damit eine später von Hand geänderte Einstellung
+ * nicht beim nächsten Start wieder überschrieben wird.
+ */
+export const SETTINGS_SCHEMA = 2;
+
 export function defaultSettings() {
   return {
+    schema: SETTINGS_SCHEMA,
     models: DEFAULT_MODELS.map(m => ({ ...m })),
     points: { ...DEFAULT_POINTS },
     rules:  { ...DEFAULT_RULES },
@@ -98,9 +116,16 @@ function normalizeModel(raw, index, taken) {
     archived: !!raw.archived,
   };
   if (kind === KIND_MODEL) {
+    // Satz und Verschluss-Zustand werden nicht gegeneinander geprüft: ein
+    // positiver Satz ohne Verschluss wäre meist ein Versehen, kann aber gemeint
+    // sein (eine belohnte Auszeit). Nur der Verschluss-Zustand selbst muss
+    // eindeutig bleiben — verschlossen und Unterbrechung schließen sich aus,
+    // denn eine Unterbrechung ist gerade *keine* verschlossene Zeit; sie
+    // beendet die Phase nur nicht.
     m.rate = clamp(num(raw.rate, 0), -100, 100);
     m.locked = !!raw.locked;
-    if (raw.isOpen) m.isOpen = true;
+    m.pause = !m.locked && !!raw.pause;
+    if (raw.isOpen) { m.isOpen = true; m.pause = false; }
     if (raw.regen) {
       m.regen = true;
       m.windowH   = clamp(num(raw.windowH, 12), 0.25, 24 * 14);
@@ -113,6 +138,27 @@ function normalizeModel(raw, index, taken) {
     m.repeatFactor  = clamp(num(raw.repeatFactor, 1), 1, 100);
   }
   return m;
+}
+
+/**
+ * Schema 1 → 2: die Reinigung wird zur Unterbrechung.
+ *
+ * Bis dahin kannte das Programm nur "verschlossen" und "offen", und die
+ * Reinigung fiel notgedrungen unter "offen". Zehn Minuten am Waschbecken haben
+ * damit die verschlossene Phase auf null zurückgesetzt — eine Aussage, die so
+ * nie gemeint war: der Käfig ist danach derselbe wie davor.
+ *
+ * Der Nachzug greift nur, wo die Bedeutung eindeutig ist: ein Modell, das weder
+ * der offene Zustand noch die Regeneration ist, nicht als verschlossen zählt und
+ * an der Standard-ID oder am Namen als Reinigung erkennbar bleibt. Er läuft
+ * genau einmal je Datei (siehe SETTINGS_SCHEMA) — wer die Einstellung danach
+ * von Hand ändert, behält sie.
+ */
+function upgradeReinigungZuPause(models) {
+  for (const m of models) {
+    if (m.kind !== KIND_MODEL || m.isOpen || m.locked || m.regen) continue;
+    if (m.id === 'CLEAN' || /reinig/i.test(m.label)) m.pause = true;
+  }
 }
 
 /**
@@ -136,22 +182,30 @@ export function normalizeSettings(raw) {
     models = DEFAULT_MODELS.map(m => ({ ...m }));
   }
 
+  const schema = Math.max(1, Math.round(num(src.schema, 1)));
+  if (schema < 2) upgradeReinigungZuPause(models);
+
   // Genau ein "offen"-Zustand: ohne ihn gäbe es keinen Startzustand für die
-  // Historie und kein Ziel für automatische Einträge.
+  // Historie und kein Ziel für automatische Einträge. Eine Unterbrechung taugt
+  // nicht dafür — sie sagt gerade *nichts* über den Verschluss aus.
   const opens = models.filter(m => m.kind === KIND_MODEL && m.isOpen);
   if (opens.length !== 1) {
     for (const m of models) delete m.isOpen;
     const pick = opens[0]
-      || models.find(m => m.kind === KIND_MODEL && !m.locked && !m.archived)
-      || models.find(m => m.kind === KIND_MODEL && !m.locked)
+      || models.find(m => m.kind === KIND_MODEL && !m.locked && !m.pause && !m.archived)
+      || models.find(m => m.kind === KIND_MODEL && !m.locked && !m.pause)
       || models.find(m => m.kind === KIND_MODEL);
     pick.isOpen = true;
     pick.locked = false;
+    pick.pause = false;
     pick.archived = false;
   }
-  // Der offene Zustand darf nie archiviert sein — er ist immer erreichbar.
+  // Der offene Zustand darf nie archiviert sein — er ist immer erreichbar — und
+  // er ist die Öffnung selbst: weder verschlossen noch eine Unterbrechung davon.
   const open = models.find(m => m.isOpen);
   open.archived = false;
+  open.locked = false;
+  open.pause = false;
 
   // Höchstens ein Regenerations-Modell.
   let seenRegen = false;
@@ -165,6 +219,10 @@ export function normalizeSettings(raw) {
   const r = (src.rules && typeof src.rules === 'object') ? src.rules : {};
   const out = {
     models,
+    // Eine neuere Fassung wird nicht heruntergestuft: sie hat Bedeutung
+    // geschrieben, die diese Version nicht kennt, und ein Nachzug auf 2 würde
+    // sie bei jedem Start erneut anstoßen.
+    schema: Math.max(SETTINGS_SCHEMA, schema),
     points: {
       bonusDurchgehend: clamp(num(p.bonusDurchgehend, DEFAULT_POINTS.bonusDurchgehend), -1000, 1000),
       bonusMaxOffenH:   clamp(num(p.bonusMaxOffenH,   DEFAULT_POINTS.bonusMaxOffenH), 0, 24),
@@ -235,6 +293,33 @@ export function lockedIds(settings) {
   return new Set(stateModels(settings).filter(m => m.locked).map(m => m.id));
 }
 
+/** IDs, die eine Unterbrechung sind (weder verschlossen noch offen). */
+export function pauseIds(settings) {
+  return new Set(stateModels(settings).filter(m => m.pause).map(m => m.id));
+}
+
+export const LOCK_KINDS = ['locked', 'pause', 'open'];
+
+/**
+ * Verschluss-Wirkung eines Zustandsmodells als *ein* Wert.
+ *
+ * In der Datei stehen zwei Schalter (`locked`, `pause`), weil ältere Fassungen
+ * nur den ersten kannten. Gemeint ist eine Auswahl aus drei sich ausschließenden
+ * Möglichkeiten, und genau so fragen Oberfläche und Rechnung sie ab.
+ */
+export function lockKind(m) {
+  if (m.locked) return 'locked';
+  if (m.pause) return 'pause';
+  return 'open';
+}
+
+/** Gegenstück zu `lockKind()` — setzt beide Schalter widerspruchsfrei. */
+export function applyLockKind(m, kind) {
+  const k = LOCK_KINDS.includes(kind) ? kind : 'open';
+  m.locked = k === 'locked';
+  m.pause  = k === 'pause';
+}
+
 /**
  * Ein unbekannter Event-Typ (Modell gelöscht, Datei aus einer neueren Version)
  * darf die Berechnung nicht zum Absturz bringen. Er wird als offen und
@@ -244,7 +329,7 @@ export function resolveModel(settings, map, id) {
   const m = map.get(id);
   if (m) return m;
   return { id, kind: KIND_MODEL, label: `${id} (unbekannt)`, color: '#6b7280',
-           rate: 0, locked: false, archived: true, unknown: true };
+           rate: 0, locked: false, pause: false, archived: true, unknown: true };
 }
 
 /** Anzeigename mit Fallback. */

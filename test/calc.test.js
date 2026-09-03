@@ -49,9 +49,9 @@ test('Tageswertung: offene Stunden kosten, Bonus entfällt', () => {
 
 test('Tageswertung: kurze Öffnung behält den Bonus', () => {
   const s = S();
-  const r = scoreDay({ HT: 23.5, CLEAN: 0.5 }, [], 0, ctxOf(s), true);
+  const r = scoreDay({ HT: 23.5, KK: 0.5 }, [], 0, ctxOf(s), true);
   assert.equal(r.durchgehend, true, 'unter der Schwelle von 1 h');
-  assert.equal(r.stundenKosten, 0, 'Reinigung kostet nichts');
+  assert.equal(r.offenH, 0.5);
   assert.equal(r.bonus, 5);
 });
 
@@ -147,6 +147,52 @@ test('Verschlossen-Phase endet beim Öffnen', () => {
   const s = S();
   const events = [ev('2026-03-01', '20:00', 'HT'), ev('2026-03-03', '09:00', 'KK')];
   assert.equal(lockPhaseStart(events, s, new Date('2026-03-04T12:00:00').getTime()), null);
+});
+
+test('Eine Unterbrechung beendet die verschlossene Phase nicht', () => {
+  const s = S();
+  const events = [
+    ev('2026-03-01', '20:00', 'HT'),
+    ev('2026-03-03', '09:00', 'CLEAN'),
+    ev('2026-03-03', '09:20', 'HT'),
+  ];
+  const phase = lockPhaseStart(events, s, new Date('2026-03-04T12:00:00').getTime());
+  assert.ok(phase, 'nach der Reinigung ist der Käfig wieder dran');
+  assert.equal(new Date(phase.ms).toISOString().slice(0, 10), '2026-03-01',
+    'die Phase zählt weiter ab dem ersten Käfig, nicht ab der Reinigung');
+  assert.equal(phase.paused, false);
+});
+
+test('Während der Unterbrechung läuft die Phase weiter und meldet sich als pausiert', () => {
+  const s = S();
+  const events = [ev('2026-03-01', '20:00', 'HT'), ev('2026-03-03', '09:00', 'CLEAN')];
+  const phase = lockPhaseStart(events, s, new Date('2026-03-03T09:30:00').getTime());
+  assert.ok(phase, 'zehn Minuten am Waschbecken sind kein Abbruch');
+  assert.equal(new Date(phase.ms).toISOString().slice(0, 10), '2026-03-01');
+  assert.equal(phase.model, 'HT', 'die Phase trägt weiter der Käfig, nicht die Reinigung');
+  assert.equal(phase.paused, true);
+  assert.equal(phase.pauseModel, 'CLEAN');
+});
+
+test('Eine Unterbrechung macht aus einem offenen Zustand keinen verschlossenen', () => {
+  const s = S();
+  const nachOffen = [ev('2026-03-01', '20:00', 'KK'), ev('2026-03-03', '09:00', 'CLEAN')];
+  assert.equal(lockPhaseStart(nachOffen, s, new Date('2026-03-03T10:00:00').getTime()), null);
+
+  const nurReinigung = [ev('2026-03-01', '20:00', 'CLEAN')];
+  assert.equal(lockPhaseStart(nurReinigung, s, new Date('2026-03-01T21:00:00').getTime()), null,
+    'ohne vorherigen Käfig bleibt der offene Startzustand stehen');
+});
+
+test('Unterbrechungsstunden zählen weder als verschlossen noch als offen', () => {
+  const s = S();
+  const r = scoreDay({ HT: 21, CLEAN: 3 }, [], 0, ctxOf(s), true);
+  assert.equal(r.verschlossenH, 21);
+  assert.equal(r.offenH, 0, 'die Reinigung ist keine Öffnung');
+  assert.equal(r.pauseH, 3);
+  assert.equal(r.bonus, 5, 'der Durchgehend-Bonus überlebt drei Stunden Reinigung');
+  assert.equal(r.stundenKosten, 0);
+  assert.equal(r.einnahmen, 21 * 0.5 + 5, 'verdient wird in der Pause nichts');
 });
 
 test('Aktueller Orgasmus-Preis richtet sich nach dem letzten Eintrag', () => {

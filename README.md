@@ -61,14 +61,30 @@ die App nicht zu benutzen zahlte sich am besten aus.
 ## Modelle sind Daten
 
 Käfige, Ereignisse und Sätze stehen unter **Regeln**, nicht im Quellcode. Je
-Modell einstellbar: Bezeichnung, Farbe, Punkte je Stunde, „zählt als
-verschlossen". Ein neuer Käfig — oder derselbe Käfig in zwei Trageweisen — ist
-ein Eintrag, kein Release.
+Modell einstellbar: Bezeichnung, Farbe, Punkte je Stunde und der
+Verschluss-Zustand. Ein neuer Käfig — oder derselbe Käfig in zwei Trageweisen —
+ist ein Eintrag, kein Release.
 
-Zwei Eigenschaften trägt das Programm mit und sichert sie gegen Unsinn ab:
+Der **Verschluss-Zustand** ist eine Auswahl aus dreien:
+
+| | verdient | zählt als | Phase „verschlossen seit" |
+|---|---|---|---|
+| **Verschlossen** | Stundensatz + Durchgehend-Bonus | verschlossene Zeit | läuft |
+| **Unterbrechung** | nichts (Satz 0) | weder noch | läuft weiter |
+| **Offen** | kostet den Stundensatz | offene Zeit | beginnt neu |
+
+Die **Unterbrechung** gibt es, weil die Reinigung sonst als Öffnung gebucht
+werden müsste: zehn Minuten am Waschbecken hätten die verschlossene Phase auf
+null gesetzt und den Tagesbonus gekostet — eine Aussage über den Käfig, die
+niemand gemeint hat. Einen Deckel braucht sie nicht: sie verdient nichts, eine
+lange „Reinigung" kostet also von allein jede Stunde, die der Käfig gebracht
+hätte.
+
+Zwei weitere Eigenschaften trägt das Programm mit und sichert sie gegen Unsinn ab:
 
 - **offener Zustand** — der Startzustand jeder Historie und das Ziel automatischer
-  Einträge. Genau einer, nicht löschbar, nicht archivierbar.
+  Einträge. Genau einer, nicht löschbar, nicht archivierbar, nie „verschlossen"
+  oder „Unterbrechung".
 - **Regeneration** — trägt Fenster und Sperrfrist. Höchstens eine, darf fehlen.
 
 Solange kein Eintrag auf ein Modell zeigt, folgt seine interne ID dem Namen
