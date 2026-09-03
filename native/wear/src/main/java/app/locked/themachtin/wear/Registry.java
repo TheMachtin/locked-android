@@ -40,9 +40,13 @@ final class Registry {
     private static final String KEY_JSON = "registry";
     private static final String KEY_STATUS = "status";
     private static final String KEY_STATUS_MS = "status_ms";
+    private static final String KEY_KLICK = "klick";
+    private static final String KEY_KLICK_MS = "klick_ms";
 
     /** Wie lange eine Rückmeldung („→ Holy Trainer") den Zustand überdeckt. */
     private static final long STATUS_MS = 20000;
+    /** Fenster, in dem derselbe Knopf als Wiederholung gilt. */
+    private static final long KLICK_MS = 3000;
 
     private Registry() {}
 
@@ -107,6 +111,25 @@ final class Registry {
         } catch (Exception e) {
             return "";
         }
+    }
+
+    /**
+     * Ist das ein echter Tipp — oder derselbe noch einmal?
+     *
+     * Der Zustand der Kachel trägt das Kennzeichen des zuletzt gedrückten Knopfes
+     * weiter. Jede Aktualisierung (etwa, weil das Telefon einen neuen Zustand
+     * gemeldet hat) ruft die Kachel damit erneut *mit diesem Kennzeichen* auf —
+     * ohne Sperre würde daraus eine Schleife aus Senden und Neuzeichnen. Ein
+     * zweiter echter Tipp drei Sekunden später kommt durch.
+     */
+    static boolean istWiederholung(Context ctx, String id) {
+        SharedPreferences p = prefs(ctx);
+        long jetzt = System.currentTimeMillis();
+        if (id.equals(p.getString(KEY_KLICK, "")) && jetzt - p.getLong(KEY_KLICK_MS, 0) < KLICK_MS) {
+            return true;
+        }
+        p.edit().putString(KEY_KLICK, id).putLong(KEY_KLICK_MS, jetzt).apply();
+        return false;
     }
 
     static void setzeStatus(Context ctx, String text) {

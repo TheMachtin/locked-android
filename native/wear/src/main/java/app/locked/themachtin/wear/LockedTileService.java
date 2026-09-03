@@ -52,7 +52,7 @@ public class LockedTileService extends TileService {
         if (request.getCurrentState() != null) {
             geklickt = request.getCurrentState().getLastClickableId();
         }
-        if (geklickt != null && !geklickt.isEmpty()) {
+        if (geklickt != null && !geklickt.isEmpty() && !Registry.istWiederholung(this, geklickt)) {
             // Erst die Rückmeldung setzen, dann senden: die Kachel wird unten
             // sofort gezeichnet, das Senden dauert länger als dieser Aufruf.
             Registry.setzeStatus(this, "→ " + Registry.labelVon(this, geklickt));
