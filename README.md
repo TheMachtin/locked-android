@@ -208,13 +208,18 @@ steht dieselbe Auswahl mit vollen Namen.
 **5. Am Telefon, einmalig**
 
 - Locked öffnen — dabei geht die Registry an die Uhr.
-- *Einstellungen → Apps → Locked →* **Über anderen Apps anzeigen** einschalten.
+- *Daten → Kurzbefehle*: dort steht, ob die Uhr direkt eintragen darf, mit
+  einem Knopf **Erlauben** direkt zum passenden Schalter. Handarbeit geht auch:
+  *Einstellungen → Apps → Locked → Über anderen Apps anzeigen* einschalten —
+  auf manchen Geräten liegt der Schalter stattdessen unter *Einstellungen →
+  Apps →* **⋮** *→ Spezieller Zugriff → Über anderen Apps anzeigen*.
 
-Der letzte Punkt ist der unscheinbare: seit Android 10 darf eine App aus dem
-Hintergrund keine Oberfläche starten. Fehlt die Berechtigung, wird das Kommando
-von der Uhr nicht still verschluckt — es kommt als Benachrichtigung, und ein
-Tipp darauf trägt ein. Das ist eine Handlung des Nutzers, die darf. Nur eben
-einen Tipp länger.
+Der Grund: seit Android 10 darf eine App aus dem Hintergrund keine Oberfläche
+starten, und ohne eigene Deklaration im Manifest bietet Android den Schalter für
+eine App gar nicht erst an — wonach man auch immer sucht, man findet ihn nicht.
+Fehlt die Berechtigung, wird das Kommando von der Uhr deshalb nicht still
+verschluckt — es kommt als Benachrichtigung, und ein Tipp darauf trägt ein. Das
+ist eine Handlung des Nutzers, die darf. Nur eben einen Tipp länger.
 
 Die Uhr-APK muss aus demselben Build stammen wie die des Telefons: der
 Datenkanal von Play Services verbindet nur Apps mit gleicher Anwendungs-ID *und*

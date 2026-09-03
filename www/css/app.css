@@ -451,3 +451,13 @@
 .sc-tag { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px;
   color: var(--accent); background: var(--accent-dim); border-radius: 5px; padding: 1px 5px; }
 .sc-tag.warn { color: #fecaca; background: var(--danger-dim); }
+
+/* Der Berechtigungs-Hinweis in der Kurzbefehl-Karte */
+.sc-perm { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 12px; padding: 10px 12px; font-size: 12px; line-height: 1.4;
+  color: var(--muted); background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 10px; }
+.sc-perm.warn { border-color: var(--bad); }
+.sc-perm .sc-state { flex: 1; min-width: 180px; }
+.sc-perm .sc-state b { color: var(--text); }
+.sc-perm .btn { padding: 7px 12px; font-size: 12px; }

@@ -1,7 +1,12 @@
 package app.locked.themachtin.plugins;
 
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
 import android.util.Log;
 
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -46,5 +51,40 @@ public class WearBridgePlugin extends Plugin {
         } catch (Exception e) {
             call.reject("Uhr-Abgleich fehlgeschlagen: " + e.getMessage());
         }
+    }
+
+    /**
+     * Darf die App sich selbst öffnen, wenn die Uhr etwas schickt?
+     *
+     * Seit Android 10 nur mit „Über anderen Apps anzeigen". Fehlt der Schalter,
+     * kommt der Eintrag als antippbare Benachrichtigung — das funktioniert, ist
+     * aber ein Tipp mehr, und man muss wissen, warum. Deshalb fragt die
+     * Oberfläche hier nach, statt es den Nutzer raten zu lassen.
+     */
+    @PluginMethod
+    public void overlayState(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("granted", darfStarten());
+        call.resolve(ret);
+    }
+
+    /** Direkt auf die Seite mit dem Schalter — suchen muss man ihn sonst lange. */
+    @PluginMethod
+    public void requestOverlay(PluginCall call) {
+        try {
+            Intent i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:" + getContext().getPackageName()));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Einstellung nicht erreichbar: " + e.getMessage());
+        }
+    }
+
+    private boolean darfStarten() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true;
+        try { return Settings.canDrawOverlays(getContext()); }
+        catch (Exception e) { Log.w("Locked", "Overlay-Status unklar", e); return false; }
     }
 }

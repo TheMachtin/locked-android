@@ -11,7 +11,10 @@ import { openFile, saveFile, readJsonFile, backup, exportCsv, exportXlsx } from 
 import { importLegacyData } from '../core/migrate.js';
 import { commandUrl, webCommandUrl, shortcutModels, MAX_SHORTCUTS } from '../core/command.js';
 import { KIND_ORGASM } from '../core/settings.js';
-import { platformName, versionLabel, APP_COMMIT, IS_NATIVE, IS_WEB, WEB_APP_URL } from '../platform.js';
+import {
+  platformName, versionLabel, APP_COMMIT, IS_NATIVE, IS_WEB, WEB_APP_URL,
+  overlayGranted, openOverlaySettings,
+} from '../platform.js';
 
 const $ = id => document.getElementById(id);
 
@@ -71,6 +74,8 @@ function renderShortcuts() {
               data-url="${escapeHtml(commandUrl(m.id))}">Kopieren</button>
     </div>`).join('');
 
+  renderUhrBerechtigung();
+
   const beispiel = (modelle[0] && modelle[0].id) || 'HT';
   const basis = IS_WEB ? (location.origin + location.pathname) : WEB_APP_URL;
   $('shortcutHint').innerHTML = [
@@ -88,6 +93,31 @@ function renderShortcuts() {
       + ' <code>&amp;app=1</code> am Ende der Adresse hält sie offen.',
     `Im Browser dieselbe Anweisung als Parameter: <code>${escapeHtml(webCommandUrl(basis, beispiel))}</code>`,
   ].map(z => `<div style="margin-top:6px">${z}</div>`).join('');
+}
+
+/**
+ * Die eine Berechtigung, die den Unterschied macht.
+ *
+ * Ohne „Über anderen Apps anzeigen" darf die App sich nach einem Kommando von
+ * der Uhr nicht selbst öffnen; der Eintrag kommt dann als Benachrichtigung, die
+ * man antippen muss. Das ist kein Fehler, aber man sieht es nirgends — und den
+ * Schalter in den Systemeinstellungen zu finden ist eine Sucherei. Also: Zustand
+ * hier anzeigen und direkt hinführen.
+ */
+function renderUhrBerechtigung() {
+  const box = $('shortcutPerm');
+  if (!box) return;
+  overlayGranted().then(ok => {
+    if (ok === null) { box.classList.add('hide'); return; }   // nicht das Telefon
+    box.classList.remove('hide');
+    box.classList.toggle('warn', !ok);
+    box.innerHTML = ok
+      ? '<span class="sc-state">✓ Die Uhr darf direkt eintragen</span>'
+      : '<span class="sc-state"><b>Von der Uhr kommt erst eine Rückfrage.</b>'
+        + ' Locked darf sich nicht selbst öffnen, deshalb kommt der Eintrag als'
+        + ' Benachrichtigung zum Antippen. Ein Schalter behebt das.</span>'
+        + '<button class="btn ghost" id="btnOverlay" type="button">Erlauben</button>';
+  });
 }
 
 export function render() {
@@ -149,6 +179,14 @@ export function initDaten() {
       const r = await saveFile();
       showToast(r.method === 'fsa' ? 'In Datei gespeichert' : 'Heruntergeladen');
     } catch (e) { console.error(e); showToast('Speichern fehlgeschlagen', true); }
+  });
+
+  // Auch dieser Knopf entsteht beim Rendern neu.
+  $('shortcutPerm').addEventListener('click', async (e) => {
+    if (!e.target.closest || !e.target.closest('#btnOverlay')) return;
+    const ok = await openOverlaySettings();
+    if (!ok) { showToast('Einstellung nicht erreichbar', true); return; }
+    showToast('Locked in der Liste einschalten, dann zurück');
   });
 
   // Die Liste wird bei jedem Rendern neu gebaut — der Zuhörer sitzt deshalb am

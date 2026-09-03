@@ -196,6 +196,30 @@ export async function publishToWatch(json) {
   catch (e) { console.warn('Uhr-Abgleich fehlgeschlagen', e); return false; }
 }
 
+/**
+ * Darf die App sich selbst in den Vordergrund holen?
+ *
+ * `null` heißt „hier nicht zu beantworten" (Web, Desktop, alte Fassung ohne
+ * Plugin) — das ist etwas anderes als „nein" und muss in der Oberfläche
+ * unterschieden werden.
+ */
+export async function overlayGranted() {
+  const W = CAP().WearBridge;
+  if (!IS_NATIVE || !W || !W.overlayState) return null;
+  try {
+    const r = await W.overlayState();
+    return !!(r && r.granted);
+  } catch (e) { console.warn('Overlay-Status nicht lesbar', e); return null; }
+}
+
+/** Die Systemseite mit dem Schalter öffnen. */
+export async function openOverlaySettings() {
+  const W = CAP().WearBridge;
+  if (!IS_NATIVE || !W || !W.requestOverlay) return false;
+  try { await W.requestOverlay(); return true; }
+  catch (e) { console.warn('Einstellung nicht erreichbar', e); return false; }
+}
+
 // =========================== ZURÜCK-TASTE ===========================
 /** Android-Zurück: erst eine Ebene zurück, dann in den Hintergrund. Ohne
  *  Listener beendet die Taste die App sofort. */
