@@ -142,40 +142,99 @@ ausgelöst wird er unterwegs, ohne hinzusehen — ein Fehlgriff soll deshalb nic
 kosten können. Wer den Orgasmus trotzdem auf die Uhr legen will, baut seine
 Adresse von Hand; angeboten wird sie nicht.
 
-### Von der Galaxy Watch
+### Die Kachel auf der Galaxy Watch
 
-Die ehrliche Lage zuerst: **Samsung hat dafür keinen eigenen Weg.** „Modi und
-Routinen" läuft auf dem Telefon, und was eine Uhr dort auslösen kann, ist
-bestenfalls ein Zifferblattwechsel — kein Öffnen einer App, keine Adresse. Die
-Brücke schlägt eine Automations-App mit Wear-Begleiter; die Uhr tippt sie an,
-das Telefon führt aus.
+Eine Wischbewegung vom Zifferblatt, ein Tipp. Oben auf der Kachel steht, was
+gerade getragen wird, darunter liegen die Modelle als farbige Knöpfe mit ihren
+Anfangsbuchstaben.
+
+**Die Uhr hält dabei nichts fest.** Sie kennt die Modell-Registry, die das
+Telefon herüberschickt, und sie schickt eine Modell-ID zurück — daraus wird
+drüben dieselbe Adresse `locked://log?m=…` wie bei jedem Kurzbefehl. Der Eintrag
+entsteht damit an genau einer Stelle im Programm; eine zweite, die irgendwann
+anders rechnet, kann es gar nicht geben. Aus demselben Grund schreibt kein
+Dienst die Datei direkt: er wüsste nichts von der laufenden WebView und nichts
+vom Sync.
+
+Der Tipp öffnet keine App. `LoadAction` ruft die Kachel erneut auf, sie erkennt
+den Knopf, schickt und zeichnet sich sofort mit der Rückmeldung neu — der
+Bildschirm bleibt, wo er ist. Die eigentliche Bestätigung kommt als
+Benachrichtigung des Telefons und steht damit ohnehin auf der Uhr; bei einem
+Orgasmus mit dem Preis darin.
+
+#### Installieren
+
+Wear-OS-Apps kommen normalerweise aus dem Play Store — für eine App mit einem
+Nutzer wären das zwölf Tester über vierzehn Tage und eine öffentliche
+Store-Seite. Also über ADB, einmal:
+
+**Auf der Uhr**
+
+1. *Einstellungen → Info zur Uhr → Softwareinformationen* → fünfmal auf
+   **Softwareversion** tippen. Die Entwickleroptionen erscheinen.
+2. *Einstellungen → Entwickleroptionen* → **ADB-Debugging** und
+   **Debugging über WLAN** einschalten. Dort stehen IP-Adresse und Port.
+
+**Am PC** (Uhr und PC im selben WLAN, `adb` installiert)
+
+```bash
+adb pair 192.168.1.42:37123     # Port und Code aus „Mit Gerät koppeln"
+adb connect 192.168.1.42:5555   # die Uhr fragt nach — zulassen
+adb devices                     # die Uhr muss dastehen
+adb install -r wear-release.apk # aus dem neuesten Release
+```
+
+**Auf der Uhr**
+
+3. Zifferblatt nach links wischen bis zum **+** → **Locked** als Kachel
+   hinzufügen. In der App-Übersicht steht dieselbe Auswahl mit vollen Namen.
+
+**Am Telefon, einmalig**
+
+4. Locked öffnen — dabei geht die Registry an die Uhr.
+5. *Einstellungen → Apps → Locked →* **Über anderen Apps anzeigen** einschalten.
+
+Punkt 5 ist der unscheinbare: seit Android 10 darf eine App aus dem Hintergrund
+keine Oberfläche starten. Fehlt die Berechtigung, wird das Kommando von der Uhr
+nicht still verschluckt — es kommt als Benachrichtigung, und ein Tipp darauf
+trägt ein. Das ist eine Handlung des Nutzers, die darf. Nur eben einen Tipp
+länger.
+
+Die Uhr-APK muss aus demselben Build stammen wie die des Telefons: der
+Datenkanal von Play Services verbindet nur Apps mit gleicher Anwendungs-ID *und*
+gleicher Signatur. Da beide aus derselben Werkstatt kommen, gilt das automatisch
+— und die Uhr braucht kein Update, solange sich am Protokoll nichts ändert.
+
+#### Wenn die Kachel „Locked am Telefon einmal öffnen" zeigt
+
+Dann hat sie noch keine Registry. Locked am Telefon öffnen und ein paar Sekunden
+warten; die Kachel zieht von allein nach.
+
+### Ohne eigene Uhr-App: über eine Automation
+
+Wer die Uhr-APK nicht aufspielen will, kommt mit einer Automations-App ans
+selbe Ziel — sie löst dieselbe Adresse aus.
 
 | Brücke | Kosten | Aktion am Telefon |
 |---|---|---|
 | MacroDroid + Wear-App | kostenlos (Limit für Makros) | „URL öffnen" |
 | Tasker + AutoWear | einmalig kostenpflichtig | „Browse URL" |
 
-Mit MacroDroid:
-
-1. MacroDroid aufs Telefon, die Wear-OS-Begleit-App auf die Uhr.
-2. Neues Makro, Auslöser **Android Wear** — der Name ist später der Knopf auf
-   der Uhr („Käfig an").
-3. Aktion **Apps → URL öffnen** mit `locked://log?m=HT`.
-4. MacroDroid die Berechtigung geben, im Hintergrund Apps zu starten
-   (Samsung: *Über anderen Apps anzeigen*). Ohne sie passiert bei
-   ausgeschaltetem Bildschirm nichts — Android verbietet den Start sonst.
-5. Auf der Uhr die MacroDroid-Kachel öffnen und antippen.
-
-Die Bestätigung kommt zurück, wo der Befehl herkam: die App meldet den Eintrag
-als Benachrichtigung, und Benachrichtigungen des Telefons stehen auf der Uhr.
-Bei einem Orgasmus steht der Preis darin — die Zahl, die er gerade kostet.
+Mit MacroDroid: neues Makro, Auslöser **Android Wear** (der Name ist später der
+Knopf auf der Uhr), Aktion **Apps → URL öffnen** mit `locked://log?m=HT`. Die
+Berechtigung *Über anderen Apps anzeigen* braucht dann MacroDroid statt Locked —
+der Haken verschwindet nicht, er wandert nur.
 
 ### Was hier absichtlich fehlt
 
-**Eine App auf der Uhr.** Sie wäre der direktere Weg, ließe sich aber nicht
-ausliefern: Wear-OS-Apps kommen über den Play Store oder gar nicht, und dieses
-Projekt verteilt eine APK über GitHub-Releases. Ein Weg, den nur sein Autor
-per ADB installieren kann, ist keiner.
+**Daten auf der Uhr.** Sie könnte den Kontostand zeigen, die Streaks, den Preis
+— dafür bräuchte sie die Datei, also eine eigene OneDrive-Anmeldung auf einem
+Bildschirm von vier Zentimetern, oder eine zweite Kopie der Historie, die mit
+der ersten auseinanderläuft. Die Uhr ist eine Fernbedienung. Das ist keine
+Einschränkung, das ist die Entscheidung.
+
+**Ereignisse mit Preis auf der Kachel.** Das Telefon schickt sie gar nicht erst
+herüber. Ein Knopf ohne Rückfrage, gedrückt ohne hinzusehen, darf nichts kosten.
 
 **Ein stiller Empfänger ohne Oberfläche.** Ein BroadcastReceiver könnte den
 Eintrag schreiben, ohne die App zu zeigen. Er wüsste aber nichts von der
@@ -225,6 +284,9 @@ www/
     platform.js       Android / Desktop / Web an einer Stelle
     shortcuts.js      Kommandos ausführen, Kurzbefehle des Launchers setzen
 electron/             main.js · preload.cjs — die Desktop-Hülle
+native/
+  java/               Capacitor-Plugins und der Empfänger für die Uhr
+  wear/               die Uhr-App: Kachel, Liste, Datenkanal (eigenes APK)
 test/                 node --test, ohne Testframework
 ```
 
@@ -232,7 +294,7 @@ Keine Build-Kette, kein Framework: ES-Module, die der Browser direkt lädt.
 Derselbe Ordner geht unverändert in die APK, in den Installer und nach Pages.
 
 ```bash
-npm test          # 101 Tests, nur Node-Builtins
+npm test          # 104 Tests, nur Node-Builtins
 npm start         # Desktop-App lokal starten
 npm run build:win # Windows-Installer (auf Windows)
 npx serve www     # Web-Version lokal
@@ -293,7 +355,7 @@ eintragen — Handy, PC und Web zeigen nach einem Push also dieselbe Nummer:
 
 | Workflow | Ergebnis |
 |---|---|
-| `build-apk.yml` | signierte APK, als Artefakt und am Release |
+| `build-apk.yml` | signierte APK für Telefon *und* Uhr, als Artefakt und am Release |
 | `build-desktop.yml` | Windows-Installer, portable `.exe`, Linux-AppImage |
 | `deploy-pages.yml` | `www/` nach GitHub Pages |
 

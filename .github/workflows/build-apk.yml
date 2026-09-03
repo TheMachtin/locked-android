@@ -77,7 +77,9 @@ jobs:
           # Uhr-Modul: eigenes APK, gleiche Anwendungs-ID, gleicher Schlüssel
           rm -rf android/wear
           cp -r native/wear android/wear
-          grep -q "include ':wear'" android/settings.gradle || echo "include ':wear'" >> android/settings.gradle
+          # Mit führendem Zeilenumbruch: Capacitors settings.gradle endet ohne einen,
+          # sonst klebt das include an der letzten Zeile („apply from: …include ':wear'").
+          grep -q "include ':wear'" android/settings.gradle || printf "\ninclude ':wear'\n" >> android/settings.gradle
           # Datenkanal zur Uhr braucht Play Services auch auf der Telefon-Seite
           grep -q "play-services-wearable" android/app/build.gradle || cat >> android/app/build.gradle << 'GRADLE_EOF'
 
