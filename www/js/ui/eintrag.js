@@ -16,7 +16,7 @@ import {
 import { dayTimeline } from './charts.js';
 import { isoOf, isoDateAdd, hmOf, eventMs, calendarDaysBetween } from '../core/time.js';
 import { lockPhaseStart, currentOrgasmPrice, regenState, expiredRegenEvents } from '../core/calc.js';
-import { resolveModel, modelMap, KIND_ORGASM } from '../core/settings.js';
+import { resolveModel, modelMap, labelOf, KIND_ORGASM } from '../core/settings.js';
 import { pendingEscalation, escalationEvents } from '../core/escalation.js';
 
 const $ = id => document.getElementById(id);
@@ -175,10 +175,17 @@ function renderHero() {
       cur = ev.type; curZeit = ev.time;
     }
   }
+  const refMs = refTimeFor(iso).getTime();
+  const lock = lockPhaseStart(STATE.data.events, s, refMs);
   const curM = cur ? resolveModel(s, map, cur) : null;
+  // Bei einer laufenden Unterbrechung ist die wichtigere Auskunft, dass die
+  // verschlossene Phase davon unberührt weiterläuft — sonst liest sich
+  // „Modell jetzt: Reinigung" wie ein Abbruch, und genau das ist es nicht.
+  const seit = curM && (curM.locked || curM.pause) ? ` (seit ${curZeit})` : '';
+  const weiter = curM && curM.pause && lock ? ' <span class="hint">— Phase läuft weiter</span>' : '';
   $('currentModel').innerHTML = curM
     ? `<span class="dot" style="background:${curM.color}"></span><span>Modell ${iso === heute() ? 'jetzt' : 'Ende ' + fmtDateShort(iso)}: `
-      + `<b>${escapeHtml(curM.label)}</b>${curM.locked ? ` (seit ${curZeit})` : ''}</span>`
+      + `<b>${escapeHtml(curM.label)}</b>${seit}${weiter}</span>`
     : '';
 
   // Tageszahl
@@ -205,7 +212,7 @@ function renderHero() {
       <div class="trend ${formDelta >= 0 ? 'up' : 'down'}">${formDelta >= 0 ? '▲' : '▼'} ${fmtSigned(formDelta)}</div>
     </div>`;
 
-  renderStreakRow(iso, days, d, s);
+  renderStreakRow(iso, days, d, s, refMs, lock);
   renderPreis(s);
 }
 
@@ -229,6 +236,15 @@ function breakdownHtml(d, s) {
     zeilen.push(zeile(`${escapeHtml(x.m.label)} · ${fmtNum(x.h, 1)} h × ${fmtNum(x.m.rate, 2)}`,
       betrag, betrag >= 0 ? 'plus' : 'minus'));
   }
+  // Eine Unterbrechung hat den Satz 0 und fiele aus der Aufschlüsselung heraus —
+  // zusammen mit der Erklärung, warum der Durchgehend-Bonus trotz abgelegtem
+  // Käfig noch steht.
+  if (d.pauseH > 0.004) {
+    const namen = stunden.filter(x => x.m.pause).map(x => escapeHtml(x.m.label)).join(', ')
+      || 'Unterbrechung';
+    zeilen.push(`<div class="row hint"><span>${namen} · ${fmtNum(d.pauseH, 1)} h`
+      + ` — zählt nicht als offen</span><b>±0</b></div>`);
+  }
   if (d.bonus) {
     zeilen.push(zeile(`Durchgehend verschlossen${d.bonusVorlaeufig ? ' <span class="hint">(vorläufig)</span>' : ''}`,
       d.bonus, 'plus'));
@@ -249,14 +265,12 @@ function zeile(label, betrag, klasse) {
   return `<div class="row ${klasse}"><span>${label}</span><b>${fmtSigned(betrag, Math.abs(betrag) < 10 ? 1 : 0)}</b></div>`;
 }
 
-function renderStreakRow(iso, days, d, s) {
-  const refMs = refTimeFor(iso).getTime();
+function renderStreakRow(iso, days, d, s, refMs, lock) {
   const idx = d ? days.indexOf(d) : -1;
 
   let ofTage = 0;
   for (let i = idx; i >= 0 && days[i].orgasmusfrei; i--) ofTage++;
   const letzterOr = letzterOrgasmusVor(refMs, s);
-  const lock = lockPhaseStart(STATE.data.events, s, refMs);
 
   const eintraege = [
     {
@@ -267,7 +281,13 @@ function renderStreakRow(iso, days, d, s) {
     {
       days: lock ? calendarDaysBetween(lock.ms, refMs) : 0, label: 'Verschlossen',
       ms: lock ? Math.max(0, refMs - lock.ms) : null,
-      since: lock ? `seit ${fmtDateShort(isoOf(new Date(lock.ms)))} ${hmOf(new Date(lock.ms))}` : 'gerade offen',
+      // Läuft gerade eine Unterbrechung, gehört das in die Kachel und nicht in
+      // einen Tooltip — auf dem Telefon gibt es kein Darüberfahren.
+      since: !lock ? 'gerade offen'
+        : `seit ${fmtDateShort(isoOf(new Date(lock.ms)))} ${hmOf(new Date(lock.ms))}`
+          + (lock.paused
+            ? `<br>${escapeHtml(labelOf(s, lock.pauseModel))} seit ${hmOf(new Date(lock.pauseSince))}`
+            : ''),
     },
     {
       days: null, label: 'Multiplikator',

@@ -381,6 +381,11 @@
 .model-edit { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 .model-edit label { font-size: 11px; color: var(--muted); display: block; margin-bottom: 3px; }
 .model-edit .full { grid-column: 1 / -1; }
+/* Drei Verschluss-Zustände nebeneinander: „Unterbrechung" ist das längste Wort
+   und muss auf einem schmalen Telefon noch in sein Drittel passen. */
+.model-edit .seg-opt { font-size: 11px; padding: 7px 2px; line-height: 1.25; }
+/* Erklärende Zeilen im Editor sind Beiwerk und dürfen die Felder nicht überstimmen. */
+.model-edit .sub { font-size: 11px; color: var(--muted); line-height: 1.4; }
 
 /* Einstellungs-Felder */
 .setting { display: grid; grid-template-columns: 1fr 108px; gap: 10px; align-items: center;

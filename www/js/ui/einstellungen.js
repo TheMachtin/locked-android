@@ -17,7 +17,7 @@ import { showToast, confirmAction } from './toast.js';
 import { fmtNum, escapeHtml, fmtDateShort as fmtDate } from './format.js';
 import {
   KIND_MODEL, KIND_ORGASM, idFromLabel, defaultSettings, PALETTE, orgasmPrice,
-  stichtagOf,
+  stichtagOf, lockKind, applyLockKind,
 } from '../core/settings.js';
 import { refreezeLegacy } from '../core/legacy.js';
 import { isoDateAdd } from '../core/time.js';
@@ -39,10 +39,18 @@ function renderModelle() {
     offen = offen === el.dataset.open ? null : el.dataset.open;
     renderModelle();
   }));
-  wrap.querySelectorAll('[data-feld]').forEach(el => {
-    const ereignis = (el.type === 'checkbox' || el.type === 'color') ? 'change' : 'change';
-    el.addEventListener(ereignis, () => feldGeaendert(el));
+  wrap.querySelectorAll('input[data-feld]').forEach(el => {
+    el.addEventListener('change', () => feldGeaendert(el));
   });
+  wrap.querySelectorAll('[data-lockkind] .seg-opt').forEach(el => el.addEventListener('click', () => {
+    const id = el.parentElement.dataset.lockkind;
+    mutateSettings(s2 => {
+      const m = s2.models.find(x => x.id === id);
+      if (m && !m.isOpen) applyLockKind(m, el.dataset.wert);
+    });
+    renderModelle();
+    showToast('Gespeichert');
+  }));
   wrap.querySelectorAll('[data-archivieren]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.archivieren;
     mutateSettings(s2 => {
@@ -67,7 +75,9 @@ function modelRow(m) {
   const badges = [
     m.isOpen ? '<span class="badge">offen-Zustand</span>' : '',
     m.regen ? '<span class="badge">Regeneration</span>' : '',
-    m.kind === KIND_ORGASM ? '<span class="badge">Ereignis</span>' : (m.locked ? '<span class="badge">verschlossen</span>' : ''),
+    m.kind === KIND_ORGASM ? '<span class="badge">Ereignis</span>'
+      : m.locked ? '<span class="badge">verschlossen</span>'
+      : m.pause ? '<span class="badge">Unterbrechung</span>' : '',
     m.archived ? '<span class="badge">archiviert</span>' : '',
   ].join('');
   const sub = m.kind === KIND_ORGASM
@@ -86,11 +96,19 @@ function modelRow(m) {
     + (offen === m.id ? modelEditor(m, anzahl) : '');
 }
 
+/** Die drei Verschluss-Zustände, in der Reihenfolge, in der sie zu erklären sind. */
+const LOCK_WAHL = [
+  { v: 'locked', l: 'Verschlossen',
+    t: 'Zählt als verschlossene Zeit, verdient den Stundensatz und trägt den Durchgehend-Bonus.' },
+  { v: 'pause', l: 'Unterbrechung',
+    t: 'Reinigung und dergleichen: verdient nichts, kostet nichts — und beendet die verschlossene Phase nicht.' },
+  { v: 'open', l: 'Offen',
+    t: 'Zählt als offene Zeit und setzt die verschlossene Phase auf null zurück.' },
+];
+
 function modelEditor(m, anzahl) {
   const feld = (label, id, typ, wert, extra = '') =>
     `<div><label>${label}</label><input type="${typ}" data-feld="${id}" data-id="${m.id}" value="${wert}" ${extra}></div>`;
-  const schalter = (label, id, an) =>
-    `<div><label>${label}</label><button class="toggle ${an ? 'on' : ''}" type="button" data-feld="${id}" data-id="${m.id}" data-wert="${an ? '1' : '0'}">${an ? 'ja' : 'nein'}</button></div>`;
 
   let felder = feld('Bezeichnung', 'label', 'text', escapeHtml(m.label))
     + feld('Farbe', 'color', 'color', m.color);
@@ -98,8 +116,9 @@ function modelEditor(m, anzahl) {
   if (m.kind === KIND_MODEL) {
     felder += feld('Punkte je Stunde', 'rate', 'number', m.rate, 'step="0.05"');
     felder += m.isOpen
-      ? '<div><label>Zählt als verschlossen</label><div class="sub" style="padding-top:8px">nein — das ist der offene Zustand</div></div>'
-      : schalter('Zählt als verschlossen', 'locked', m.locked);
+      ? `<div class="full"><label>Verschluss-Zustand</label>
+          <div class="sub">offen — das ist der offene Zustand und bleibt es</div></div>`
+      : lockWahl(m);
     if (m.regen) {
       felder += feld('Fenster (Stunden)', 'windowH', 'number', m.windowH, 'step="0.5" min="0.5"');
       felder += feld('Sperrfrist (Tage)', 'cooldownD', 'number', m.cooldownD, 'step="1" min="0"');
@@ -122,6 +141,25 @@ function modelEditor(m, anzahl) {
   return `<div class="model-edit">${felder}</div>`;
 }
 
+/**
+ * Die Auswahl aus drei Verschluss-Zuständen.
+ *
+ * Vorher stand hier ein Ja/Nein-Schalter für „zählt als verschlossen". Der ließ
+ * die Unterbrechung gar nicht erst zu: eine Reinigung musste als offen gebucht
+ * werden und riss damit die Phase auf. Die erklärende Zeile darunter steht
+ * bewusst am gewählten Wert — was die Wahl bedeutet, gehört neben die Wahl.
+ */
+function lockWahl(m) {
+  const wert = lockKind(m);
+  const opts = LOCK_WAHL.map(o =>
+    `<div class="seg-opt ${o.v === wert ? 'active' : ''}" data-wert="${o.v}">${o.l}</div>`).join('');
+  const erklaerung = (LOCK_WAHL.find(o => o.v === wert) || LOCK_WAHL[2]).t;
+  return `<div class="full"><label>Verschluss-Zustand</label>
+      <div class="seg" data-lockkind="${escapeHtml(m.id)}">${opts}</div>
+      <div class="sub" style="margin-top:6px">${erklaerung}</div>
+    </div>`;
+}
+
 /** Zeigt die Preiskurve an ein paar Stützstellen — abstrakte Parameter sagen sonst nichts. */
 function preisVorschau(m) {
   return 'Preis nach Wartezeit: ' + [0, 3, 7, 14, 30]
@@ -131,9 +169,7 @@ function preisVorschau(m) {
 function feldGeaendert(el) {
   const id = el.dataset.id;
   const feld = el.dataset.feld;
-  const istSchalter = el.classList.contains('toggle');
-  const wert = istSchalter ? el.dataset.wert !== '1'
-    : (el.type === 'number' ? parseFloat(String(el.value).replace(',', '.')) : el.value);
+  const wert = el.type === 'number' ? parseFloat(String(el.value).replace(',', '.')) : el.value;
   if (el.type === 'number' && !isFinite(wert)) { showToast('Keine gültige Zahl', true); renderModelle(); return; }
 
   let neueId = id;
@@ -141,10 +177,6 @@ function feldGeaendert(el) {
     const m = s.models.find(x => x.id === id);
     if (!m) return;
     m[feld] = wert;
-    // Ein Modell mit positivem Satz, das nicht als verschlossen zählt, wäre
-    // widersprüchlich gemeint — aber erlaubt (etwa eine belohnte Auszeit).
-    // Nur der offene Zustand bleibt zwingend offen.
-    if (m.isOpen) m.locked = false;
     // Solange noch kein Eintrag darauf zeigt, darf die ID dem Namen folgen —
     // „COBRAV" liest sich in CSV und Excel besser als „NEUESM". Sobald Einträge
     // existieren, bleibt sie fest, sonst zeigten alte Tage ins Leere.
@@ -181,7 +213,8 @@ const PUNKT_FELDER = [
     desc: 'Einmal pro Tag, zusätzlich zu den Stunden. Wird ebenfalls mit dem Streak-Multiplikator verrechnet.',
     step: 1 },
   { key: 'bonusMaxOffenH', name: 'Bis zu wie viel offener Zeit der Bonus noch gilt',
-    desc: 'In Stunden. Duschen soll den Tag nicht kosten; ein halber Tag offen schon.', step: 0.5 },
+    desc: 'In Stunden, und gemeint ist wirklich offene Zeit. Für Reinigungspausen gibt es den Verschluss-Zustand „Unterbrechung" — die zählt hier gar nicht erst mit.',
+    step: 0.5 },
   { key: 'streakK', name: 'Multiplikator-Zuwachs je orgasmusfreiem Tag',
     desc: '0,02 heißt: nach 25 Tagen zählt jede Stunde anderthalbfach.', step: 0.005 },
   { key: 'streakCap', name: 'Höchster Multiplikator',
