@@ -2,14 +2,16 @@
  * Daten-Tab: Synchronisation, Dateien, Export, Umzug und Version.
  */
 
-import { STATE, calc, setData, clearSyncBase } from '../state.js';
+import { STATE, calc, setData, clearSyncBase, settings as getSettings } from '../state.js';
 import { showToast, confirmAction } from './toast.js';
 import { fmtDateShort, escapeHtml } from './format.js';
 import { AUTH, CFG, login, logout, isSignedIn } from '../sync/auth.js';
 import { loadFromCloud, saveToCloud, fetchLegacyFile, sanityCheck } from '../sync/onedrive.js';
 import { openFile, saveFile, readJsonFile, backup, exportCsv, exportXlsx } from '../sync/files.js';
 import { importLegacyData } from '../core/migrate.js';
-import { platformName, versionLabel, APP_COMMIT } from '../platform.js';
+import { commandUrl, webCommandUrl, shortcutModels, MAX_SHORTCUTS } from '../core/command.js';
+import { KIND_ORGASM } from '../core/settings.js';
+import { platformName, versionLabel, APP_COMMIT, IS_NATIVE, IS_WEB, WEB_APP_URL } from '../platform.js';
 
 const $ = id => document.getElementById(id);
 
@@ -42,8 +44,54 @@ function renderUmzug() {
   card.classList.toggle('hide', !leer);
 }
 
+/**
+ * Die Kurzbefehle zum Mitnehmen.
+ *
+ * Ohne diese Liste wäre die Kommando-Schnittstelle unbenutzbar: die ID eines
+ * Modells steht sonst nirgends, und genau sie gehört in die Automation. Jede
+ * Zeile ist damit fertig zum Kopieren — der Rest steht in der README.
+ */
+function renderShortcuts() {
+  const s = getSettings();
+  const modelle = s.models.filter(m => !m.archived);
+  const imLauncher = new Set(shortcutModels(s, MAX_SHORTCUTS).map(m => m.id));
+
+  $('shortcutIntro').innerHTML =
+    'Diese Adressen tragen beim Öffnen genau einen Eintrag ein — mit der aktuellen '
+    + 'Uhrzeit, ohne Rückfrage. Sie funktionieren überall, wo sich eine URL hinterlegen '
+    + 'lässt: Startbildschirm, Automations-App, Uhr.';
+
+  $('shortcutList').innerHTML = modelle.map(m => `<div class="sc-row">
+      <span class="dot" style="background:${m.color}"></span>
+      <div class="sc-name">${escapeHtml(m.label)}${m.kind === KIND_ORGASM
+        ? '<span class="sc-tag warn">kostet</span>'
+        : (imLauncher.has(m.id) ? '<span class="sc-tag">im Launcher</span>' : '')}</div>
+      <code class="sc-url">${escapeHtml(commandUrl(m.id))}</code>
+      <button class="btn ghost sc-copy" type="button"
+              data-url="${escapeHtml(commandUrl(m.id))}">Kopieren</button>
+    </div>`).join('');
+
+  const beispiel = (modelle[0] && modelle[0].id) || 'HT';
+  const basis = IS_WEB ? (location.origin + location.pathname) : WEB_APP_URL;
+  $('shortcutHint').innerHTML = [
+    IS_NATIVE
+      ? `<b>Am Telefon:</b> lang auf das App-Symbol — bis zu ${MAX_SHORTCUTS} Zustände liegen`
+        + ' dort schon als Kurzbefehl und lassen sich auf den Startbildschirm ziehen.'
+        + ' Ereignisse mit Preis stehen bewusst nicht dabei: ein Kurzbefehl fragt nicht nach.'
+      : '<b>Am Telefon:</b> die App legt aus den ersten Modellen selbst Kurzbefehle an'
+        + ' (langer Druck auf das App-Symbol).',
+    '<b>Von der Uhr:</b> Samsung hat dafür keinen eigenen Weg — eine Automations-App mit'
+      + ' Wear-Begleiter (MacroDroid, Tasker) löst die Adresse aus. Die Bestätigung kommt'
+      + ' als Benachrichtigung zurück aufs Handgelenk.',
+    'Nach dem Eintrag geht die App von allein wieder in den Hintergrund;'
+      + ' <code>&amp;app=1</code> am Ende der Adresse hält sie offen.',
+    `Im Browser dieselbe Anweisung als Parameter: <code>${escapeHtml(webCommandUrl(basis, beispiel))}</code>`,
+  ].map(z => `<div style="margin-top:6px">${z}</div>`).join('');
+}
+
 export function render() {
   renderAuth();
+  renderShortcuts();
   const v = versionLabel();
   const commit = APP_COMMIT.startsWith('__') ? null : APP_COMMIT;
   $('versionInfo').innerHTML = `<b>Locked v${escapeHtml(v)}</b> · ${platformName()}`
@@ -100,6 +148,22 @@ export function initDaten() {
       const r = await saveFile();
       showToast(r.method === 'fsa' ? 'In Datei gespeichert' : 'Heruntergeladen');
     } catch (e) { console.error(e); showToast('Speichern fehlgeschlagen', true); }
+  });
+
+  // Die Liste wird bei jedem Rendern neu gebaut — der Zuhörer sitzt deshalb am
+  // Behälter und nicht an den Knöpfen.
+  $('shortcutList').addEventListener('click', async (e) => {
+    const btn = e.target.closest && e.target.closest('button[data-url]');
+    if (!btn) return;
+    const url = btn.dataset.url;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('Adresse kopiert');
+    } catch {
+      // Ohne Zwischenablage (alte WebView, unsicherer Kontext) wenigstens zum
+      // Markieren anbieten.
+      window.prompt('Adresse von Hand kopieren:', url);
+    }
   });
 
   $('btnBackup').addEventListener('click', () => { backup(); showToast('Backup heruntergeladen'); });

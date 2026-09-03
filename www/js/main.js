@@ -20,6 +20,7 @@ import {
   refresh, lastSyncAt, isRefreshing, markSynced, setRefreshStateHandler,
 } from './sync/refresh.js';
 import { initPullToRefresh } from './ui/pull.js';
+import * as shortcuts from './shortcuts.js';
 import { pad2 } from './core/time.js';
 import { lastRealInteractionMs } from './core/escalation.js';
 import { settings as getSettings } from './state.js';
@@ -275,6 +276,13 @@ async function start() {
 
   await initAuth();
   if (isSignedIn()) await ladenUndMerken();
+
+  // Kommandos (Shortcut, Automation, Uhr) erst ab hier: sie tragen sofort ein
+  // und speichern sofort — beides soll auf dem geladenen Stand passieren und
+  // nicht auf dem Cache von vorgestern. Ohne `await`, damit ein Kommando ohne
+  // Netz den Rest des Starts nicht aufhält; der Listener steht trotzdem sofort.
+  shortcuts.setEntryHook(reminderNeu);
+  shortcuts.initShortcuts().catch(e => console.error('Kommandos nicht eingerichtet', e));
 
   setupBackButton(() => {
     if (aktiverTab !== 'eintrag') { switchTab('eintrag'); return true; }

@@ -1,0 +1,156 @@
+/**
+ * Kommandos ausführen und Kurzbefehle bereitstellen.
+ *
+ * Was ein Kommando *bedeutet*, steht in `core/command.js`; hier steht, was
+ * daraufhin passiert: eintragen, speichern, melden — und zurück in den
+ * Hintergrund. Die Reihenfolge ist der eigentliche Inhalt dieser Datei.
+ *
+ * Drei Wege führen herein, alle mit derselben Anweisung:
+ *
+ *   Kaltstart      der Shortcut startet die App; die URL steht in `launchUrl()`
+ *   App läuft      Android reicht sie über `appUrlOpen` nach
+ *   Web/Desktop    `?log=…` in der Adresse der Seite
+ *
+ * Gespeichert wird *bevor* die App sich verabschiedet. Eine Automation löst aus,
+ * während das Telefon in der Tasche liegt — wer erst beim nächsten Öffnen
+ * synchronisiert, hat den Eintrag am PC eine halbe Stunde später immer noch
+ * nicht.
+ */
+
+import { STATE, calc, mutate, subscribe, settings as getSettings } from './state.js';
+import { showToast } from './ui/toast.js';
+import { fmtInt } from './ui/format.js';
+import { KIND_ORGASM } from './core/settings.js';
+import {
+  parseCommand, planCommand, shortcutModels, commandUrl, CMD_PARAM, CMD_PARAMS, MAX_SHORTCUTS,
+} from './core/command.js';
+import {
+  IS_NATIVE, onAppUrlOpen, launchUrl, minimizeApp, notifyNow, setLauncherShortcuts,
+} from './platform.js';
+import { autosave } from './sync/onedrive.js';
+
+let onNachEintrag = () => {};
+export function setEntryHook(fn) { onNachEintrag = fn; }
+
+// Derselbe Start kann auf zwei Wegen ankommen (Launch-URL *und* appUrlOpen,
+// je nach Android-Fassung). Der Dublettenschutz in planCommand() fängt den
+// doppelten Eintrag ab; dieses Fenster verhindert zusätzlich die doppelte
+// Meldung.
+const WIEDERHOLFENSTER_MS = 4000;
+let zuletzt = { url: null, ms: 0 };
+
+/**
+ * Ein Kommando ausführen.
+ * @returns {Promise<boolean>} ob die URL überhaupt eins war
+ */
+export async function runCommand(url) {
+  const cmd = parseCommand(url);
+  if (!cmd) return false;
+
+  const jetzt = Date.now();
+  if (zuletzt.url === url && jetzt - zuletzt.ms < WIEDERHOLFENSTER_MS) return true;
+  zuletzt = { url, ms: jetzt };
+
+  const s = getSettings();
+  const plan = planCommand(STATE.data, s, cmd);
+  if (!plan.ok) {
+    showToast(plan.fehler, true);
+    await notifyNow(plan.fehler);
+    return true;
+  }
+  if (plan.doppelt) {
+    showToast(plan.meldung);
+    await abschluss(plan.meldung, cmd);
+    return true;
+  }
+
+  mutate(data => {
+    data.events.push(plan.event);
+    data.events.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  }, { save: false });
+
+  const meldung = plan.model.kind === KIND_ORGASM ? mitPreis(plan) : plan.meldung;
+  showToast(meldung, plan.model.kind === KIND_ORGASM);
+  // Abgewartet, nicht nebenbei: der Haken stellt die Inaktivitäts-Erinnerung neu
+  // und räumt dabei wartende Benachrichtigungen weg. Die Bestätigung unten darf
+  // nicht in dieses Aufräumen geraten.
+  try { await onNachEintrag(); } catch (e) { console.warn('Nach-Eintrag-Haken', e); }
+
+  // Erst speichern, dann verabschieden — in dieser Reihenfolge, sonst schließt
+  // sich die App über einer laufenden Übertragung.
+  try { await autosave(); } catch (e) { console.error('Speichern nach Kommando fehlgeschlagen', e); }
+  await abschluss(meldung, cmd);
+  return true;
+}
+
+/** Der Preis gehört in die Bestätigung: er ist die Zahl, die das Ereignis kostet. */
+function mitPreis(plan) {
+  const tag = calc().byDate[plan.event.date];
+  const treffer = tag && tag.orgasmen
+    && tag.orgasmen.find(o => o.event.time === plan.event.time && o.event.type === plan.event.type);
+  return treffer
+    ? `${plan.model.label} ${plan.event.time} · −${fmtInt(treffer.price)} Punkte`
+    : plan.meldung;
+}
+
+/**
+ * Melden und aus dem Weg gehen.
+ *
+ * Die Benachrichtigung ist nicht Zierrat: sie ist auf Android der einzige Weg,
+ * eine Bestätigung an die Uhr zu bringen. `app=1` in der URL hält die App
+ * stattdessen offen — für den Fall, dass man doch gleich weiterarbeiten will.
+ */
+async function abschluss(meldung, cmd) {
+  await notifyNow(meldung);
+  if (IS_NATIVE && !cmd.zeigen) minimizeApp();
+}
+
+// =========================== LAUNCHER-SHORTCUTS ===========================
+let letzteKennung = '';
+
+/** Die Kurzbefehle des Launchers der Registry nachziehen. */
+export function syncLauncherShortcuts(settings) {
+  if (!IS_NATIVE) return;
+  const liste = shortcutModels(settings, MAX_SHORTCUTS);
+  const kennung = JSON.stringify(liste.map(m => [m.id, m.label, m.color]));
+  if (kennung === letzteKennung) return;
+  letzteKennung = kennung;
+  setLauncherShortcuts(liste.map(m => ({
+    id: m.id,
+    label: m.label,
+    kurz: m.label.length > 12 ? m.label.slice(0, 11) + '…' : m.label,
+    url: commandUrl(m.id),
+    color: m.color,
+  })));
+}
+
+// =========================== AUFBAU ===========================
+/**
+ * Anbinden. Wird aus `main.js` aufgerufen, *nachdem* der Cloud-Stand geladen
+ * ist: ein Kommando schreibt sofort und soll nicht gegen einen veralteten Stand
+ * laufen.
+ */
+export async function initShortcuts() {
+  onAppUrlOpen(url => {
+    runCommand(url).catch(e => console.error('Kommando fehlgeschlagen', e));
+  });
+
+  syncLauncherShortcuts(getSettings());
+  subscribe(() => syncLauncherShortcuts(getSettings()));
+
+  // Web und Desktop: der Befehl steht in der Adresse. Danach wird er entfernt —
+  // sonst trüge ein Neuladen (oder ein Lesezeichen auf die aktuelle Seite) ihn
+  // ein zweites Mal ein.
+  if (!IS_NATIVE && typeof location !== 'undefined' && location.search.includes(CMD_PARAM + '=')) {
+    const adresse = location.href;
+    if (parseCommand(adresse)) {
+      const sauber = new URL(adresse);
+      for (const name of CMD_PARAMS) sauber.searchParams.delete(name);
+      history.replaceState(null, '', sauber.pathname + sauber.search + sauber.hash);
+      await runCommand(adresse);
+    }
+  }
+
+  const start = await launchUrl();
+  if (start) await runCommand(start);
+}

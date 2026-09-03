@@ -433,3 +433,21 @@
 
 .model-row .badge { white-space: nowrap; }
 .model-row .name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+
+/* ==================== Kurzbefehle (Daten-Tab) ==================== */
+/* Je Modell eine Zeile: Farbe, Name, die fertige Adresse, ein Knopf. Die
+   Adresse steht in einer eigenen Zeile — sie ist zu lang für eine Spalte und
+   soll ganz lesbar sein, nicht abgeschnitten. */
+.sc-list { margin-top: 10px; }
+.sc-row { display: grid; grid-template-columns: 10px 1fr auto; gap: 4px 8px;
+  align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.sc-row:last-child { border-bottom: none; }
+.sc-row .dot { grid-area: 1 / 1; width: 10px; height: 10px; border-radius: 50%; }
+.sc-name { grid-area: 1 / 2; font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sc-copy { grid-area: 1 / 3; padding: 6px 10px; font-size: 12px; }
+.sc-url { grid-area: 2 / 2 / auto / -1; font-size: 11px; color: var(--muted);
+  overflow-wrap: anywhere; }
+.sc-tag { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px;
+  color: var(--accent); background: var(--accent-dim); border-radius: 5px; padding: 1px 5px; }
+.sc-tag.warn { color: #fecaca; background: var(--danger-dim); }

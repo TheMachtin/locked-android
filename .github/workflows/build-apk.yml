@@ -65,11 +65,12 @@ jobs:
       - name: Sync web assets to native
         run: npx cap sync android
 
-      - name: Install AppInstaller plugin + FileProvider (native)
+      - name: Install native plugins + FileProvider
         run: |
           # Java-Klassen kopieren
           mkdir -p android/app/src/main/java/app/locked/themachtin/plugins
           cp native/java/AppInstallerPlugin.java android/app/src/main/java/app/locked/themachtin/plugins/
+          cp native/java/ShortcutsPlugin.java android/app/src/main/java/app/locked/themachtin/plugins/
           cp native/java/MainActivity.java android/app/src/main/java/app/locked/themachtin/MainActivity.java
           # FileProvider Paths-XML
           mkdir -p android/app/src/main/res/xml
@@ -93,20 +94,26 @@ jobs:
                     '                android:resource="@xml/file_provider_paths" />\n'
                     '        </provider>\n')
               c = c.replace('</application>', fp + '    </application>', 1)
-          # OAuth-Rücksprung aus dem System-Browser: locked://auth
-          if 'android:scheme="locked"' not in c:
+          # Eigenes Schema: locked://auth ist der OAuth-Rücksprung aus dem
+          # System-Browser, locked://log das Kommando eines Shortcuts oder einer
+          # Automation (siehe www/js/core/command.js).
+          def add_filter(c, host):
+              if f'android:host="{host}"' in c: return c
               flt = ('            <intent-filter>\n'
                      '                <action android:name="android.intent.action.VIEW" />\n'
                      '                <category android:name="android.intent.category.DEFAULT" />\n'
                      '                <category android:name="android.intent.category.BROWSABLE" />\n'
-                     '                <data android:scheme="locked" android:host="auth" />\n'
+                     f'                <data android:scheme="locked" android:host="{host}" />\n'
                      '            </intent-filter>\n')
               # erstes </activity> = MainActivity; Einrückung des Tags übernehmen
               m = re.search(r'\n([ \t]*)</activity>', c)
               assert m, 'kein </activity> im Manifest'
-              c = c[:m.start()] + '\n' + flt + m.group(1) + '</activity>' + c[m.end():]
+              return c[:m.start()] + '\n' + flt + m.group(1) + '</activity>' + c[m.end():]
+          c = add_filter(c, 'auth')
+          c = add_filter(c, 'log')
           with open(p, 'w') as f: f.write(c)
-          for needle in ('REQUEST_INSTALL_PACKAGES', 'FileProvider', 'android:scheme="locked"'):
+          for needle in ('REQUEST_INSTALL_PACKAGES', 'FileProvider',
+                         'android:host="auth"', 'android:host="log"'):
               assert needle in c, f'Manifest-Patch fehlgeschlagen: {needle}'
           print('Manifest patched OK')
           PY

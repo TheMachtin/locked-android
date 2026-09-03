@@ -22,6 +22,8 @@ export function platformName() {
 }
 
 export const RELEASE_REPO = 'TheMachtin/locked-android';
+/** Die Web-Fassung — als Adresse für Kurzbefehle, die keine App voraussetzen. */
+export const WEB_APP_URL = 'https://themachtin.github.io/locked-android/';
 
 // =========================== DATEIABLAGE ===========================
 // Android: eine echte Datei im app-privaten Speicher. Sie überlebt App-Updates,
@@ -137,6 +139,46 @@ export async function scheduleReminder(firstAt, text) {
   } catch (e) { console.warn('Reminder konnte nicht gesetzt werden', e); }
 }
 
+/**
+ * Eine Meldung, die sofort erscheint.
+ *
+ * Der Weg zurück ans Handgelenk: eine Benachrichtigung des Telefons steht auf
+ * der Uhr. Ein Kommando, das von dort ausgelöst wurde, bestätigt sich damit
+ * dort, wo es abgeschickt wurde — der Bildschirm des Telefons ist in dem Moment
+ * niemandes Blickfeld.
+ */
+export async function notifyNow(text, id) {
+  if (!IS_NATIVE) return false;
+  const LN = CAP().LocalNotifications;
+  if (!LN) return false;
+  try {
+    const perm = await LN.checkPermissions();
+    if (perm.display !== 'granted') {
+      const r = await LN.requestPermissions();
+      if (r.display !== 'granted') return false;
+    }
+    await LN.schedule({ notifications: [{ id: id || 7001, title: 'Locked', body: text }] });
+    return true;
+  } catch (e) { console.warn('Meldung konnte nicht gezeigt werden', e); return false; }
+}
+
+// =========================== LAUNCHER-SHORTCUTS ===========================
+/**
+ * Die Kurzbefehle des Launchers setzen (langer Druck auf das App-Symbol).
+ *
+ * Sie kommen aus der Modell-Registry und nicht aus einer XML-Datei im Build:
+ * Modelle sind Daten, ein neuer Käfig ist ein Eintrag und kein Release — das
+ * gilt hier genauso wie für die Schnelltasten.
+ *
+ * @param {Array<{id,label,kurz,url,color}>} items
+ */
+export async function setLauncherShortcuts(items) {
+  const S = CAP().Shortcuts;
+  if (!IS_NATIVE || !S || !S.set) return false;
+  try { await S.set({ items }); return true; }
+  catch (e) { console.warn('Shortcuts konnten nicht gesetzt werden', e); return false; }
+}
+
 // =========================== ZURÜCK-TASTE ===========================
 /** Android-Zurück: erst eine Ebene zurück, dann in den Hintergrund. Ohne
  *  Listener beendet die Taste die App sofort. */
@@ -148,6 +190,30 @@ export function setupBackButton(onBack) {
 function minimize(App) {
   if (App.minimizeApp) App.minimizeApp();
   else if (App.exitApp) App.exitApp();
+}
+
+/**
+ * Die App in den Hintergrund schicken.
+ *
+ * Für Kommandos von außen: wer am Handgelenk tippt, will das Telefon nicht
+ * danach mit einer offenen App in der Tasche haben.
+ */
+export function minimizeApp() {
+  const App = CAP().App;
+  if (!IS_NATIVE || !App) return;
+  minimize(App);
+}
+
+/** Die URL, mit der die App gestartet wurde — `null`, wenn sie normal geöffnet
+ *  wurde. Ein Kaltstart über einen Shortcut kommt hier an, nicht über
+ *  `onAppUrlOpen()`: den Listener gibt es beim Start noch nicht. */
+export async function launchUrl() {
+  const App = CAP().App;
+  if (!IS_NATIVE || !App || !App.getLaunchUrl) return null;
+  try {
+    const r = await App.getLaunchUrl();
+    return (r && r.url) || null;
+  } catch { return null; }
 }
 
 /** Rücksprung aus dem System-Browser (locked://auth?...) */

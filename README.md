@@ -91,6 +91,99 @@ Solange kein Eintrag auf ein Modell zeigt, folgt seine interne ID dem Namen
 („Cobra Variante A" → `COBRAV`). Sobald Einträge existieren, bleibt sie fest und
 das Modell lässt sich nur noch archivieren — sonst zeigten alte Tage ins Leere.
 
+## Eintragen, ohne die App zu öffnen
+
+Ein Eintrag ist ein Zeitpunkt und ein Modell. Dafür das Telefon zu entsperren,
+die App zu suchen, den richtigen Tab abzuwarten und eine Taste zu halten, ist
+viel Weg für wenig Inhalt — besonders in dem Moment, in dem der Käfig gerade
+zugeht. Jedes Modell hat deshalb eine Adresse:
+
+```
+locked://log?m=HT
+```
+
+Wer sie öffnet, hat eingetragen: aktuelle Uhrzeit, aktuelles Datum, keine
+Rückfrage. Die App speichert nach OneDrive, meldet den Eintrag als
+Benachrichtigung und geht wieder in den Hintergrund — das Telefon bleibt, wo es
+war.
+
+| Parameter | Bedeutung | Standard |
+|---|---|---|
+| `m` | Modell: ID (`HT`) oder Name (`Holy Trainer`) | — |
+| `t` | Uhrzeit `HH:MM` | jetzt |
+| `d` | Datum `YYYY-MM-DD`, `-1`, `gestern` | heute |
+| `app` | die App offen lassen statt sie zu schließen | aus |
+
+Die ID steht in der App unter **Daten → Kurzbefehle**, je Modell eine fertige
+Adresse zum Kopieren. Der Name tut es auch — die ID ist nur die stabilere
+Angabe, weil sie sich beim Umbenennen nicht ändert.
+
+Dieselbe Anweisung nimmt die Web-App als Parameter der Seite entgegen:
+`https://themachtin.github.io/locked-android/?log=HT`. Ein Lesezeichen genügt.
+
+**Zweimal ausgelöst ist einmal eingetragen.** Ein Fehlgriff, eine hängende
+Automation, ein zweiter Tastendruck: derselbe Eintrag in derselben Minute wird
+nicht doppelt geschrieben, sondern gemeldet. Alles andere wäre am Handgelenk
+nicht von Erfolg zu unterscheiden.
+
+### Am Startbildschirm
+
+Langer Druck auf das App-Symbol zeigt die Zustände als Kurzbefehle; jeder lässt
+sich einzeln auf den Startbildschirm ziehen. Sie stehen nicht im Build, sondern
+kommen aus der Registry — ein neuer Käfig erscheint dort, sobald er in **Regeln**
+angelegt ist, mit seiner Farbe und seinen Anfangsbuchstaben.
+
+Android zeigt vier bis fünf davon. Ist die Liste länger, bleibt der offene
+Zustand trotzdem dabei: eine Auswahl aus lauter Käfigen ohne den Weg heraus wäre
+die Hälfte der Wahrheit.
+
+**Ereignisse mit Preis sind nicht dabei.** Ein Kurzbefehl fragt nicht nach, und
+ausgelöst wird er unterwegs, ohne hinzusehen — ein Fehlgriff soll deshalb nichts
+kosten können. Wer den Orgasmus trotzdem auf die Uhr legen will, baut seine
+Adresse von Hand; angeboten wird sie nicht.
+
+### Von der Galaxy Watch
+
+Die ehrliche Lage zuerst: **Samsung hat dafür keinen eigenen Weg.** „Modi und
+Routinen" läuft auf dem Telefon, und was eine Uhr dort auslösen kann, ist
+bestenfalls ein Zifferblattwechsel — kein Öffnen einer App, keine Adresse. Die
+Brücke schlägt eine Automations-App mit Wear-Begleiter; die Uhr tippt sie an,
+das Telefon führt aus.
+
+| Brücke | Kosten | Aktion am Telefon |
+|---|---|---|
+| MacroDroid + Wear-App | kostenlos (Limit für Makros) | „URL öffnen" |
+| Tasker + AutoWear | einmalig kostenpflichtig | „Browse URL" |
+
+Mit MacroDroid:
+
+1. MacroDroid aufs Telefon, die Wear-OS-Begleit-App auf die Uhr.
+2. Neues Makro, Auslöser **Android Wear** — der Name ist später der Knopf auf
+   der Uhr („Käfig an").
+3. Aktion **Apps → URL öffnen** mit `locked://log?m=HT`.
+4. MacroDroid die Berechtigung geben, im Hintergrund Apps zu starten
+   (Samsung: *Über anderen Apps anzeigen*). Ohne sie passiert bei
+   ausgeschaltetem Bildschirm nichts — Android verbietet den Start sonst.
+5. Auf der Uhr die MacroDroid-Kachel öffnen und antippen.
+
+Die Bestätigung kommt zurück, wo der Befehl herkam: die App meldet den Eintrag
+als Benachrichtigung, und Benachrichtigungen des Telefons stehen auf der Uhr.
+Bei einem Orgasmus steht der Preis darin — die Zahl, die er gerade kostet.
+
+### Was hier absichtlich fehlt
+
+**Eine App auf der Uhr.** Sie wäre der direktere Weg, ließe sich aber nicht
+ausliefern: Wear-OS-Apps kommen über den Play Store oder gar nicht, und dieses
+Projekt verteilt eine APK über GitHub-Releases. Ein Weg, den nur sein Autor
+per ADB installieren kann, ist keiner.
+
+**Ein stiller Empfänger ohne Oberfläche.** Ein BroadcastReceiver könnte den
+Eintrag schreiben, ohne die App zu zeigen. Er wüsste aber nichts von der
+laufenden WebView und nichts vom Sync — der nächste Speichervorgang der App
+überschriebe ihn, und der Fehler fiele erst am PC auf. Der Umweg über die
+sichtbare App ist eine Sekunde langsamer und dafür dieselbe Wahrheit wie jeder
+andere Eintrag.
+
 ## Der Umstieg von 1.x
 
 Beim ersten Start rechnet `www/js/core/legacy.js` die alte Formel ein letztes Mal
@@ -125,10 +218,12 @@ www/
       migrate.js      1.x → 2.0, Stichtag, Archiv
       merge.js        Drei-Wege-Merge für den Sync
       escalation.js   Inaktivitäts-Vorschläge
+      command.js      Kommandos aus einer URL: lesen, auflösen, planen
     sync/             auth.js · onedrive.js · files.js
     ui/               eintrag · dashboard · einstellungen · daten · charts
     state.js          zentraler Zustand, alle Änderungen über mutate()
     platform.js       Android / Desktop / Web an einer Stelle
+    shortcuts.js      Kommandos ausführen, Kurzbefehle des Launchers setzen
 electron/             main.js · preload.cjs — die Desktop-Hülle
 test/                 node --test, ohne Testframework
 ```
@@ -137,7 +232,7 @@ Keine Build-Kette, kein Framework: ES-Module, die der Browser direkt lädt.
 Derselbe Ordner geht unverändert in die APK, in den Installer und nach Pages.
 
 ```bash
-npm test          # 65 Tests, nur Node-Builtins
+npm test          # 101 Tests, nur Node-Builtins
 npm start         # Desktop-App lokal starten
 npm run build:win # Windows-Installer (auf Windows)
 npx serve www     # Web-Version lokal
