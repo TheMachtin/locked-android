@@ -98,6 +98,12 @@ jobs:
           if 'REQUEST_INSTALL_PACKAGES' not in c:
               c = c.replace('<application',
                   '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <application', 1)
+          # Ohne diese Deklaration listet Android die App unter „Über anderen Apps
+          # anzeigen" gar nicht auf — und ohne den Schalter dort darf ein Kommando
+          # von der Uhr die App nicht aus dem Hintergrund öffnen.
+          if 'SYSTEM_ALERT_WINDOW' not in c:
+              c = c.replace('<application',
+                  '<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />\n    <application', 1)
           if 'FileProvider' not in c:
               fp = ('        <provider\n'
                     '            android:name="androidx.core.content.FileProvider"\n'
@@ -138,8 +144,8 @@ jobs:
           c = add_filter(c, 'auth')
           c = add_filter(c, 'log')
           with open(p, 'w') as f: f.write(c)
-          for needle in ('REQUEST_INSTALL_PACKAGES', 'FileProvider', 'WearCommandService',
-                         'android:host="auth"', 'android:host="log"'):
+          for needle in ('REQUEST_INSTALL_PACKAGES', 'SYSTEM_ALERT_WINDOW', 'FileProvider',
+                         'WearCommandService', 'android:host="auth"', 'android:host="log"'):
               assert needle in c, f'Manifest-Patch fehlgeschlagen: {needle}'
           print('Manifest patched OK')
           PY
