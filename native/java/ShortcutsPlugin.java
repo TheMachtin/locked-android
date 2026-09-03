@@ -88,7 +88,8 @@ public class ShortcutsPlugin extends Plugin {
         return new ShortcutInfoCompat.Builder(ctx, "modell-" + id)
             .setShortLabel(kurz)
             .setLongLabel(label)
-            .setIcon(IconCompat.createWithAdaptiveBitmap(symbol(farbe(o.optString("color", "")), label)))
+            .setIcon(IconCompat.createWithAdaptiveBitmap(
+                symbol(farbe(o.optString("color", "")), o.optString("initialen", ""), label)))
             .setRank(rang)
             .setIntent(intent)
             .build();
@@ -106,12 +107,14 @@ public class ShortcutsPlugin extends Plugin {
      * die Fläche füllt also das ganze Bitmap — sichtbar ist je nach Launcher nur
      * der mittlere Ausschnitt, und dort steht die Schrift.
      */
-    private static Bitmap symbol(int farbe, String label) {
+    private static Bitmap symbol(int farbe, String vorgabe, String label) {
         Bitmap bmp = Bitmap.createBitmap(ICON_PX, ICON_PX, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         c.drawColor(farbe);
 
-        String txt = initialen(label);
+        // Das Kürzel kommt aus der Web-Seite, damit Uhr und Startbildschirm
+        // dasselbe zeigen; fehlt es, leitet diese Klasse es selbst ab.
+        String txt = (vorgabe == null || vorgabe.isEmpty()) ? initialen(label) : vorgabe;
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         p.setColor(kontrast(farbe));
         p.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
