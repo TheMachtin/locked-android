@@ -40,7 +40,7 @@ jobs:
         run: |
           # Anzahl der Commits als versionCode; Kurz-Hash als Suffix
           CODE=$(git rev-list --count HEAD)
-          NAME="2.0.${CODE}"
+          NAME="2.1.${CODE}"
           HASH=$(git rev-parse --short HEAD)
           echo "code=$CODE" >> $GITHUB_OUTPUT
           echo "name=$NAME" >> $GITHUB_OUTPUT
