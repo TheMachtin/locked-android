@@ -162,43 +162,59 @@ Bildschirm bleibt, wo er ist. Die eigentliche Bestätigung kommt als
 Benachrichtigung des Telefons und steht damit ohnehin auf der Uhr; bei einem
 Orgasmus mit dem Preis darin.
 
-#### Installieren
+#### Installieren — ein PC ist nicht nötig
 
-Wear-OS-Apps kommen normalerweise aus dem Play Store — für eine App mit einem
+Wear-OS-Apps kommen normalerweise aus dem Play Store; für eine App mit einem
 Nutzer wären das zwölf Tester über vierzehn Tage und eine öffentliche
-Store-Seite. Also über ADB, einmal:
+Store-Seite. Bleibt der Weg über ADB — und den kann das Telefon selbst gehen.
 
-**Auf der Uhr**
+**1. Auf der Uhr: Entwicklermodus**
 
-1. *Einstellungen → Info zur Uhr → Softwareinformationen* → fünfmal auf
-   **Softwareversion** tippen. Die Entwickleroptionen erscheinen.
-2. *Einstellungen → Entwickleroptionen* → **ADB-Debugging** und
-   **Debugging über WLAN** einschalten. Dort stehen IP-Adresse und Port.
+- *Einstellungen → Info zur Uhr → Softwareinformationen* → fünfmal auf
+  **Softwareversion** tippen.
+- *Einstellungen → Entwickleroptionen* → **ADB-Debugging** an, dann
+  **Drahtloses Debugging** an. Dort stehen IP-Adresse und Port; unter
+  **Neues Gerät koppeln** erscheinen Kopplungscode und ein *zweiter*, eigener
+  Kopplungs-Port. Die beiden Ports sind nicht derselbe — das ist die häufigste
+  Stolperstelle.
 
-**Am PC** (Uhr und PC im selben WLAN, `adb` installiert)
+**2. Am Telefon: die APK holen**
+
+`wear-release.apk` aus dem neuesten [Release](https://github.com/TheMachtin/locked-android/releases)
+herunterladen. Sie darf im Download-Ordner liegen bleiben.
+
+**3. Am Telefon: aufspielen**
+
+Mit **Wear Installer 2** (kostenlos im Play Store; es gibt auch *Bugjaeger*,
+gleiches Prinzip): Uhr und Telefon im selben WLAN, dann in der App den
+Kopplungscode samt IP und Kopplungs-Port eintragen, danach mit IP und dem
+regulären Port verbinden. Anschließend **APK vom Gerät installieren** und die
+heruntergeladene Datei auswählen. Gekoppelt wird nur einmal; beim nächsten Mal
+genügt das Verbinden.
+
+Wer lieber am PC arbeitet, tut dasselbe mit `adb` — Uhr und PC im selben WLAN:
 
 ```bash
-adb pair 192.168.1.42:37123     # Port und Code aus „Mit Gerät koppeln"
-adb connect 192.168.1.42:5555   # die Uhr fragt nach — zulassen
-adb devices                     # die Uhr muss dastehen
-adb install -r wear-release.apk # aus dem neuesten Release
+adb pair 192.168.1.42:37123     # Kopplungs-Port und Code aus „Neues Gerät koppeln"
+adb connect 192.168.1.42:5555   # der Port aus „Drahtloses Debugging"
+adb install -r wear-release.apk
 ```
 
-**Auf der Uhr**
+**4. Auf der Uhr: Kachel hinzufügen**
 
-3. Zifferblatt nach links wischen bis zum **+** → **Locked** als Kachel
-   hinzufügen. In der App-Übersicht steht dieselbe Auswahl mit vollen Namen.
+Zifferblatt nach links wischen bis zum **+** → **Locked**. In der App-Übersicht
+steht dieselbe Auswahl mit vollen Namen.
 
-**Am Telefon, einmalig**
+**5. Am Telefon, einmalig**
 
-4. Locked öffnen — dabei geht die Registry an die Uhr.
-5. *Einstellungen → Apps → Locked →* **Über anderen Apps anzeigen** einschalten.
+- Locked öffnen — dabei geht die Registry an die Uhr.
+- *Einstellungen → Apps → Locked →* **Über anderen Apps anzeigen** einschalten.
 
-Punkt 5 ist der unscheinbare: seit Android 10 darf eine App aus dem Hintergrund
-keine Oberfläche starten. Fehlt die Berechtigung, wird das Kommando von der Uhr
-nicht still verschluckt — es kommt als Benachrichtigung, und ein Tipp darauf
-trägt ein. Das ist eine Handlung des Nutzers, die darf. Nur eben einen Tipp
-länger.
+Der letzte Punkt ist der unscheinbare: seit Android 10 darf eine App aus dem
+Hintergrund keine Oberfläche starten. Fehlt die Berechtigung, wird das Kommando
+von der Uhr nicht still verschluckt — es kommt als Benachrichtigung, und ein
+Tipp darauf trägt ein. Das ist eine Handlung des Nutzers, die darf. Nur eben
+einen Tipp länger.
 
 Die Uhr-APK muss aus demselben Build stammen wie die des Telefons: der
 Datenkanal von Play Services verbindet nur Apps mit gleicher Anwendungs-ID *und*
