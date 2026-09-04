@@ -276,25 +276,177 @@ export function initialen(label) {
   return (eins.slice(0, 2) || '•').toUpperCase();
 }
 
+/** Die ersten zwei Zeichen einer ID — „CLEAN" → „CL". */
+function idKurz(id) {
+  return String(id || '').replace(/[^\p{L}\p{N}]/gu, '').slice(0, 2).toUpperCase();
+}
+
+/**
+ * Steht die ID noch für den Namen — kommen ihre Zeichen der Reihe nach darin vor?
+ *
+ * „NS" passt zu „Neosteel", „HT" zu „Holy Trainer". „KK" passt zu „Nicht
+ * verschlossen" nicht, und nach einer Umbenennung von „Neosteel" zu „Stahl"
+ * passt „NS" auch nicht mehr — dann ist der Name die ehrlichere Auskunft.
+ */
+function passtZumNamen(id, label) {
+  const name = String(label || '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  let ab = 0;
+  for (const zeichen of String(id || '').toLowerCase()) {
+    const treffer = name.indexOf(zeichen, ab);
+    if (treffer < 0) return false;
+    ab = treffer + 1;
+  }
+  return true;
+}
+
+/**
+ * Das Kürzel *eines* Modells — die ID, solange sie zum Namen passt.
+ *
+ * Der Knopf schickt eine ID (`locked://log?m=NS`), und dieselbe ID steht in den
+ * Kurzbefehlen, in einer Automation und in der Adresse zum Kopieren. Zeigte der
+ * Knopf daneben ein aus dem Namen gerechnetes „NE", gäbe es für dasselbe Modell
+ * zwei Kürzel — eins zum Lesen und eins zum Tippen. Deshalb gewinnt die ID,
+ * wenn sie kurz genug ist *und* noch zum Namen passt; sonst der Name, der nach
+ * einer Umbenennung als einziger stimmt.
+ */
+export function kuerzel(model) {
+  const id = String((model && model.id) || '');
+  const label = (model && model.label) || id;
+  const kurz = idKurz(id);
+  const ganz = id.replace(/[^\p{L}\p{N}]/gu, '').length;
+  if (kurz && kurz.length === ganz && passtZumNamen(id, label)) return kurz;
+  return initialen(label);
+}
+
+/**
+ * Kürzel für die ganze Registry — je Modell eins, und keins zweimal.
+ *
+ * „Regeneration" und „Reinigung" ergeben beide „RE": zwei Knöpfe, die gleich
+ * aussehen und Verschiedenes tun. Am Handgelenk, ohne hinzusehen, ist das der
+ * eine Fehlgriff, den die Kachel nicht anbieten darf. Wer zuerst in der Registry
+ * steht, behält sein Kürzel; für den zweiten sucht die Leiter unten das nächste
+ * freie — „Reinigung" wird über seine ID `CLEAN` zu „CL".
+ *
+ * Gerechnet wird über die *ganze* Registry, nicht über die Auswahl, die gerade
+ * auf einen Bildschirm passt: sonst hieße dasselbe Modell auf der Uhr anders als
+ * am Startbildschirm, je nachdem, wer sonst noch mitfährt.
+ */
+export function kuerzelMap(settings) {
+  const aktive = ((settings && settings.models) || []).filter(m => !m.archived);
+  const belegt = new Set();
+  const out = {};
+  for (const m of aktive) {
+    for (const kandidat of kuerzelLeiter(m)) {
+      if (!kandidat || belegt.has(kandidat)) continue;
+      belegt.add(kandidat);
+      out[m.id] = kandidat;
+      break;
+    }
+  }
+  return out;
+}
+
+/** Kürzel-Vorschläge für ein Modell, vom besten abwärts. Der letzte ist immer frei. */
+function* kuerzelLeiter(model) {
+  const label = String((model && model.label) || (model && model.id) || '');
+  yield kuerzel(model);
+  yield idKurz(model && model.id);
+  yield initialen(label);
+  // Erster Buchstabe plus ein weiterer aus dem Namen: „Reinigung" → RE, RI, RN, …
+  const zeichen = label.toUpperCase().replace(/[^\p{L}\p{N}]/gu, '');
+  for (let i = 1; i < zeichen.length; i++) yield zeichen[0] + zeichen[i];
+  for (let i = 2; i <= 9; i++) yield (zeichen[0] || '•') + i;
+}
+
+/** Zeitraum, über den die Nutzung eines Modells für die Kachel zählt. */
+export const TILE_USAGE_DAYS = 90;
+
+/**
+ * Welche Modelle auf die Kachel kommen.
+ *
+ * Die Kachel hat weniger Platz als der Startbildschirm Geduld, deshalb entscheidet
+ * sie schärfer als `shortcutModels()`:
+ *
+ * **Der getragene Zustand fehlt.** Sein Knopf setzt den Zustand auf den Zustand —
+ * er kostet nur den Platz eines Knopfes, der etwas ändern könnte. Wer ohnehin im
+ * Käfig ist, braucht den Käfig nicht anzutippen; was er trägt, steht als Zeile
+ * darüber. Nebenbei wird der Knopf dadurch größer: MultiButtonLayout zeichnet
+ * weniger Knöpfe größer, und drei Knöpfe trifft man unterwegs besser als vier.
+ *
+ * **Der Ausweg bleibt gesetzt.** Der offene Zustand bekommt notfalls den letzten
+ * Platz — außer er ist gerade selbst der getragene, dann braucht ihn niemand.
+ *
+ * **Käfige vor Reinigung und Regeneration.** Wer mehr Modelle führt, als auf ein
+ * Zifferblatt passen, will die tragen können; die Nebenzustände sind der Rest.
+ * Innerhalb beider Klassen entscheidet, wie oft ein Modell zuletzt gebraucht
+ * wurde — die Historie liegt auf dem Telefon, die Uhr muss davon nichts wissen.
+ *
+ * Gezeichnet wird am Ende in Registry-Reihenfolge: welcher Knopf wo liegt, soll
+ * sich nicht mit der Nutzung verschieben, sonst lernt man die Kachel nie.
+ */
+export function tileModels(data, settings, max, jetztId, refMs) {
+  const grenze = Math.max(1, max || MAX_TILE_BUTTONS);
+  const kandidaten = settings.models.filter(m => m.kind === KIND_MODEL && !m.archived);
+  const waehlbar = kandidaten.filter(m => m.id !== jetztId);
+  const genutzt = nutzung(data, refMs);
+
+  const rang = m => (m.pause || m.regen ? 1 : 0);
+  const sortiert = waehlbar
+    .map((m, i) => ({ m, i }))
+    .sort((a, b) => rang(a.m) - rang(b.m)
+      || (genutzt[b.m.id] || 0) - (genutzt[a.m.id] || 0)
+      || a.i - b.i)
+    .map(x => x.m);
+
+  const offen = waehlbar.find(m => m.isOpen);
+  const liste = sortiert.slice(0, grenze);
+  if (offen && !liste.some(m => m.id === offen.id)) {
+    if (liste.length >= grenze) liste[grenze - 1] = offen;
+    else liste.push(offen);
+  }
+
+  const drin = new Set(liste.map(m => m.id));
+  return waehlbar.filter(m => drin.has(m.id));
+}
+
+/** Wie oft jedes Modell zuletzt eingetragen wurde. */
+function nutzung(data, refMs) {
+  const ab = refMs - TILE_USAGE_DAYS * 86400000;
+  const out = {};
+  for (const e of ((data && data.events) || [])) {
+    const t = eventMs(e);
+    if (!isFinite(t) || t < ab || t > refMs) continue;
+    out[e.type] = (out[e.type] || 0) + 1;
+  }
+  return out;
+}
+
 /**
  * Was die Uhr wissen muss — und mehr nicht.
  *
  * Die Modelle mit Farbe und Kürzel, damit die Kachel sie zeichnen kann, und der
  * gerade getragene Zustand, damit dort etwas Wahres steht, bevor man tippt.
  * Keine Einträge, keine Punkte, keine Historie: die Uhr ist eine Fernbedienung.
+ *
+ * `seitMs` ist der Zeitpunkt, seit dem dieser Zustand gilt — nicht die fertige
+ * Dauer. Eine Dauer wäre in dem Moment richtig, in dem sie gesendet wird, und
+ * danach jede Minute falscher; der Zeitpunkt bleibt wahr, und die Uhr rechnet
+ * beim Zeichnen. `seit` bleibt als Uhrzeit daneben stehen, damit eine ältere
+ * Uhr-APK weiter etwas anzuzeigen hat.
  */
 export function watchPayload(data, settings, max, now) {
   const refMs = (now || new Date()).getTime();
   const st = currentStateAt((data && data.events) || [], settings, refMs);
   const m = resolveModel(settings, modelMap(settings), st.type);
+  const kurz = kuerzelMap(settings);
   return {
-    models: shortcutModels(settings, max || MAX_TILE_BUTTONS).map(x => ({
+    models: tileModels(data, settings, max || MAX_TILE_BUTTONS, m.id, refMs).map(x => ({
       id: x.id,
       label: x.label,
-      kurz: initialen(x.label),
+      kurz: kurz[x.id] || initialen(x.label),
       color: x.color,
     })),
-    jetzt: { id: m.id, label: m.label, seit: st.time || '' },
+    jetzt: { id: m.id, label: m.label, seit: st.time || '', seitMs: st.ms || null },
   };
 }
 

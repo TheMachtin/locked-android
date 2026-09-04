@@ -100,7 +100,7 @@ public class ShortcutsPlugin extends Plugin {
     }
 
     /**
-     * Ein Symbol aus Farbe und Anfangsbuchstaben.
+     * Ein Symbol aus Farbe und Kürzel.
      *
      * Kein eigenes Bild je Modell: die Farbe steht in der Registry und ändert
      * sich mit ihr, ein mitgeliefertes PNG könnte das nicht. Adaptiv gezeichnet,

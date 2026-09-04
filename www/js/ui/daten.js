@@ -9,7 +9,7 @@ import { AUTH, CFG, login, logout, isSignedIn } from '../sync/auth.js';
 import { loadFromCloud, saveToCloud, fetchLegacyFile, sanityCheck } from '../sync/onedrive.js';
 import { openFile, saveFile, readJsonFile, backup, exportCsv, exportXlsx } from '../sync/files.js';
 import { importLegacyData } from '../core/migrate.js';
-import { commandUrl, webCommandUrl, shortcutModels, MAX_SHORTCUTS } from '../core/command.js';
+import { commandUrl, webCommandUrl, shortcutModels, kuerzelMap, MAX_SHORTCUTS } from '../core/command.js';
 import { KIND_ORGASM } from '../core/settings.js';
 import {
   platformName, versionLabel, APP_COMMIT, IS_NATIVE, IS_WEB, WEB_APP_URL,
@@ -58,6 +58,9 @@ function renderShortcuts() {
   const s = getSettings();
   const modelle = s.models.filter(m => !m.archived);
   const imLauncher = new Set(shortcutModels(s, MAX_SHORTCUTS).map(m => m.id));
+  // Auf Kachel und Startbildschirm steht das Kürzel, hier die ID. Meist dasselbe —
+  // und wo nicht, wäre der Knopf sonst nirgends erklärt.
+  const kurz = kuerzelMap(s);
 
   $('shortcutIntro').innerHTML =
     'Diese Adressen tragen beim Öffnen genau einen Eintrag ein — mit der aktuellen '
@@ -68,7 +71,9 @@ function renderShortcuts() {
       <span class="dot" style="background:${m.color}"></span>
       <div class="sc-name">${escapeHtml(m.label)}${m.kind === KIND_ORGASM
         ? '<span class="sc-tag warn">kostet</span>'
-        : (imLauncher.has(m.id) ? '<span class="sc-tag">im Launcher</span>' : '')}</div>
+        : (imLauncher.has(m.id) ? '<span class="sc-tag">im Launcher</span>' : '')}${
+        m.kind !== KIND_ORGASM && kurz[m.id] && kurz[m.id] !== m.id
+          ? `<span class="sc-tag">Knopf ${escapeHtml(kurz[m.id])}</span>` : ''}</div>
       <code class="sc-url">${escapeHtml(commandUrl(m.id))}</code>
       <button class="btn ghost sc-copy" type="button"
               data-url="${escapeHtml(commandUrl(m.id))}">Kopieren</button>

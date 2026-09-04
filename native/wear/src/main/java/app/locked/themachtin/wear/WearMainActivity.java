@@ -22,9 +22,9 @@ import java.util.List;
 /**
  * Die Liste in der App-Übersicht.
  *
- * Die Kachel ist der schnelle Weg, aber sie zeigt nur Anfangsbuchstaben. Wer
- * nachsehen will, welcher Knopf welcher Käfig ist — oder wer die Kachel gar
- * nicht eingerichtet hat —, findet hier dieselben Modelle mit vollem Namen.
+ * Die Kachel ist der schnelle Weg, aber sie zeigt nur Kürzel. Wer nachsehen
+ * will, welcher Knopf welcher Käfig ist — oder wer die Kachel gar nicht
+ * eingerichtet hat —, findet hier dieselben Modelle mit vollem Namen.
  */
 public class WearMainActivity extends Activity {
 

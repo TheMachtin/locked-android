@@ -45,8 +45,16 @@ final class Registry {
 
     /** Wie lange eine Rückmeldung („→ Holy Trainer") den Zustand überdeckt. */
     private static final long STATUS_MS = 20000;
-    /** Fenster, in dem derselbe Knopf als Wiederholung gilt. */
-    private static final long KLICK_MS = 3000;
+    /**
+     * Fenster, in dem derselbe Knopf als Wiederholung gilt.
+     *
+     * Großzügig bemessen, weil es nichts kostet: das Telefon trägt denselben
+     * Eintrag in derselben Minute ohnehin nur einmal ein („Zweimal ausgelöst ist
+     * einmal eingetragen"). Ein zweiter Tipp auf denselben Knopf innerhalb einer
+     * Minute hätte drüben also gar keine Wirkung — hier abgefangen spart er den
+     * Weg und die Rückfrage.
+     */
+    private static final long KLICK_MS = 60000;
 
     private Registry() {}
 
@@ -105,8 +113,12 @@ final class Registry {
             JSONObject jetzt = new JSONObject(rohdaten(ctx)).optJSONObject("jetzt");
             if (jetzt == null) return "";
             String label = jetzt.optString("label", "");
-            String seit = jetzt.optString("seit", "");
             if (label.isEmpty()) return "";
+            long seitMs = jetzt.optLong("seitMs", 0);
+            String wieLange = seitMs > 0 ? dauer(System.currentTimeMillis() - seitMs) : "";
+            if (!wieLange.isEmpty()) return label + " · " + wieLange;
+            // Ältere Fassung des Telefons: nur die Uhrzeit des Wechsels.
+            String seit = jetzt.optString("seit", "");
             return seit.isEmpty() ? label : label + " · " + seit;
         } catch (Exception e) {
             return "";
@@ -114,13 +126,39 @@ final class Registry {
     }
 
     /**
-     * Ist das ein echter Tipp — oder derselbe noch einmal?
+     * Wie lange das schon so ist — „3 h 20", „47 min", „12 T 5 h".
+     *
+     * Die Uhrzeit des Wechsels stand vorher da und beantwortete die Frage nur
+     * mittelbar: wer um 4 Uhr nachts auf die Uhr sieht, will nicht rechnen. Das
+     * Telefon schickt deshalb den Zeitpunkt, gerechnet wird hier beim Zeichnen —
+     * eine fertige Dauer wäre in dem Moment richtig, in dem sie ankommt, und
+     * danach jede Minute falscher.
+     *
+     * Knapper geschrieben als im Telefon (dort „5 h 12 min"): die Zeile trägt den
+     * Namen des Zustands mit, und was nicht in eine Zeile passt, endet als „…".
+     */
+    static String dauer(long ms) {
+        if (ms < 0) return "";
+        long min = ms / 60000;
+        if (min < 1) return "gerade eben";
+        long tage = min / 1440, std = (min % 1440) / 60, rest = min % 60;
+        if (tage > 0) return tage + " T " + std + " h";
+        if (std > 0) return std + " h " + (rest < 10 ? "0" : "") + rest;
+        return min + " min";
+    }
+
+    /**
+     * Kam derselbe Knopf eben schon?
      *
      * Der Zustand der Kachel trägt das Kennzeichen des zuletzt gedrückten Knopfes
      * weiter. Jede Aktualisierung (etwa, weil das Telefon einen neuen Zustand
-     * gemeldet hat) ruft die Kachel damit erneut *mit diesem Kennzeichen* auf —
-     * ohne Sperre würde daraus eine Schleife aus Senden und Neuzeichnen. Ein
-     * zweiter echter Tipp drei Sekunden später kommt durch.
+     * gemeldet hat, oder weil die Kachel sich auffrischt) ruft sie damit erneut
+     * *mit diesem Kennzeichen* auf — ohne Sperre würde daraus eine Schleife aus
+     * Senden und Neuzeichnen.
+     *
+     * Die zweite Sperre steht in `LockedTileService.istEchterTipp()`: ein Knopf,
+     * den es gar nicht mehr gibt, war kein Tipp. Diese hier deckt die Zeitspanne
+     * ab, bis das Telefon den neuen Zustand gemeldet hat.
      */
     static boolean istWiederholung(Context ctx, String id) {
         SharedPreferences p = prefs(ctx);

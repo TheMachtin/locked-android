@@ -22,7 +22,7 @@ import { showToast } from './ui/toast.js';
 import { fmtInt } from './ui/format.js';
 import { KIND_ORGASM } from './core/settings.js';
 import {
-  parseCommand, planCommand, shortcutModels, commandUrl, initialen, watchPayload,
+  parseCommand, planCommand, shortcutModels, commandUrl, kuerzelMap, watchPayload,
   CMD_PARAM, CMD_PARAMS, MAX_SHORTCUTS, MAX_TILE_BUTTONS,
 } from './core/command.js';
 import {
@@ -164,14 +164,17 @@ export function syncGeraete(settings) {
 export function syncLauncherShortcuts(settings) {
   if (!IS_NATIVE) return;
   const liste = shortcutModels(settings, MAX_SHORTCUTS);
-  const kennung = JSON.stringify(liste.map(m => [m.id, m.label, m.color]));
+  // Das Kürzel gehört zur Kennung: eine Umbenennung anderswo in der Registry kann
+  // ein Kürzel hier verschieben, ohne dass sich an dieser Liste sonst etwas ändert.
+  const kurz = kuerzelMap(settings);
+  const kennung = JSON.stringify(liste.map(m => [m.id, m.label, m.color, kurz[m.id]]));
   if (kennung === letzterLauncher) return;
   letzterLauncher = kennung;
   setLauncherShortcuts(liste.map(m => ({
     id: m.id,
     label: m.label,
     kurz: m.label.length > 12 ? m.label.slice(0, 11) + '…' : m.label,
-    initialen: initialen(m.label),
+    initialen: kurz[m.id] || '',
     url: commandUrl(m.id),
     color: m.color,
   })));
