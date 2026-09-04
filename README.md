@@ -131,7 +131,7 @@ nicht von Erfolg zu unterscheiden.
 Langer Druck auf das App-Symbol zeigt die Zustände als Kurzbefehle; jeder lässt
 sich einzeln auf den Startbildschirm ziehen. Sie stehen nicht im Build, sondern
 kommen aus der Registry — ein neuer Käfig erscheint dort, sobald er in **Regeln**
-angelegt ist, mit seiner Farbe und seinen Anfangsbuchstaben.
+angelegt ist, mit seiner Farbe und seinem Kürzel.
 
 Android zeigt vier bis fünf davon. Ist die Liste länger, bleibt der offene
 Zustand trotzdem dabei: eine Auswahl aus lauter Käfigen ohne den Weg heraus wäre
@@ -145,8 +145,29 @@ Adresse von Hand; angeboten wird sie nicht.
 ### Die Kachel auf der Galaxy Watch
 
 Eine Wischbewegung vom Zifferblatt, ein Tipp. Oben auf der Kachel steht, was
-gerade getragen wird, darunter liegen die Modelle als farbige Knöpfe mit ihren
-Anfangsbuchstaben.
+gerade getragen wird und seit wann, darunter liegen die Modelle als farbige
+Knöpfe mit ihrem Kürzel.
+
+**Was gerade getragen wird, ist kein Knopf.** Sein Tipp setzte den Zustand auf
+den Zustand — er belegte nur den Platz eines Knopfes, der etwas ändern kann. Die
+Auskunft steht als Zeile darüber, und die übrigen Knöpfe werden dafür größer: die
+Kachel zeichnet weniger Knöpfe größer, und drei trifft man unterwegs besser als
+vier. Der offene Zustand bleibt dabei gesetzt, solange er nicht selbst der
+getragene ist — wer offen ist, braucht den Ausweg nicht.
+
+Führt jemand mehr Modelle, als auf ein Zifferblatt passen, kommen die Käfige
+zuerst und darunter die zuletzt häufiger getragenen; Reinigung und Regeneration
+rücken nach, wenn Platz bleibt. Gezeichnet wird trotzdem in der Reihenfolge der
+Registry: welcher Knopf wo liegt, soll sich nicht mit der Nutzung verschieben,
+sonst lernt man die Kachel nie.
+
+**Auf dem Knopf steht die ID** — dieselbe, die in `locked://log?m=NS` steht, in
+den Kurzbefehlen und in einer Automation. Nur wo sie dafür zu lang ist (`REG`)
+oder nichts mehr mit dem Namen zu tun hat (`KK` für „Nicht verschlossen"),
+rechnet die App zwei Buchstaben aus dem Namen: „RE" und „NV". Zweimal dasselbe
+Kürzel gibt es nicht — „Regeneration" und „Reinigung" ergäben beide „RE", also
+weicht das zweite auf seine ID aus und wird „CL". Weicht ein Kürzel so von der ID
+ab, steht es unter **Daten → Kurzbefehle** neben dem Modell.
 
 **Die Uhr hält dabei nichts fest.** Sie kennt die Modell-Registry, die das
 Telefon herüberschickt, und sie schickt eine Modell-ID zurück — daraus wird
