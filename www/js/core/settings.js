@@ -103,6 +103,29 @@ export function idFromLabel(label, taken) {
   return base + Date.now().toString(36).toUpperCase().slice(-3);
 }
 
+/**
+ * Eine von Hand getippte ID auf das reduzieren, was eine ID sein darf.
+ *
+ * Dieselbe Regel wie beim Laden (`normalizeModel`), nur früher: was hier nicht
+ * durchkommt, käme sonst beim nächsten Start stillschweigend anders zurück.
+ */
+export function cleanId(roh) {
+  return String(roh || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+}
+
+/**
+ * Folgt die ID dieses Modells noch seinem Namen?
+ *
+ * Wichtig beim Umbenennen: eine abgeleitete ID darf mitwandern („Cobra" →
+ * „COBRA"), eine von Hand gesetzte nicht — die steht in Adressen, die woanders
+ * eingerichtet sind, in einer Automation oder auf dem Startbildschirm. Ein
+ * eigenes Feld dafür braucht es nicht: abgeleitet ist sie genau dann, wenn sie
+ * dem entspricht, was aus dem Namen entstünde.
+ */
+export function idFolgtNamen(model, label, andereIds) {
+  return !!model && model.id === idFromLabel(label, andereIds);
+}
+
 function normalizeModel(raw, index, taken) {
   const kind = raw.kind === KIND_ORGASM ? KIND_ORGASM : KIND_MODEL;
   let id = String(raw.id || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);

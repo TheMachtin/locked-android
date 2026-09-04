@@ -16,8 +16,8 @@ import { STATE, calc, mutate, mutateSettings, settings as getSettings } from '..
 import { showToast, confirmAction } from './toast.js';
 import { fmtNum, escapeHtml, fmtDateShort as fmtDate } from './format.js';
 import {
-  KIND_MODEL, KIND_ORGASM, idFromLabel, defaultSettings, PALETTE, orgasmPrice,
-  stichtagOf, lockKind, applyLockKind,
+  KIND_MODEL, KIND_ORGASM, idFromLabel, cleanId, idFolgtNamen, defaultSettings,
+  PALETTE, orgasmPrice, stichtagOf, lockKind, applyLockKind,
 } from '../core/settings.js';
 import { refreezeLegacy } from '../core/legacy.js';
 import { isoDateAdd } from '../core/time.js';
@@ -111,7 +111,8 @@ function modelEditor(m, anzahl) {
     `<div><label>${label}</label><input type="${typ}" data-feld="${id}" data-id="${m.id}" value="${wert}" ${extra}></div>`;
 
   let felder = feld('Bezeichnung', 'label', 'text', escapeHtml(m.label))
-    + feld('Farbe', 'color', 'color', m.color);
+    + feld('Farbe', 'color', 'color', m.color)
+    + idFeld(m, anzahl);
 
   if (m.kind === KIND_MODEL) {
     felder += feld('Punkte je Stunde', 'rate', 'number', m.rate, 'step="0.05"');
@@ -142,6 +143,32 @@ function modelEditor(m, anzahl) {
 }
 
 /**
+ * Die ID — das, was man tippt, statt das, was die App sich denkt.
+ *
+ * Sie steht in `locked://log?m=…`, also im Kurzbefehl, in der Automation und im
+ * Lesezeichen; und ist sie ein oder zwei Zeichen lang und passt zum Namen, steht
+ * sie auch auf dem Knopf der Uhr. Abgeleitet wird sie aus den ersten sechs
+ * Zeichen des Namens — was bei „Steelworxx mit" und „Steelworxx ohne" zu
+ * `STEELW` und `STEELW2` führt, zwei Adressen, die niemand auseinanderhält.
+ * Deshalb darf man sie selbst setzen.
+ *
+ * Nur solange kein Eintrag auf sie zeigt: danach zeigten alte Tage ins Leere.
+ * Das ist dieselbe Grenze, die auch das Löschen zieht.
+ */
+function idFeld(m, anzahl) {
+  if (anzahl > 0) {
+    return `<div><label>ID</label>
+        <div class="sub" style="padding-top:6px"><code>${escapeHtml(m.id)}</code>
+        — hat Einträge, bleibt</div></div>`;
+  }
+  return `<div><label>ID</label>
+      <input type="text" data-feld="id" data-id="${escapeHtml(m.id)}" value="${escapeHtml(m.id)}"
+             maxlength="8" autocapitalize="characters" spellcheck="false">
+      <div class="sub" style="margin-top:4px">steht in <code>locked://log?m=${escapeHtml(m.id)}</code></div>
+    </div>`;
+}
+
+/**
  * Die Auswahl aus drei Verschluss-Zuständen.
  *
  * Vorher stand hier ein Ja/Nein-Schalter für „zählt als verschlossen". Der ließ
@@ -169,6 +196,7 @@ function preisVorschau(m) {
 function feldGeaendert(el) {
   const id = el.dataset.id;
   const feld = el.dataset.feld;
+  if (feld === 'id') { setzeId(id, el.value); return; }
   const wert = el.type === 'number' ? parseFloat(String(el.value).replace(',', '.')) : el.value;
   if (el.type === 'number' && !isFinite(wert)) { showToast('Keine gültige Zahl', true); renderModelle(); return; }
 
@@ -176,19 +204,52 @@ function feldGeaendert(el) {
   mutateSettings(s => {
     const m = s.models.find(x => x.id === id);
     if (!m) return;
+    const altesLabel = m.label;
     m[feld] = wert;
     // Solange noch kein Eintrag darauf zeigt, darf die ID dem Namen folgen —
     // „COBRAV" liest sich in CSV und Excel besser als „NEUESM". Sobald Einträge
     // existieren, bleibt sie fest, sonst zeigten alte Tage ins Leere.
     if (feld === 'label' && zaehleEvents(id) === 0) {
       const frei = s.models.filter(x => x !== m).map(x => x.id);
-      const kandidat = idFromLabel(wert, frei);
-      if (kandidat !== id) { m.id = kandidat; neueId = kandidat; }
+      // Aber nur, wenn sie ihm bisher gefolgt ist. Eine von Hand gesetzte ID
+      // steht in Adressen, die anderswo eingerichtet sind — die wandert nicht
+      // mit, bloß weil hier ein Name präziser wird.
+      if (idFolgtNamen({ id }, altesLabel, frei)) {
+        const kandidat = idFromLabel(wert, frei);
+        if (kandidat !== id) { m.id = kandidat; neueId = kandidat; }
+      }
     }
   });
   if (offen === id) offen = neueId;
   renderModelle();
   showToast('Gespeichert');
+}
+
+/**
+ * Die ID von Hand setzen.
+ *
+ * Jede Ablehnung sagt, woran es lag, und zeichnet neu — das Feld steht danach
+ * wieder auf dem Wert, der wirklich gilt. Eine ID, die stillschweigend anders
+ * gespeichert wird als getippt, wäre hier das Schlimmste: sie steht in Adressen,
+ * die man einmal einrichtet und dann jahrelang benutzt.
+ */
+function setzeId(alt, roh) {
+  const neu = cleanId(roh);
+  const fehler =
+      !neu ? 'Eine ID braucht mindestens einen Buchstaben oder eine Ziffer'
+    : zaehleEvents(alt) > 0 ? 'Hat Einträge — die ID bleibt'
+    : (neu !== alt && getSettings().models.some(x => x.id === neu)) ? `„${neu}" ist schon vergeben`
+    : null;
+  if (fehler) { showToast(fehler, true); renderModelle(); return; }
+  if (neu === alt) { renderModelle(); return; }
+
+  mutateSettings(s => {
+    const m = s.models.find(x => x.id === alt);
+    if (m) m.id = neu;
+  });
+  if (offen === alt) offen = neu;
+  renderModelle();
+  showToast(`ID ist jetzt ${neu}`);
 }
 
 function neuesModell(kind) {

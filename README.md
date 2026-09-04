@@ -88,8 +88,16 @@ Zwei weitere Eigenschaften trägt das Programm mit und sichert sie gegen Unsinn 
 - **Regeneration** — trägt Fenster und Sperrfrist. Höchstens eine, darf fehlen.
 
 Solange kein Eintrag auf ein Modell zeigt, folgt seine interne ID dem Namen
-(„Cobra Variante A" → `COBRAV`). Sobald Einträge existieren, bleibt sie fest und
-das Modell lässt sich nur noch archivieren — sonst zeigten alte Tage ins Leere.
+(„Cobra Variante A" → `COBRAV`) — und lässt sich in demselben Zeitraum auch von
+Hand setzen. Sobald Einträge existieren, bleibt sie fest und das Modell lässt
+sich nur noch archivieren; sonst zeigten alte Tage ins Leere.
+
+Die Wahl lohnt sich, sobald zwei Modelle gleich anfangen: „Steelworxx mit" und
+„Steelworxx ohne" ergeben von allein `STEELW` und `STEELW2` — zwei Adressen, die
+niemand auseinanderhält. `SM` und `SO` stehen dann nicht nur in `locked://log?m=SM`,
+sondern auch auf dem Knopf der Uhr, denn eine kurze ID, die zum Namen passt,
+*ist* dort das Kürzel. Eine selbst gesetzte ID wandert beim Umbenennen übrigens
+nicht mehr mit: sie steht in Adressen, die anderswo eingerichtet sind.
 
 ## Eintragen, ohne die App zu öffnen
 
