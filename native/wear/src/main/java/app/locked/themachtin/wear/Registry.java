@@ -13,7 +13,6 @@ import com.google.android.gms.wearable.Wearable;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -37,6 +36,8 @@ final class Registry {
     static final String TAG = "LockedWear";
     static final String PFAD_REGISTRY = "/locked/models";
     static final String PFAD_LOG = "/locked/log";
+    /** Der Rückweg vom Telefon: erst diese Nachricht streicht einen Tipp. */
+    static final String PFAD_OK = "/locked/ok";
 
     private static final String PREFS = "locked_wear";
     private static final String KEY_JSON = "registry";
@@ -278,12 +279,9 @@ final class Registry {
         if (erster == null) return;
         final String id = erster.optString("id", "");
         final long ms = erster.optLong("ms", 0);
-        if (id.isEmpty()) { erledigt(app, id); return; }
+        if (id.isEmpty()) { erledigt(app, id, ms); return; }
 
         final byte[] nachricht = (id + "@" + ms).getBytes(StandardCharsets.UTF_8);
-        // Mehrere Knoten sind selten (Telefon *und* Tablet), aber möglich: gesendet
-        // wird an alle, weitergerückt nur einmal.
-        final AtomicBoolean weiter = new AtomicBoolean(false);
         try {
             Wearable.getNodeClient(app).getConnectedNodes()
                 .addOnSuccessListener(nodes -> {
@@ -294,12 +292,9 @@ final class Registry {
                     for (Node n : nodes) {
                         Wearable.getMessageClient(app)
                             .sendMessage(n.getId(), PFAD_LOG, nachricht)
-                            .addOnSuccessListener(x -> {
-                                if (!weiter.compareAndSet(false, true)) return;
-                                erledigt(app, id);
-                                aktualisiereKachel(app);
-                                zustellen(app, false);
-                            })
+                            // Kein Streichen hier: Erfolg heißt nur, dass Play
+                            // Services die Nachricht angenommen hat. Gestrichen
+                            // wird in `bestaetigt()`, wenn das Telefon antwortet.
                             .addOnFailureListener(e -> {
                                 if (melden) melde(app, "nicht angekommen — wird nachgetragen");
                             });
@@ -337,12 +332,37 @@ final class Registry {
         prefs(ctx).edit().putString(KEY_WARTEND, arr.toString()).apply();
     }
 
-    /** Einen zugestellten Tipp streichen — über die ID, nicht über die Stelle. */
-    private static void erledigt(Context ctx, String id) {
+    /**
+     * Das Telefon hat einen Tipp übernommen — jetzt darf er weg.
+     *
+     * Zurück kommt genau das, was hinausging (`NS@1757003100000`). Über den
+     * Zeitstempel trifft es denselben Eintrag und nicht einen zweiten, den man
+     * inzwischen für dasselbe Modell getippt hat.
+     */
+    static void bestaetigt(Context ctx, String marke) {
+        final Context app = ctx.getApplicationContext();
+        int at = marke.lastIndexOf('@');
+        String id = at > 0 ? marke.substring(0, at) : marke;
+        long ms = 0;
+        if (at > 0) {
+            try { ms = Long.parseLong(marke.substring(at + 1)); }
+            catch (NumberFormatException e) { Log.w(TAG, "Bestätigung unlesbar: " + marke); }
+        }
+        erledigt(app, id, ms);
+        aktualisiereKachel(app);
+        // Was sonst noch wartet, geht gleich hinterher — die Verbindung steht ja.
+        zustellen(app, false);
+    }
+
+    /** Einen Tipp streichen — über ID und Zeitpunkt, nicht über die Stelle. */
+    private static void erledigt(Context ctx, String id, long ms) {
         JSONArray arr = warteschlange(ctx);
         for (int i = 0; i < arr.length(); i++) {
             JSONObject o = arr.optJSONObject(i);
-            if (o == null || id.equals(o.optString("id"))) { arr.remove(i); break; }
+            if (o == null || (id.equals(o.optString("id")) && (ms == 0 || ms == o.optLong("ms")))) {
+                arr.remove(i);
+                break;
+            }
         }
         speichereWarteschlange(ctx, arr);
     }

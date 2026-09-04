@@ -7,10 +7,14 @@ import androidx.wear.tiles.TileService;
 import com.google.android.gms.wearable.DataEvent;
 import com.google.android.gms.wearable.DataEventBuffer;
 import com.google.android.gms.wearable.DataMapItem;
+import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.WearableListenerService;
 
+import java.nio.charset.StandardCharsets;
+
 /**
- * Nimmt die Modell-Registry vom Telefon entgegen.
+ * Nimmt entgegen, was vom Telefon kommt: die Modell-Registry — und die
+ * Bestätigung, dass ein Tipp angekommen ist.
  *
  * Das Telefon legt sie als Datenelement ab, sobald sich Registry oder Zustand
  * ändern; Google Play Services trägt sie herüber, auch wenn die Uhr-App gerade
@@ -18,6 +22,21 @@ import com.google.android.gms.wearable.WearableListenerService;
  * damit sie beim nächsten Blick schon stimmt und nicht erst beim Antippen.
  */
 public class ModelSyncService extends WearableListenerService {
+
+    /**
+     * Das Telefon hat einen Tipp übernommen.
+     *
+     * Diese Nachricht ist der einzige Beweis, dass er drüben ist: der Erfolg beim
+     * Senden sagt nur, dass Play Services ihn angenommen hat. Erst hier wird er
+     * aus der Warteschlange gestrichen.
+     */
+    @Override
+    public void onMessageReceived(MessageEvent event) {
+        if (event == null || !Registry.PFAD_OK.equals(event.getPath())) return;
+        String marke = new String(event.getData(), StandardCharsets.UTF_8).trim();
+        if (marke.isEmpty()) return;
+        Registry.bestaetigt(this, marke);
+    }
 
     @Override
     public void onDataChanged(DataEventBuffer events) {

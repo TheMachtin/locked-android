@@ -43,6 +43,8 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <!-- Die Bestätigung eines zugestellten Tipps kommt als Nachricht. -->
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
                 <data android:scheme="wear" android:host="*" android:pathPrefix="/locked" />
             </intent-filter>
         </service>

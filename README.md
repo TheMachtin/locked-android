@@ -190,6 +190,15 @@ gerade deshalb im anderen Zimmer — sonst bräuchte es die Uhr nicht. Kommt die
 Nachricht nicht durch, hebt die Uhr den Tipp auf und stellt ihn zu, sobald sie
 das Telefon wieder erreicht: beim nächsten Blick auf die Kachel, beim Öffnen der
 Uhr-App oder wenn das Telefon von sich aus eine neue Registry schickt.
+
+Gestrichen wird er erst, wenn das Telefon **zurückmeldet**, dass es ihn hat.
+Dass das Senden gelingt, heißt nämlich nichts: es bedeutet nur, dass Play
+Services die Nachricht angenommen hat. Steht das Telefon im Flugmodus, während
+die Bluetooth-Bindung weiter besteht, gilt es als verbunden — die Nachricht
+verschwindet unterwegs, und ohne Rückmeldung hätte die Uhr genau den Tipp
+weggeworfen, den sie aufheben sollte. Beide APKs müssen dafür aus demselben
+Release stammen; eine ältere Telefon-App bestätigt nicht, und auf der Uhr bliebe
+dann alles als „wartet" stehen.
 Nachgereicht wird er mit seinem Zeitstempel — `locked://log?m=NS&t=14:05&d=2026-09-04` —
 und steht damit in der Historie, wo er passiert ist, nicht wo er ankam. Erst ab
 zwei Minuten Verspätung; darunter bleibt die Uhrzeit des Telefons maßgeblich,
