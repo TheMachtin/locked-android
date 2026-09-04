@@ -30,6 +30,9 @@ public class ModelSyncService extends WearableListenerService {
             Registry.speichere(this, json);
             neu = true;
         }
+        // Das Telefon hat sich gemeldet, ist also erreichbar — der beste Moment für
+        // Tipps, die von einer Funklücke übrig sind.
+        Registry.zustellen(this, false);
         if (!neu) return;
         try {
             TileService.getUpdater(this).requestUpdate(LockedTileService.class);

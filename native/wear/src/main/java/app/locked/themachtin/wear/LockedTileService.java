@@ -77,10 +77,15 @@ public class LockedTileService extends TileService {
             geklickt = request.getCurrentState().getLastClickableId();
         }
         if (istEchterTipp(geklickt, modelle)) {
-            // Erst die Rückmeldung setzen, dann senden: die Kachel wird unten
-            // sofort gezeichnet, das Senden dauert länger als dieser Aufruf.
-            Registry.setzeStatus(this, "→ " + Registry.labelVon(this, geklickt));
-            Registry.sende(this, geklickt);
+            // Vormerken und zustellen in einem: die Kachel wird unten sofort
+            // gezeichnet, das Senden dauert länger als dieser Aufruf.
+            Registry.tippe(this, geklickt);
+        } else {
+            // Jedes Zeichnen ist auch eine Gelegenheit: was vom letzten Mal noch
+            // wartet, geht jetzt hinaus, falls das Telefon inzwischen da ist.
+            // Stumm — eine Meldung stieße eine Aktualisierung an, die erneut
+            // zeichnet und erneut meldete.
+            Registry.zustellen(this, false);
         }
 
         LayoutElement layout = layout(this, request.getDeviceConfiguration(), modelle);

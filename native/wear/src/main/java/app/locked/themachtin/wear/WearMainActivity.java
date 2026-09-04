@@ -60,6 +60,9 @@ public class WearMainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        // Wer die App öffnet, hat die Uhr am Arm und das Telefon vielleicht wieder
+        // in Reichweite: ein guter Moment für alles, was noch wartet.
+        Registry.zustellen(this, false);
         zeichne();
     }
 
@@ -122,8 +125,7 @@ public class WearMainActivity extends Activity {
         b.setLayoutParams(lp);
 
         b.setOnClickListener(v -> {
-            Registry.setzeStatus(this, "→ " + m.label);
-            Registry.sende(this, m.id);
+            Registry.tippe(this, m.id);
             kopf.setText(Registry.kopfzeile(this));
             v.setAlpha(0.6f);
             v.animate().alpha(1f).setDuration(400).start();

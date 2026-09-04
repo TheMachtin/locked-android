@@ -13,8 +13,10 @@ import com.google.android.gms.wearable.Wearable;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 /**
@@ -42,6 +44,16 @@ final class Registry {
     private static final String KEY_STATUS_MS = "status_ms";
     private static final String KEY_KLICK = "klick";
     private static final String KEY_KLICK_MS = "klick_ms";
+    private static final String KEY_WARTEND = "wartend";
+
+    /**
+     * Wie viele Tipps höchstens auf das Telefon warten dürfen.
+     *
+     * Erreicht wird die Grenze nur, wenn tagelang keine Verbindung zustande kommt.
+     * Dann fällt der älteste heraus: eine Schlange, die unbegrenzt wächst, trüge
+     * irgendwann Einträge aus einer Woche, an die sich niemand mehr erinnert.
+     */
+    private static final int MAX_WARTEND = 20;
 
     /** Wie lange eine Rückmeldung („→ Holy Trainer") den Zustand überdeckt. */
     private static final long STATUS_MS = 20000;
@@ -181,45 +193,166 @@ final class Registry {
      * Die Zeile über den Knöpfen: kurz nach einem Tippen die Rückmeldung, sonst
      * der zuletzt gemeldete Zustand. Eine Bestätigung, die ewig stehen bleibt,
      * wäre beim nächsten Blick eine Lüge.
+     *
+     * Dazwischen steht, was noch wartet — und zwar *statt* des Zustands, nicht
+     * neben ihm. Solange ein Tipp nicht zugestellt ist, weiß das Telefon von dem
+     * Wechsel nichts und meldet weiter den alten Zustand: „Neosteel · 1 h 25"
+     * wäre dann die falscheste Auskunft, die die Kachel geben kann.
      */
     static String kopfzeile(Context ctx) {
         SharedPreferences p = prefs(ctx);
         String status = p.getString(KEY_STATUS, "");
         long ms = p.getLong(KEY_STATUS_MS, 0);
         if (!status.isEmpty() && System.currentTimeMillis() - ms < STATUS_MS) return status;
+        int offen = wartend(ctx);
+        if (offen == 1) return "wartet: " + wartendesLabel(ctx);
+        if (offen > 1) return "wartet: " + offen + " Einträge";
         String jetzt = jetztText(ctx);
         return jetzt.isEmpty() ? "Locked" : jetzt;
     }
 
+    // =========================== WARTESCHLANGE ===========================
     /**
-     * Ein Modell ans Telefon schicken.
+     * Ein Tipp, der noch nicht beim Telefon ist.
      *
-     * Ohne Antwort: die Bestätigung kommt als Benachrichtigung des Telefons, die
-     * auf der Uhr ohnehin erscheint. Nur wenn gar nichts hinausging, muss die
-     * Kachel es selbst sagen — sonst stünde dort „gesendet", während nichts
-     * passiert ist.
+     * Der Zweck der Uhr ist nicht Geschwindigkeit, sondern Nähe: das Telefon liegt
+     * zwei Zimmer weiter, und was man dort nicht sofort einträgt, trägt man oft
+     * gar nicht mehr ein. Ist es im Moment des Tippens nicht erreichbar, wäre ein
+     * verlorener Tipp genau der Fehler, gegen den die Kachel gebaut ist.
+     *
+     * Also wird jeder Tipp erst gemerkt und dann zugestellt — mit dem Zeitpunkt,
+     * an dem er *getippt* wurde. Kommt er eine Stunde später durch, steht er
+     * trotzdem zur richtigen Zeit in der Historie. Die Adresse kann das seit je
+     * (`locked://log?m=NS&t=14:05&d=2026-09-04`), nur hat die Uhr sie bisher nicht
+     * benutzt: sie schickte eine nackte Modell-ID, und das Telefon setzte seine
+     * eigene Uhrzeit darunter.
+     *
+     * Wiederholtes Zustellen ist gefahrlos — dasselbe Modell in derselben Minute
+     * erkennt das Telefon als denselben Eintrag und schreibt ihn nicht zweimal.
      */
-    static void sende(Context ctx, String id) {
+    static void tippe(Context ctx, String id) {
         final Context app = ctx.getApplicationContext();
+        setzeStatus(app, merke(app, id) ? "→ " + labelVon(app, id)
+                                        : labelVon(app, id) + " wartet schon");
+        zustellen(app, true);
+    }
+
+    /**
+     * Einen Tipp vormerken. `false`, wenn dasselbe Modell schon wartet.
+     *
+     * Dann bleibt der frühere Zeitpunkt stehen: gemeint war der Wechsel, nicht das
+     * zweite Antippen, weil auf der Kachel noch nichts passiert ist.
+     */
+    private static boolean merke(Context ctx, String id) {
+        JSONArray arr = warteschlange(ctx);
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            if (o != null && id.equals(o.optString("id"))) return false;
+        }
+        JSONObject neu = new JSONObject();
+        try {
+            neu.put("id", id);
+            neu.put("ms", System.currentTimeMillis());
+        } catch (JSONException e) {
+            Log.w(TAG, "Tipp nicht zu merken", e);
+            return false;
+        }
+        arr.put(neu);
+        while (arr.length() > MAX_WARTEND) arr.remove(0);
+        speichereWarteschlange(ctx, arr);
+        return true;
+    }
+
+    /**
+     * Den ältesten wartenden Tipp zustellen — bei Erfolg gleich den nächsten.
+     *
+     * `melden` steuert, ob ein Misserfolg auf der Kachel landet. Beim Tippen ja:
+     * wer gerade gedrückt hat, muss erfahren, dass es noch nicht durch ist. Beim
+     * bloßen Zeichnen der Kachel nicht — eine Meldung stieße dort eine
+     * Aktualisierung an, die erneut zeichnet und erneut meldet.
+     */
+    static void zustellen(Context ctx, boolean melden) {
+        final Context app = ctx.getApplicationContext();
+        JSONArray arr = warteschlange(app);
+        JSONObject erster = arr.optJSONObject(0);
+        if (erster == null) return;
+        final String id = erster.optString("id", "");
+        final long ms = erster.optLong("ms", 0);
+        if (id.isEmpty()) { erledigt(app, id); return; }
+
+        final byte[] nachricht = (id + "@" + ms).getBytes(StandardCharsets.UTF_8);
+        // Mehrere Knoten sind selten (Telefon *und* Tablet), aber möglich: gesendet
+        // wird an alle, weitergerückt nur einmal.
+        final AtomicBoolean weiter = new AtomicBoolean(false);
         try {
             Wearable.getNodeClient(app).getConnectedNodes()
                 .addOnSuccessListener(nodes -> {
-                    if (nodes == null || nodes.isEmpty()) { melde(app, "Telefon nicht verbunden"); return; }
+                    if (nodes == null || nodes.isEmpty()) {
+                        if (melden) melde(app, "Telefon nicht in Reichweite — wird nachgetragen");
+                        return;
+                    }
                     for (Node n : nodes) {
                         Wearable.getMessageClient(app)
-                            .sendMessage(n.getId(), PFAD_LOG, id.getBytes(StandardCharsets.UTF_8))
-                            .addOnFailureListener(e -> melde(app, "nicht angekommen"));
+                            .sendMessage(n.getId(), PFAD_LOG, nachricht)
+                            .addOnSuccessListener(x -> {
+                                if (!weiter.compareAndSet(false, true)) return;
+                                erledigt(app, id);
+                                aktualisiereKachel(app);
+                                zustellen(app, false);
+                            })
+                            .addOnFailureListener(e -> {
+                                if (melden) melde(app, "nicht angekommen — wird nachgetragen");
+                            });
                     }
                 })
-                .addOnFailureListener(e -> melde(app, "Telefon nicht verbunden"));
+                .addOnFailureListener(e -> {
+                    if (melden) melde(app, "Telefon nicht in Reichweite — wird nachgetragen");
+                });
         } catch (Exception e) {
-            Log.w(TAG, "Senden fehlgeschlagen", e);
-            melde(app, "Senden fehlgeschlagen");
+            Log.w(TAG, "Zustellen fehlgeschlagen", e);
+            if (melden) melde(app, "Senden fehlgeschlagen — wird nachgetragen");
         }
+    }
+
+    /** Wie viele Tipps noch auf das Telefon warten. */
+    static int wartend(Context ctx) {
+        return warteschlange(ctx).length();
+    }
+
+    /** Der Name des ältesten wartenden Tipps. */
+    private static String wartendesLabel(Context ctx) {
+        JSONObject erster = warteschlange(ctx).optJSONObject(0);
+        return erster == null ? "" : labelVon(ctx, erster.optString("id", ""));
+    }
+
+    private static JSONArray warteschlange(Context ctx) {
+        try {
+            return new JSONArray(prefs(ctx).getString(KEY_WARTEND, "[]"));
+        } catch (Exception e) {
+            return new JSONArray();
+        }
+    }
+
+    private static void speichereWarteschlange(Context ctx, JSONArray arr) {
+        prefs(ctx).edit().putString(KEY_WARTEND, arr.toString()).apply();
+    }
+
+    /** Einen zugestellten Tipp streichen — über die ID, nicht über die Stelle. */
+    private static void erledigt(Context ctx, String id) {
+        JSONArray arr = warteschlange(ctx);
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            if (o == null || id.equals(o.optString("id"))) { arr.remove(i); break; }
+        }
+        speichereWarteschlange(ctx, arr);
     }
 
     private static void melde(Context ctx, String text) {
         setzeStatus(ctx, text);
+        aktualisiereKachel(ctx);
+    }
+
+    private static void aktualisiereKachel(Context ctx) {
         try {
             TileService.getUpdater(ctx).requestUpdate(LockedTileService.class);
         } catch (Exception e) {
