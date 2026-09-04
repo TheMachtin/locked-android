@@ -88,8 +88,16 @@ Zwei weitere Eigenschaften trägt das Programm mit und sichert sie gegen Unsinn 
 - **Regeneration** — trägt Fenster und Sperrfrist. Höchstens eine, darf fehlen.
 
 Solange kein Eintrag auf ein Modell zeigt, folgt seine interne ID dem Namen
-(„Cobra Variante A" → `COBRAV`). Sobald Einträge existieren, bleibt sie fest und
-das Modell lässt sich nur noch archivieren — sonst zeigten alte Tage ins Leere.
+(„Cobra Variante A" → `COBRAV`) — und lässt sich in demselben Zeitraum auch von
+Hand setzen. Sobald Einträge existieren, bleibt sie fest und das Modell lässt
+sich nur noch archivieren; sonst zeigten alte Tage ins Leere.
+
+Die Wahl lohnt sich, sobald zwei Modelle gleich anfangen: „Steelworxx mit" und
+„Steelworxx ohne" ergeben von allein `STEELW` und `STEELW2` — zwei Adressen, die
+niemand auseinanderhält. `SM` und `SO` stehen dann nicht nur in `locked://log?m=SM`,
+sondern auch auf dem Knopf der Uhr, denn eine kurze ID, die zum Namen passt,
+*ist* dort das Kürzel. Eine selbst gesetzte ID wandert beim Umbenennen übrigens
+nicht mehr mit: sie steht in Adressen, die anderswo eingerichtet sind.
 
 ## Eintragen, ohne die App zu öffnen
 
@@ -169,13 +177,31 @@ Kürzel gibt es nicht — „Regeneration" und „Reinigung" ergäben beide „R
 weicht das zweite auf seine ID aus und wird „CL". Weicht ein Kürzel so von der ID
 ab, steht es unter **Daten → Kurzbefehle** neben dem Modell.
 
-**Die Uhr hält dabei nichts fest.** Sie kennt die Modell-Registry, die das
-Telefon herüberschickt, und sie schickt eine Modell-ID zurück — daraus wird
-drüben dieselbe Adresse `locked://log?m=…` wie bei jedem Kurzbefehl. Der Eintrag
-entsteht damit an genau einer Stelle im Programm; eine zweite, die irgendwann
-anders rechnet, kann es gar nicht geben. Aus demselben Grund schreibt kein
-Dienst die Datei direkt: er wüsste nichts von der laufenden WebView und nichts
-vom Sync.
+**Die Uhr rechnet dabei nichts.** Sie kennt die Modell-Registry, die das
+Telefon herüberschickt, und sie schickt eine Modell-ID mit dem Zeitpunkt des
+Tippens zurück — daraus wird drüben dieselbe Adresse `locked://log?m=…` wie bei
+jedem Kurzbefehl. Der Eintrag entsteht damit an genau einer Stelle im Programm;
+eine zweite, die irgendwann anders rechnet, kann es gar nicht geben. Aus
+demselben Grund schreibt kein Dienst die Datei direkt: er wüsste nichts von der
+laufenden WebView und nichts vom Sync.
+
+**Ein Tipp geht nicht verloren, wenn das Telefon nicht da ist.** Es liegt ja
+gerade deshalb im anderen Zimmer — sonst bräuchte es die Uhr nicht. Kommt die
+Nachricht nicht durch, hebt die Uhr den Tipp auf und stellt ihn zu, sobald sie
+das Telefon wieder erreicht: beim nächsten Blick auf die Kachel, beim Öffnen der
+Uhr-App oder wenn das Telefon von sich aus eine neue Registry schickt.
+Nachgereicht wird er mit seinem Zeitstempel — `locked://log?m=NS&t=14:05&d=2026-09-04` —
+und steht damit in der Historie, wo er passiert ist, nicht wo er ankam. Erst ab
+zwei Minuten Verspätung; darunter bleibt die Uhrzeit des Telefons maßgeblich,
+denn zwei Uhren gehen nie exakt gleich.
+
+Solange etwas wartet, steht das oben auf der Kachel — „wartet: Neosteel" —
+*statt* des Zustands. Das Telefon weiß von dem Wechsel ja noch nichts und würde
+weiter den alten melden; „Neosteel · 1 h 25" wäre in dem Moment die falscheste
+Auskunft, die die Kachel geben kann. Ein zweiter Tipp auf dasselbe Modell ändert
+nichts: gemeint war der Wechsel, nicht das Nachfassen, also bleibt der frühere
+Zeitpunkt stehen. Und weil dasselbe Modell in derselben Minute drüben ohnehin nur
+einmal eingetragen wird, ist ein doppelt zugestellter Tipp folgenlos.
 
 Der Tipp öffnet keine App. `LoadAction` ruft die Kachel erneut auf, sie erkennt
 den Knopf, schickt und zeichnet sich sofort mit der Rückmeldung neu — der
@@ -274,6 +300,10 @@ der Haken verschwindet nicht, er wandert nur.
 Bildschirm von vier Zentimetern, oder eine zweite Kopie der Historie, die mit
 der ersten auseinanderläuft. Die Uhr ist eine Fernbedienung. Das ist keine
 Einschränkung, das ist die Entscheidung.
+
+Was sie aufhebt, ist deshalb kein Widerspruch: ein Tipp, der noch nicht
+zugestellt ist, ist keine Historie, sondern eine unbeantwortete Frage. Sobald er
+durch ist, vergisst die Uhr ihn wieder.
 
 **Ereignisse mit Preis auf der Kachel.** Das Telefon schickt sie gar nicht erst
 herüber. Ein Knopf ohne Rückfrage, gedrückt ohne hinzusehen, darf nichts kosten.

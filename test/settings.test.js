@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  normalizeSettings, defaultSettings, idFromLabel, openModelId,
+  normalizeSettings, defaultSettings, idFromLabel, cleanId, idFolgtNamen, openModelId,
   lockedIds, pauseIds, lockKind, applyLockKind, resolveModel, modelMap, orgasmPrice,
   SETTINGS_SCHEMA,
 } from '../www/js/core/settings.js';
@@ -142,6 +142,30 @@ test('IDs aus Namen sind kollisionsfrei und vertragen Umlaute', () => {
   assert.equal(idFromLabel('Öse', []), 'OESE');
   const zweite = idFromLabel('Neuer Käfig', ['NEUERK']);
   assert.notEqual(zweite, 'NEUERK');
+});
+
+test('Eine von Hand getippte ID wird auf das Erlaubte gestutzt', () => {
+  assert.equal(cleanId(' sm '), 'SM');
+  assert.equal(cleanId('s-m!'), 'SM');
+  assert.equal(cleanId('viel zu langer text'), 'VIELZULA', 'acht Zeichen sind die Grenze');
+  assert.equal(cleanId('---'), '', 'daraus wird keine ID — die Oberfläche muss das melden');
+});
+
+test('Eine selbst gesetzte ID wandert beim Umbenennen nicht mit', () => {
+  // Der Fall, der das Feld nötig macht: zwei Varianten desselben Käfigs. Aus den
+  // Namen entstünden STEELW und STEELW2 — zwei Adressen, die niemand auseinanderhält.
+  const s = normalizeSettings({ models: [
+    { kind: 'model', id: 'SM', label: 'Steelworxx mit',  locked: true, rate: 0.5 },
+    { kind: 'model', id: 'SO', label: 'Steelworxx ohne', locked: true, rate: 0.5 },
+    { kind: 'model', id: 'KK', label: 'Nicht verschlossen', isOpen: true, rate: -1 },
+  ] });
+  assert.deepEqual(s.models.map(m => m.id), ['SM', 'SO', 'KK'], 'kurze IDs überleben das Laden');
+
+  const andere = ['SO', 'KK'];
+  assert.equal(idFolgtNamen(s.models[0], 'Steelworxx mit', andere), false,
+    'SM ist nicht das, was aus dem Namen entstünde — also von Hand gesetzt');
+  assert.equal(idFolgtNamen({ id: 'STEELW' }, 'Steelworxx mit', andere), true,
+    'STEELW dagegen folgt dem Namen und dürfte ihm weiter folgen');
 });
 
 test('Unbekannte IDs lösen sich in ein neutrales Ersatzmodell auf', () => {

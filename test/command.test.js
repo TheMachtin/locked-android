@@ -259,6 +259,21 @@ test('Häufig Getragenes steht auf der Kachel, die Reihenfolge bleibt die der Re
     'gezeichnet wird in Registry-Reihenfolge, nicht nach Rangliste');
 });
 
+test('Ein nachgetragener Tipp der Uhr landet zur Zeit des Tippens', () => {
+  // Genau die Adresse, die WearCommandService baut, wenn die Uhr einen Tipp
+  // nachreicht, den sie in einer Funklücke aufgehoben hat.
+  const cmd = parseCommand('locked://log?m=NS&t=14:05&d=2026-09-02');
+  const p = planCommand({ events: [] }, S, cmd, JETZT);
+  assert.equal(p.ok, true);
+  assert.deepEqual(p.event, { date: '2026-09-02', time: '14:05', type: 'NS' },
+    'nicht die Ankunft zählt, sondern der Moment am Handgelenk');
+
+  // Deshalb ist mehrfaches Zustellen gefahrlos: derselbe Tipp bleibt derselbe
+  // Eintrag, während ein Tipp ohne Zeitstempel jedes Mal ein neuer wäre.
+  const nochmal = planCommand({ events: [p.event] }, S, cmd, JETZT);
+  assert.equal(nochmal.doppelt, true);
+});
+
 test('Ohne Historie meldet die Uhr den offenen Zustand', () => {
   const p = watchPayload({ events: [] }, S, MAX_TILE_BUTTONS, JETZT);
   assert.equal(p.jetzt.id, 'KK');
