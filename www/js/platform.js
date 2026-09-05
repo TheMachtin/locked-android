@@ -189,6 +189,20 @@ export async function setLauncherShortcuts(items) {
  *
  * @param {string} json  fertig serialisiert (siehe core/command.js → watchPayload)
  */
+/**
+ * Der Uhr bestätigen, dass ihr Tipp jetzt in der Datei steht.
+ *
+ * Erst danach streicht sie ihn aus ihrer Warteschlange. Schlägt es fehl, bleibt
+ * er dort und kommt später wieder — doppelt eingetragen wird er nicht, weil er
+ * seinen Zeitpunkt mitbringt.
+ */
+export async function confirmToWatch(marke) {
+  const W = CAP().WearBridge;
+  if (!IS_NATIVE || !W || !W.confirm || !marke) return;
+  try { await W.confirm({ marke }); }
+  catch (e) { console.warn('Uhr nicht bestätigt', e); }
+}
+
 export async function publishToWatch(json) {
   const W = CAP().WearBridge;
   if (!IS_NATIVE || !W || !W.publish) return false;

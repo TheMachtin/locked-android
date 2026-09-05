@@ -34,10 +34,14 @@ const P_MODELL = ['m', 'modell', 'model', 'log', 'typ'];
 const P_ZEIT   = ['t', 'zeit', 'time'];
 const P_DATUM  = ['d', 'datum', 'date'];
 const P_ZEIGEN = ['app', 'zeigen', 'show'];
+// Die Marke, unter der die Uhr diesen Tipp in ihrer Warteschlange führt. Sie
+// kommt nur von dort und wird unverändert zurückgeschickt, sobald der Eintrag
+// steht — vorher darf die Uhr ihn nicht vergessen.
+const P_UHR    = ['w', 'uhr'];
 
 /** Alle Parameter, die zu einem Kommando gehören — die Web-App räumt sie nach
  *  der Ausführung aus der Adresse, sonst trüge ein Neuladen sie erneut ein. */
-export const CMD_PARAMS = [...P_MODELL, ...P_ZEIT, ...P_DATUM, ...P_ZEIGEN];
+export const CMD_PARAMS = [...P_MODELL, ...P_ZEIT, ...P_DATUM, ...P_ZEIGEN, ...P_UHR];
 
 const ISO_DATUM = /^\d{4}-\d{2}-\d{2}$/;
 const RELATIV   = /^[+-]?\d{1,3}$/;
@@ -91,6 +95,7 @@ export function parseCommand(url) {
     zeit:   ersterWert(params, P_ZEIT),
     datum:  ersterWert(params, P_DATUM),
     zeigen: istWahr(ersterWert(params, P_ZEIGEN)),
+    uhr:    ersterWert(params, P_UHR),
   };
 }
 

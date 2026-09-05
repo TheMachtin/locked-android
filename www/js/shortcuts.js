@@ -27,7 +27,7 @@ import {
 } from './core/command.js';
 import {
   IS_NATIVE, onAppUrlOpen, launchUrl, minimizeApp, notifyNow, setLauncherShortcuts,
-  publishToWatch,
+  publishToWatch, confirmToWatch,
 } from './platform.js';
 import { autosave } from './sync/onedrive.js';
 
@@ -94,6 +94,9 @@ export async function runCommand(url) {
   }
   if (plan.doppelt) {
     showToast(plan.meldung);
+    // Steht schon: für die Uhr ist das erledigt wie ein neuer Eintrag. Sonst
+    // schickte sie denselben Tipp bis in alle Ewigkeit erneut.
+    await confirmToWatch(cmd.uhr);
     await abschluss(plan.meldung, cmd);
     return true;
   }
@@ -113,6 +116,10 @@ export async function runCommand(url) {
   // Erst speichern, dann verabschieden — in dieser Reihenfolge, sonst schließt
   // sich die App über einer laufenden Übertragung.
   try { await autosave(); } catch (e) { console.error('Speichern nach Kommando fehlgeschlagen', e); }
+  // Jetzt steht der Eintrag: die Uhr darf ihn vergessen. Vorher nicht — bis
+  // hierher hätte jeder Abbruch ihn verloren, und sie ist die einzige Stelle,
+  // die ihn dann noch hätte.
+  await confirmToWatch(cmd.uhr);
   await abschluss(meldung, cmd);
   return true;
 }

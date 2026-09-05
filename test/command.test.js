@@ -14,7 +14,7 @@ const JETZT = new Date('2026-09-03T10:20:00');
 // =========================== LESEN ===========================
 test('Das eigene Schema wird erkannt, der OAuth-Rücksprung nicht', () => {
   assert.deepEqual(parseCommand('locked://log?m=HT'),
-    { modell: 'HT', zeit: null, datum: null, zeigen: false });
+    { modell: 'HT', zeit: null, datum: null, zeigen: false, uhr: null });
   assert.equal(parseCommand('locked://auth?code=abc&state=xyz'), null,
     'die Anmeldung darf nie als Eintrag gedeutet werden');
   assert.equal(parseCommand('locked://log'), null, 'ohne Modell ist es kein Kommando');
@@ -24,7 +24,7 @@ test('Das eigene Schema wird erkannt, der OAuth-Rücksprung nicht', () => {
 
 test('Die Web-Adresse trägt denselben Befehl als Parameter', () => {
   const c = parseCommand('https://themachtin.github.io/locked-android/?log=KK&t=07:05');
-  assert.deepEqual(c, { modell: 'KK', zeit: '07:05', datum: null, zeigen: false });
+  assert.deepEqual(c, { modell: 'KK', zeit: '07:05', datum: null, zeigen: false, uhr: null });
   assert.equal(parseCommand('https://themachtin.github.io/locked-android/'), null);
   assert.equal(parseCommand('https://themachtin.github.io/locked-android/?code=abc'), null);
 });
@@ -257,6 +257,18 @@ test('Häufig Getragenes steht auf der Kachel, die Reihenfolge bleibt die der Re
   const dreiPlaetze = tileModels({ events }, S, 3, 'HT', JETZT.getTime()).map(m => m.id);
   assert.deepEqual(dreiPlaetze, ['NS', 'PC', 'KK'],
     'gezeichnet wird in Registry-Reihenfolge, nicht nach Rangliste');
+});
+
+test('Die Marke der Uhr reist mit und wird nicht für ein Modell gehalten', () => {
+  // Genau die Adresse, die WearCommandService baut. `w` sagt der App, welchen
+  // Eintrag sie der Uhr bestätigen muss — erst danach vergisst diese ihn.
+  const c = parseCommand('locked://log?m=NS&t=14:05&d=2026-09-02&w=NS%401757003100000');
+  assert.equal(c.modell, 'NS');
+  assert.equal(c.uhr, 'NS@1757003100000');
+  assert.ok(CMD_PARAMS.includes('w'), 'sonst bliebe die Marke in der Adresse der Web-App stehen');
+
+  const ohne = parseCommand('locked://log?m=NS');
+  assert.equal(ohne.uhr, null, 'ein Kurzbefehl hat nichts zu bestätigen');
 });
 
 test('Ein nachgetragener Tipp der Uhr landet zur Zeit des Tippens', () => {

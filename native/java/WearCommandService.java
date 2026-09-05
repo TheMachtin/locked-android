@@ -17,7 +17,6 @@ import androidx.core.content.ContextCompat;
 import app.locked.themachtin.MainActivity;
 
 import com.google.android.gms.wearable.MessageEvent;
-import com.google.android.gms.wearable.Wearable;
 import com.google.android.gms.wearable.WearableListenerService;
 
 import java.nio.charset.StandardCharsets;
@@ -50,8 +49,6 @@ import java.util.Locale;
 public class WearCommandService extends WearableListenerService {
 
     private static final String PFAD = "/locked/log";
-    /** Der Rückweg: „angekommen". Ohne ihn hakt die Uhr nichts ab. */
-    private static final String PFAD_OK = "/locked/ok";
     private static final String KANAL = "locked-wear";
     private static final int NOTIF_ID = 7100;
     /** Bis hierhin gilt ein Tipp der Uhr als „jetzt". */
@@ -79,7 +76,11 @@ public class WearCommandService extends WearableListenerService {
         }
         if (id.isEmpty()) return;
 
-        Uri adresse = Uri.parse("locked://log?m=" + Uri.encode(id) + nachgetragen(getipptMs));
+        // Die Marke der Uhr reist mit: bestätigt wird erst, wenn daraus ein Eintrag
+        // geworden ist (siehe shortcuts.js → runCommand). Ein unbekannter Parameter
+        // stört das Lesen der Adresse nicht.
+        Uri adresse = Uri.parse("locked://log?m=" + Uri.encode(id) + nachgetragen(getipptMs)
+            + "&w=" + Uri.encode(roh));
         Intent intent = new Intent(Intent.ACTION_VIEW, adresse)
             .setClass(this, MainActivity.class)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -87,38 +88,12 @@ public class WearCommandService extends WearableListenerService {
         if (darfAusDemHintergrundStarten()) {
             try {
                 startActivity(intent);
-                bestaetige(event, roh);
                 return;
             } catch (Exception e) {
                 Log.w("Locked", "Start aus dem Hintergrund abgelehnt", e);
             }
         }
-        if (biete(intent, id)) bestaetige(event, roh);
-    }
-
-    /**
-     * Der Uhr sagen, dass der Tipp angekommen ist.
-     *
-     * Erst diese Nachricht streicht ihn drüben aus der Warteschlange. Der Erfolg
-     * von `sendMessage()` taugt dafür nicht: er bedeutet nur, dass Play Services
-     * die Nachricht angenommen hat — bei einem Telefon im Flugmodus, dessen
-     * Bluetooth-Bindung noch steht, gilt der Knoten als verbunden, und der Tipp
-     * verschwände auf dem Weg, während die Uhr ihn als erledigt abhakt.
-     *
-     * Bestätigt wird deshalb erst, wenn dieses Gerät den Eintrag übernommen hat —
-     * entweder ist die App gestartet oder die Benachrichtigung steht. Kann beides
-     * nicht sein, bleibt der Tipp auf der Uhr und kommt später wieder.
-     *
-     * Zurück geht genau das, was ankam: die Uhr erkennt ihren Eintrag daran, ohne
-     * dass beide Seiten sich auf ein weiteres Format einigen müssten.
-     */
-    private void bestaetige(MessageEvent event, String roh) {
-        try {
-            Wearable.getMessageClient(this).sendMessage(
-                event.getSourceNodeId(), PFAD_OK, roh.getBytes(StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            Log.w("Locked", "Bestätigung an die Uhr fehlgeschlagen", e);
-        }
+        biete(intent, id);
     }
 
     /**

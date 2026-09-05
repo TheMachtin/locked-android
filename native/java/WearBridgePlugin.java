@@ -11,9 +11,12 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.PutDataMapRequest;
 import com.google.android.gms.wearable.PutDataRequest;
 import com.google.android.gms.wearable.Wearable;
+
+import java.nio.charset.StandardCharsets;
 
 /**
  * Was die Uhr wissen muss.
@@ -30,6 +33,8 @@ import com.google.android.gms.wearable.Wearable;
 public class WearBridgePlugin extends Plugin {
 
     private static final String PFAD = "/locked/models";
+    /** Der Rückweg zur Uhr: „steht in der Datei". */
+    private static final String PFAD_OK = "/locked/ok";
 
     @PluginMethod
     public void publish(PluginCall call) {
@@ -50,6 +55,45 @@ public class WearBridgePlugin extends Plugin {
             call.resolve();
         } catch (Exception e) {
             call.reject("Uhr-Abgleich fehlgeschlagen: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Der Uhr sagen, dass ihr Tipp jetzt in der Datei steht.
+     *
+     * Erst diese Nachricht streicht ihn drüben aus der Warteschlange, und sie geht
+     * bewusst von *hier* aus — nicht schon aus dem Dienst, der die Nachricht
+     * entgegennimmt. Der weiß nur, dass etwas angekommen ist; ob daraus ein
+     * Eintrag wurde, entscheidet sich erst danach. Fehlt „Über anderen Apps
+     * anzeigen", liegt der Tipp bis dahin als Benachrichtigung da und wartet auf
+     * einen Fingerdruck — würde die Uhr ihn schon dafür streichen, wäre er
+     * verloren, sobald ihn jemand wegwischt.
+     *
+     * Verschickt wird die Marke, die die Uhr mitgeschickt hat („NS@1757003100000"),
+     * damit drüben genau dieser Eintrag getroffen wird und kein späterer.
+     */
+    @PluginMethod
+    public void confirm(PluginCall call) {
+        String marke = call.getString("marke");
+        if (marke == null || marke.isEmpty()) {
+            call.reject("marke required");
+            return;
+        }
+        try {
+            byte[] daten = marke.getBytes(StandardCharsets.UTF_8);
+            Wearable.getNodeClient(getContext()).getConnectedNodes()
+                .addOnSuccessListener(nodes -> {
+                    if (nodes == null) return;
+                    for (Node n : nodes) {
+                        Wearable.getMessageClient(getContext())
+                            .sendMessage(n.getId(), PFAD_OK, daten)
+                            .addOnFailureListener(e -> Log.w("Locked", "Uhr nicht bestätigt", e));
+                    }
+                })
+                .addOnFailureListener(e -> Log.w("Locked", "Keine Uhr erreichbar", e));
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Bestätigung fehlgeschlagen: " + e.getMessage());
         }
     }
 

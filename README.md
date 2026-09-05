@@ -191,14 +191,22 @@ Nachricht nicht durch, hebt die Uhr den Tipp auf und stellt ihn zu, sobald sie
 das Telefon wieder erreicht: beim nächsten Blick auf die Kachel, beim Öffnen der
 Uhr-App oder wenn das Telefon von sich aus eine neue Registry schickt.
 
-Gestrichen wird er erst, wenn das Telefon **zurückmeldet**, dass es ihn hat.
-Dass das Senden gelingt, heißt nämlich nichts: es bedeutet nur, dass Play
-Services die Nachricht angenommen hat. Steht das Telefon im Flugmodus, während
-die Bluetooth-Bindung weiter besteht, gilt es als verbunden — die Nachricht
-verschwindet unterwegs, und ohne Rückmeldung hätte die Uhr genau den Tipp
-weggeworfen, den sie aufheben sollte. Beide APKs müssen dafür aus demselben
-Release stammen; eine ältere Telefon-App bestätigt nicht, und auf der Uhr bliebe
-dann alles als „wartet" stehen.
+Gestrichen wird er erst, wenn das Telefon zurückmeldet, dass der Eintrag **in
+der Datei steht** — nicht, wenn die Nachricht angekommen ist, und schon gar
+nicht, wenn das Senden gelungen ist. Jede frühere Stufe wäre eine Lüge:
+
+| Stufe | sagt aus | taugt als Beleg? |
+|---|---|---|
+| `sendMessage` erfolgreich | Play Services hat die Nachricht angenommen | nein — bei stehender Bluetooth-Bindung gilt ein funkstilles Telefon als verbunden, die Nachricht verschwindet unterwegs |
+| Dienst hat sie empfangen | das Telefon weiß davon | nein — ohne „Über anderen Apps anzeigen" liegt sie nur als Benachrichtigung da und wartet auf einen Fingerdruck |
+| Eintrag gespeichert | er steht in der Historie | ja |
+
+Die Bestätigung geht deshalb aus der App selbst hinaus, direkt nach dem
+Speichern (`shortcuts.js` → `runCommand`), und trägt die Marke, die die Uhr
+mitgeschickt hat. Bleibt sie aus, versucht es die Uhr später erneut; doppelt
+eingetragen wird nichts, weil derselbe Zeitpunkt denselben Eintrag ergibt.
+Beide APKs müssen dafür aus demselben Release stammen — eine ältere Telefon-App
+bestätigt nicht, und auf der Uhr bliebe alles als „wartet" stehen.
 Nachgereicht wird er mit seinem Zeitstempel — `locked://log?m=NS&t=14:05&d=2026-09-04` —
 und steht damit in der Historie, wo er passiert ist, nicht wo er ankam. Erst ab
 zwei Minuten Verspätung; darunter bleibt die Uhrzeit des Telefons maßgeblich,
