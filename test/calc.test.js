@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { computeAll, computeDayHours, scoreDay, lockPhaseStart, currentOrgasmPrice, regenState, expiredRegenEvents }
+import { computeAll, computeDayHours, scoreDay, lockPhaseStart, unopenedPhaseStart,
+  currentOrgasmPrice, regenState, expiredRegenEvents }
   from '../www/js/core/calc.js';
 import { normalizeSettings, modelMap, defaultSettings, orgasmPrice } from '../www/js/core/settings.js';
 
@@ -182,6 +183,79 @@ test('Eine Unterbrechung macht aus einem offenen Zustand keinen verschlossenen',
   const nurReinigung = [ev('2026-03-01', '20:00', 'CLEAN')];
   assert.equal(lockPhaseStart(nurReinigung, s, new Date('2026-03-01T21:00:00').getTime()), null,
     'ohne vorherigen Käfig bleibt der offene Startzustand stehen');
+});
+
+test('Ungeöffnet endet beim Modellwechsel, verschlossen läuft weiter', () => {
+  const s = S();
+  const events = [
+    ev('2026-03-01', '20:00', 'HT'),
+    ev('2026-03-03', '09:00', 'NS'),
+  ];
+  const ref = new Date('2026-03-04T12:00:00').getTime();
+  assert.equal(new Date(lockPhaseStart(events, s, ref).ms).toISOString().slice(0, 10), '2026-03-01');
+  const uo = unopenedPhaseStart(events, s, ref);
+  assert.equal(uo.model, 'NS');
+  assert.equal(new Date(uo.ms).toISOString().slice(0, 10), '2026-03-03',
+    'für den Wechsel musste der Käfig auf — die Strecke beginnt dort neu');
+});
+
+test('Ungeöffnet: derselbe Käfig zweimal eingetragen ist kein Wechsel', () => {
+  const s = S();
+  const events = [
+    ev('2026-03-01', '20:00', 'HT'),
+    ev('2026-03-02', '08:00', 'HT'),
+    ev('2026-03-03', '08:00', 'HT'),
+  ];
+  const uo = unopenedPhaseStart(events, s, new Date('2026-03-04T12:00:00').getTime());
+  assert.equal(new Date(uo.ms).toISOString().slice(0, 10), '2026-03-01',
+    'der Lauf beginnt beim ersten der gleichen Einträge');
+});
+
+test('Ungeöffnet: eine Unterbrechung setzt zurück, die verschlossene Phase nicht', () => {
+  const s = S();
+  const events = [
+    ev('2026-03-01', '20:00', 'HT'),
+    ev('2026-03-03', '09:00', 'CLEAN'),
+    ev('2026-03-03', '09:20', 'HT'),
+  ];
+  const ref = new Date('2026-03-04T12:00:00').getTime();
+  assert.equal(new Date(lockPhaseStart(events, s, ref).ms).toISOString().slice(0, 10), '2026-03-01');
+  const uo = unopenedPhaseStart(events, s, ref);
+  assert.equal(new Date(uo.ms).getHours(), 9);
+  assert.equal(new Date(uo.ms).getMinutes(), 20,
+    'die Reinigung steht in der Datei, weil der Käfig dafür herunter kam');
+});
+
+test('Ungeöffnet: während der Unterbrechung und im offenen Zustand läuft nichts', () => {
+  const s = S();
+  const inReinigung = [ev('2026-03-01', '20:00', 'HT'), ev('2026-03-03', '09:00', 'CLEAN')];
+  assert.equal(unopenedPhaseStart(inReinigung, s, new Date('2026-03-03T09:30:00').getTime()), null);
+
+  const offen = [ev('2026-03-01', '20:00', 'HT'), ev('2026-03-03', '09:00', 'KK')];
+  assert.equal(unopenedPhaseStart(offen, s, new Date('2026-03-04T12:00:00').getTime()), null);
+
+  assert.equal(unopenedPhaseStart([], s, Date.now()), null, 'ohne Historie ist der Startzustand offen');
+});
+
+test('Ungeöffnet: ein Orgasmus für sich öffnet nichts', () => {
+  const s = S();
+  const events = [ev('2026-03-01', '20:00', 'HT'), ev('2026-03-03', '09:00', 'OR')];
+  const uo = unopenedPhaseStart(events, s, new Date('2026-03-04T12:00:00').getTime());
+  assert.equal(new Date(uo.ms).toISOString().slice(0, 10), '2026-03-01',
+    'wer dafür aufgemacht hat, trägt die Öffnung ein — das Ereignis selbst sagt nichts');
+});
+
+test('Ungeöffnet ist nie länger als verschlossen', () => {
+  const s = S();
+  const events = [
+    ev('2026-03-01', '08:00', 'HT'), ev('2026-03-01', '20:00', 'NS'),
+    ev('2026-03-02', '07:00', 'CLEAN'), ev('2026-03-02', '07:30', 'NS'),
+    ev('2026-03-03', '12:00', 'HT'),
+  ];
+  const ref = new Date('2026-03-04T18:00:00').getTime();
+  const lock = lockPhaseStart(events, s, ref);
+  const uo = unopenedPhaseStart(events, s, ref);
+  assert.ok(uo.ms >= lock.ms);
 });
 
 test('Unterbrechungsstunden zählen weder als verschlossen noch als offen', () => {

@@ -111,6 +111,10 @@ function renderArchiv() {
   if (!l) { card.classList.add('hide'); return; }
   card.classList.remove('hide');
   const zeile = (l1, v) => `<div class="row"><span>${l1}</span><b>${v}</b></div>`;
+  // `bestUoStreak` heißt „ungeöffnet", meint aber die 1.x-Definition: *kein
+  // Eintrag an dem Tag*. Mit der Kachel „Ungeöffnet" auf der Eintrag-Seite hat
+  // das nichts zu tun — unter demselben Namen stünden zwei verschiedene Zahlen
+  // in derselben App. Das Feld in der Datei bleibt, die Zeile heißt anders.
   $('archivBody').innerHTML = `
     <div class="stamp">Formel 1.x · abgeschlossen</div>
     <div class="gross">${fmtInt(l.punkte)}</div>
@@ -121,7 +125,7 @@ function renderArchiv() {
       ${zeile('Stunden verschlossen', fmtHours(l.stundenVerschlossen))}
       ${zeile('Orgasmen', fmtInt(l.orgasmen))}
       ${zeile('Längste orgasmusfreie Strecke', `${fmtInt(l.bestOfStreak.days)} T`)}
-      ${zeile('Längste ungeöffnete Strecke', `${fmtInt(l.bestUoStreak.days)} T`)}
+      ${zeile('Längste Strecke ohne Eintrag', `${fmtInt(l.bestUoStreak.days)} T`)}
     </div>
     <div class="small">Eingefroren am ${fmtDateShort((l.eingefrorenAm || '').slice(0, 10))}.
       Diese Zahlen ändern sich nicht mehr — die alte Streak-Formel wuchs exponentiell

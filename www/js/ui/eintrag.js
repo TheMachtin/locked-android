@@ -15,7 +15,7 @@ import {
 } from './format.js';
 import { dayTimeline } from './charts.js';
 import { isoOf, isoDateAdd, hmOf, eventMs, calendarDaysBetween } from '../core/time.js';
-import { lockPhaseStart, currentOrgasmPrice, regenState, expiredRegenEvents } from '../core/calc.js';
+import { lockPhaseStart, unopenedPhaseStart, currentOrgasmPrice, regenState, expiredRegenEvents } from '../core/calc.js';
 import { resolveModel, modelMap, labelOf, KIND_ORGASM } from '../core/settings.js';
 import { pendingEscalation, escalationEvents } from '../core/escalation.js';
 
@@ -271,23 +271,38 @@ function renderStreakRow(iso, days, d, s, refMs, lock) {
   let ofTage = 0;
   for (let i = idx; i >= 0 && days[i].orgasmusfrei; i--) ofTage++;
   const letzterOr = letzterOrgasmusVor(refMs, s);
+  const uo = unopenedPhaseStart(STATE.data.events, s, refMs);
 
+  const seitStempel = (ms) => `seit ${fmtDateShort(isoOf(new Date(ms)))} ${hmOf(new Date(ms))}`;
+
+  // Paarweise: oben die beiden Uhren am Käfig, unten die beiden am Orgasmus.
   const eintraege = [
-    {
-      days: ofTage, label: 'Orgasmusfrei',
-      ms: letzterOr != null ? Math.max(0, refMs - letzterOr) : null,
-      since: letzterOr != null ? `seit ${fmtDateShort(isoOf(new Date(letzterOr)))} ${hmOf(new Date(letzterOr))}` : 'keiner erfasst',
-    },
     {
       days: lock ? calendarDaysBetween(lock.ms, refMs) : 0, label: 'Verschlossen',
       ms: lock ? Math.max(0, refMs - lock.ms) : null,
       // Läuft gerade eine Unterbrechung, gehört das in die Kachel und nicht in
       // einen Tooltip — auf dem Telefon gibt es kein Darüberfahren.
       since: !lock ? 'gerade offen'
-        : `seit ${fmtDateShort(isoOf(new Date(lock.ms)))} ${hmOf(new Date(lock.ms))}`
+        : seitStempel(lock.ms)
           + (lock.paused
             ? `<br>${escapeHtml(labelOf(s, lock.pauseModel))} seit ${hmOf(new Date(lock.pauseSince))}`
             : ''),
+    },
+    {
+      days: uo ? calendarDaysBetween(uo.ms, refMs) : 0, label: 'Ungeöffnet',
+      ms: uo ? Math.max(0, refMs - uo.ms) : null,
+      // Steht hier keine Strecke, ist die interessante Auskunft *warum* nicht —
+      // vor allem im Fall, in dem die Kachel daneben weiterläuft: der Käfig ist
+      // gerade zur Reinigung ab.
+      since: uo ? seitStempel(uo.ms)
+        : (lock && lock.paused
+            ? `${escapeHtml(labelOf(s, lock.pauseModel))} läuft`
+            : 'gerade offen'),
+    },
+    {
+      days: ofTage, label: 'Orgasmusfrei',
+      ms: letzterOr != null ? Math.max(0, refMs - letzterOr) : null,
+      since: letzterOr != null ? seitStempel(letzterOr) : 'keiner erfasst',
     },
     {
       days: null, label: 'Multiplikator',

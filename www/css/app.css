@@ -125,7 +125,13 @@
     margin-top: 2px; }
 
   /* Streak-Row in Hero */
-  .streak-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding-top: 14px; }
+  /* Vier Kacheln: auf dem Telefon 2×2 (Käfig oben, Orgasmus unten), auf dem
+     Breitbild in einer Reihe. Vier nebeneinander wären am Handy je 80 px —
+     zu wenig für „12 T (289 h)".
+     Die Breitbild-Zeile steht hier und nicht oben im Desktop-Block: gleiche
+     Spezifität entscheidet die Reihenfolge, und dieser Selektor käme später. */
+  .streak-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding-top: 14px; }
+  @media (min-width: 820px) { .streak-row { grid-template-columns: repeat(4, 1fr); } }
   .streak-item { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
     padding: 10px 4px; text-align: center; }
   .streak-item .days { font-size: 20px; font-weight: 700; color: var(--text);

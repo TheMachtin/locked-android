@@ -56,7 +56,9 @@ Ab etwa Tag 40 maß die App nur noch „Tage seit dem letzten Orgasmus"; ob 24 o
 4 Stunden getragen wurde, war rechnerisch Rauschen. Der Orgasmus kostete nominal
 −10, real aber den ganzen Streak — unbezifferbar und nirgends sichtbar. Und
 „Ungeöffnet" hieß *kein Eintrag an dem Tag*, mit der höchsten Basis im Modell:
-die App nicht zu benutzen zahlte sich am besten aus.
+die App nicht zu benutzen zahlte sich am besten aus. Den Namen gibt es in 2.0
+wieder, die Bedeutung nicht: er zählt jetzt die Zeit am Stück im selben Käfig
+(siehe unten) und bringt keine Punkte.
 
 ## Modelle sind Daten
 
@@ -67,11 +69,11 @@ ist ein Eintrag, kein Release.
 
 Der **Verschluss-Zustand** ist eine Auswahl aus dreien:
 
-| | verdient | zählt als | Phase „verschlossen seit" |
-|---|---|---|---|
-| **Verschlossen** | Stundensatz + Durchgehend-Bonus | verschlossene Zeit | läuft |
-| **Unterbrechung** | nichts (Satz 0) | weder noch | läuft weiter |
-| **Offen** | kostet den Stundensatz | offene Zeit | beginnt neu |
+| | verdient | zählt als | „verschlossen seit" | „ungeöffnet seit" |
+|---|---|---|---|---|
+| **Verschlossen** | Stundensatz + Durchgehend-Bonus | verschlossene Zeit | läuft | läuft, solange dasselbe Modell bleibt |
+| **Unterbrechung** | nichts (Satz 0) | weder noch | läuft weiter | beginnt neu |
+| **Offen** | kostet den Stundensatz | offene Zeit | beginnt neu | beginnt neu |
 
 Die **Unterbrechung** gibt es, weil die Reinigung sonst als Öffnung gebucht
 werden müsste: zehn Minuten am Waschbecken hätten die verschlossene Phase auf
@@ -79,6 +81,23 @@ null gesetzt und den Tagesbonus gekostet — eine Aussage über den Käfig, die
 niemand gemeint hat. Einen Deckel braucht sie nicht: sie verdient nichts, eine
 lange „Reinigung" kostet also von allein jede Stunde, die der Käfig gebracht
 hätte.
+
+### Zwei Uhren: „verschlossen" und „ungeöffnet"
+
+Auf der Eintrag-Seite stehen beide nebeneinander, und sie beantworten
+verschiedene Fragen. **Verschlossen** misst den Verschluss und läuft über
+Modellwechsel und Reinigungen hinweg — wer zweimal täglich den Käfig tauscht,
+war trotzdem durchgehend zu. **Ungeöffnet** ist die strengere Frage: der
+zusammenhängende Lauf desselben Modells. Jeder Wechsel setzt sie zurück, eine
+Unterbrechung ebenso, denn die steht in der Datei genau dann, wenn der Käfig
+dafür herunter kam. Was ohne Öffnen geht — die Düse unter der Dusche — erzeugt
+keinen Eintrag und lässt die Strecke laufen.
+
+Damit ist „ungeöffnet" nie länger als „verschlossen", und der Abstand zwischen
+beiden ist genau das, was die Wechsel gekostet haben. Punkte hängen an keiner
+der beiden Zahlen: sie sind Anzeige, kein Faktor in der Rechnung — anders als in
+1.x, wo „Ungeöffnet" *kein Eintrag an dem Tag* hieß und die höchste Basis im
+Modell trug.
 
 Zwei weitere Eigenschaften trägt das Programm mit und sichert sie gegen Unsinn ab:
 

@@ -340,6 +340,50 @@ export function lockPhaseStart(events, settings, refMs) {
   };
 }
 
+// =========================== UNGEÖFFNET-PHASE ===========================
+/**
+ * Beginn der laufenden *ungeöffneten* Strecke — oder null, wenn der Käfig
+ * gerade offen oder abgelegt ist.
+ *
+ * „Verschlossen" und „ungeöffnet" sind zwei verschiedene Fragen, und die zweite
+ * ist die strengere. Wer zweimal am Tag vom Holy Trainer auf den Neosteel
+ * wechselt, war durchgehend verschlossen — aufgemacht hat er trotzdem, zweimal.
+ * Die verschlossene Phase soll darüber hinweglaufen, das ist ihr Sinn: sie misst
+ * den Verschluss, nicht das Modell. Diese hier soll es genau nicht.
+ *
+ * Ungeöffnet ist deshalb der zusammenhängende Lauf *desselben* Modells. Ein
+ * Wechsel setzt zurück, egal auf welches, und eine Unterbrechung (Reinigung)
+ * ebenso: sie steht in der Datei genau dann, wenn der Käfig dafür herunter kam.
+ * Was ohne Öffnen geht — die Düse unter der Dusche — erzeugt keinen Eintrag und
+ * lässt die Strecke laufen. Damit ist „ungeöffnet" nie länger als
+ * „verschlossen", und die Differenz zwischen beiden ist genau das, was ein
+ * Modellwechsel kostet.
+ *
+ * Derselbe Käfig zweimal hintereinander eingetragen ist kein Wechsel — der Lauf
+ * beginnt beim ersten der beiden. Ein Orgasmus sagt hier so wenig über den
+ * Verschluss aus wie in `lockPhaseStart()`: wer dafür geöffnet hat, hat die
+ * Öffnung eingetragen.
+ */
+export function unopenedPhaseStart(events, settings, refMs) {
+  const map = modelMap(settings);
+  const ref = (typeof refMs === 'number') ? refMs : Date.now();
+  const evs = (events || [])
+    .map(e => ({ e, m: resolveModel(settings, map, e.type), t: eventMs(e) }))
+    .filter(x => x.m.kind === KIND_MODEL && isFinite(x.t) && x.t <= ref)
+    .sort((a, b) => a.t - b.t);
+  if (!evs.length) return null;                 // Startzustand ist offen
+
+  const last = evs[evs.length - 1];
+  if (!last.m.locked) return null;              // offen oder gerade abgelegt
+
+  let start = last;
+  for (let i = evs.length - 2; i >= 0; i--) {
+    if (evs[i].e.type !== last.e.type) break;   // anderes Modell: dort wurde geöffnet
+    start = evs[i];
+  }
+  return { ms: start.t, model: last.e.type };
+}
+
 /** Zeitpunkt des letzten Orgasmus vor `refMs`, oder null. */
 export function lastOrgasmMs(events, settings, refMs) {
   const map = modelMap(settings);
