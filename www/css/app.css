@@ -15,41 +15,6 @@
   body { padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
   .app { max-width: 520px; margin: 0 auto; padding: 16px 14px 130px; }
 
-  /* Tablet / Desktop: breiter + 2-Spalten-Karten */
-  @media (min-width: 820px) {
-    .app { max-width: 1080px; padding: 20px 24px 140px; }
-    #page-eintrag, #page-dashboard {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      grid-auto-flow: dense;
-      align-items: start;
-    }
-    /* Eintrag: Hero und Einträge-Karte (letzte) volle Breite */
-    #page-eintrag > .card.hero,
-    #page-eintrag > .card:last-of-type { grid-column: 1 / -1; }
-    /* Dashboard: Zeitraum + Hauptcharts + Details volle Breite */
-    #page-dashboard > .card:nth-child(1),  /* Zeitraum */
-    #page-dashboard > .card:nth-child(3),  /* Punkte-Verlauf */
-    #page-dashboard > .card:nth-child(5),  /* Streak-Verlauf */
-    #page-dashboard > .card:nth-child(6),  /* Kalender */
-    #page-dashboard > .collapse-toggle,
-    #page-dashboard > #detailsSection { grid-column: 1 / -1; }
-    #detailsSection { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
-    /* Daten-Tab kompakt mittig */
-    #page-daten { max-width: 600px; margin: 0 auto; }
-    /* Savebar mit App breit halten */
-    .savebar .inner { max-width: 1080px; }
-    /* Hero etwas größer */
-    .hero { padding: 22px 24px 18px; }
-    .hero-num { font-size: 64px; }
-    /* Schnelleintrag: Buttons größer auf Desktop */
-    .qb { padding: 22px 8px; font-size: 17px; }
-  }
-  @media (min-width: 1200px) {
-    .app { max-width: 1280px; }
-    .savebar .inner { max-width: 1280px; }
-  }
   header { display:flex; align-items:center; justify-content:space-between; padding: 6px 4px 14px; gap: 8px; }
   header h1 { font-size: 18px; font-weight: 600; margin: 0; }
   header .meta { font-size: 11px; color: var(--muted); }
@@ -125,13 +90,10 @@
     margin-top: 2px; }
 
   /* Streak-Row in Hero */
-  /* Vier Kacheln: auf dem Telefon 2×2 (Käfig oben, Orgasmus unten), auf dem
-     Breitbild in einer Reihe. Vier nebeneinander wären am Handy je 80 px —
-     zu wenig für „12 T (289 h)".
-     Die Breitbild-Zeile steht hier und nicht oben im Desktop-Block: gleiche
-     Spezifität entscheidet die Reihenfolge, und dieser Selektor käme später. */
+  /* Vier Kacheln, am Telefon 2×2 (Käfig oben, Orgasmus unten). Vier
+     nebeneinander wären hier je 80 px — zu wenig für „12 T (289 h)". Die
+     Breitbild-Zeile steht unten im Desktop-Block. */
   .streak-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding-top: 14px; }
-  @media (min-width: 820px) { .streak-row { grid-template-columns: repeat(4, 1fr); } }
   .streak-item { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
     padding: 10px 4px; text-align: center; }
   .streak-item .days { font-size: 20px; font-weight: 700; color: var(--text);
@@ -467,3 +429,50 @@
 .sc-perm .sc-state { flex: 1; min-width: 180px; }
 .sc-perm .sc-state b { color: var(--text); }
 .sc-perm .btn { padding: 7px 12px; font-size: 12px; }
+
+/* ===========================================================================
+   Tablet / Desktop.
+
+   Steht am Dateiende, und das ist kein Stil, sondern Bedingung: eine Media
+   Query erhöht die Spezifität nicht. Bei gleicher Spezifität entscheidet die
+   Reihenfolge — von oben aus verloren `.hero`, `.hero-num`, `.qb` und
+   `.savebar .inner` gegen ihre eigenen Basis-Regeln weiter unten und waren
+   wirkungslos. Wer hier etwas ergänzt, dessen Selektor auch oben vorkommt,
+   muss den Block unten lassen.
+   =========================================================================== */
+  @media (min-width: 820px) {
+    .app { max-width: 1080px; padding: 20px 24px 140px; }
+    #page-eintrag, #page-dashboard {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      grid-auto-flow: dense;
+      align-items: start;
+    }
+    /* Eintrag: Hero und Einträge-Karte (letzte) volle Breite */
+    #page-eintrag > .card.hero,
+    #page-eintrag > .card:last-of-type { grid-column: 1 / -1; }
+    /* Dashboard: Zeitraum + Hauptcharts + Details volle Breite */
+    #page-dashboard > .card:nth-child(1),  /* Zeitraum */
+    #page-dashboard > .card:nth-child(3),  /* Punkte-Verlauf */
+    #page-dashboard > .card:nth-child(5),  /* Streak-Verlauf */
+    #page-dashboard > .card:nth-child(6),  /* Kalender */
+    #page-dashboard > .collapse-toggle,
+    #page-dashboard > #detailsSection { grid-column: 1 / -1; }
+    #detailsSection { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+    /* Daten-Tab kompakt mittig */
+    #page-daten { max-width: 600px; margin: 0 auto; }
+    /* Savebar mit App breit halten */
+    .savebar .inner { max-width: 1080px; }
+    /* Hero etwas größer */
+    .hero { padding: 22px 24px 18px; }
+    .hero-num { font-size: 64px; }
+    /* Schnelleintrag: Buttons größer auf Desktop */
+    .qb { padding: 22px 8px; font-size: 17px; }
+    /* Die vier Zähler passen hier nebeneinander */
+    .streak-row { grid-template-columns: repeat(4, 1fr); }
+  }
+  @media (min-width: 1200px) {
+    .app { max-width: 1280px; }
+    .savebar .inner { max-width: 1280px; }
+  }
