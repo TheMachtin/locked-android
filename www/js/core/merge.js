@@ -116,13 +116,16 @@ export function mergeData(base, local, remote) {
   const notes = mergeMap(b && b.notes, l.notes, r.notes, k => konflikte.push('notes:' + k));
   const bk = mergeList(b && b.bookings, l.bookings, r.bookings, x => String(x.id));
 
-  // meta: der spätere Zeitstempel gewinnt — ein Vorschlag, den ein Gerät später
-  // verworfen hat, soll nicht durch den älteren Stand des anderen zurückkommen.
+  // meta: bei diesen Marken gewinnt der spätere Zeitstempel. Ein Vorschlag, den
+  // ein Gerät später verworfen hat, soll nicht durch den älteren Stand des
+  // anderen zurückkommen — und der jüngere Blick in die App zählt, egal an
+  // welchem Gerät er passiert ist. Sonst mahnte das Telefon eine Woche lang
+  // etwas an, das am PC längst nachgesehen wurde.
   const meta = { ...(r.meta || {}), ...(l.meta || {}) };
-  const dl = Date.parse((l.meta || {}).escalationDismissedAt || '') || 0;
-  const dr = Date.parse((r.meta || {}).escalationDismissedAt || '') || 0;
-  if (dr > dl && (r.meta || {}).escalationDismissedAt) {
-    meta.escalationDismissedAt = r.meta.escalationDismissedAt;
+  for (const k of ['escalationDismissedAt', 'lastSeenAt']) {
+    const dl = Date.parse((l.meta || {})[k] || '') || 0;
+    const dr = Date.parse((r.meta || {})[k] || '') || 0;
+    if (dr > dl && (r.meta || {})[k]) meta[k] = r.meta[k];
   }
 
   const data = {

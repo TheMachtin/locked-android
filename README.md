@@ -16,17 +16,33 @@ Alle Installationen teilen sich dieselbe OneDrive-Datei und führen parallele
 ## Wie die Punkte entstehen
 
 ```
-Einnahmen = (verschlossene Stunden × Satz des Modells + Bonus) × Streak-Multiplikator
+Einnahmen = (verschlossene Stunden × Satz + Ungeöffnet-Zuschlag) × Streak-Multiplikator
 Kosten    = offene Stunden × Satz + Preis je Orgasmus
 Konto     = Summe aller Tagesergebnisse seit dem Stichtag
 Form      = Form gestern × 0,97 + Tagesergebnis
 ```
 
-Drei Eigenschaften, die das Modell tragen:
+Vier Eigenschaften, die das Modell tragen:
 
 **Der Streak wirkt als Multiplikator, nicht als Summand.** `1 + 0,02 × orgasmusfreie
 Tage`, gedeckelt bei 2,0. Er verstärkt, was tatsächlich getan wurde — ohne Käfig
 gibt es auch mit 200 Tagen Streak nichts.
+
+**Die ungeöffnete Strecke steigt und ist gedeckelt.** `min(1 × Tage am Stück, 7)`
+obendrauf, je vollendetem Tag. Sie bezahlt das, was der Stundensatz nicht sieht:
+zwei Modellwechsel am Tag ergeben dieselben 24 verschlossenen Stunden wie ein
+Tag, an dem der Käfig gar nicht auf war — nur ist das nicht dasselbe. Der Anstieg
+bildet ab, dass der fünfte Tag mehr verlangt als der erste; der Deckel
+verhindert, dass daraus wieder eine Größe wird, gegen die Tragestunden und
+Orgasmuspreis nicht mehr ankommen. Am Deckel sind es 7 von 19 Rohpunkten eines
+vollen Tages.
+
+**Ein Tag sind 24 Stunden am Verschluss, nicht bis Mitternacht.** Sonst hinge die
+Belohnung daran, wann die Uhr steht: wer um 01:00 zusperrt und 46 Stunden
+durchhält, hätte keinen einzigen ganzen Kalendertag — wer um 23:00 zusperrt, nach
+26 Stunden schon einen. Gutgeschrieben wird an dem Datum, an dem der Block
+abläuft, und was einmal abgelaufen ist, bleibt: eine Öffnung am Abend nimmt den
+Block nicht mehr weg, den der Morgen voll gemacht hat.
 
 **Der Orgasmus hat einen sichtbaren Preis.** `15 + 45 × 2^(−Wartetage/7)`: heute
 nach dem letzten kostet er 60, nach einer Woche 37, nach einem Monat 17. Die App
@@ -39,6 +55,31 @@ dadurch über Jahre vergleichbar: ein Ausrutscher dellt sie, zerstört sie nicht
 und zwei ruhige Wochen bauen sie spürbar ab.
 
 Jede Zahl darin steht im Tab **Regeln** und liegt in der Datei, nicht im Programm.
+
+### Was der Ungeöffnet-Zuschlag ersetzt hat
+
+Bis dahin stand an dieser Stelle ein starrer Bonus von 5 Punkten für einen Tag
+mit höchstens einer offenen Stunde. Der maß die falsche Größe. Zwei
+Modellwechsel am Tag ergeben keine einzige offene Stunde — der Käfig geht auf,
+der nächste kommt dran, dazwischen liegt keine Zeit, die als „offen" gebucht
+würde. Dieser Tag bekam den Bonus voll, genau wie ein Tag, an dem nichts
+passiert ist. Was den Unterschied macht, ist nicht die offene Stunde, sondern
+das Öffnen selbst; und wie oft geöffnet wurde, stand nirgends in der Rechnung.
+
+Der Zuschlag misst dasselbe Anliegen an der richtigen Größe und macht daraus
+eine Skala statt eines Schalters. Ein Vergleich mit den Standardsätzen, jeweils
+ein voll verschlossener Tag ohne Multiplikator:
+
+| | vorher | jetzt |
+|---|---|---|
+| Tag mit Modellwechsel | 17 | 12 |
+| 1. Tag am Stück | 17 | 13 |
+| 5. Tag am Stück | 17 | 17 |
+| 7. Tag am Stück und weiter | 17 | 19 |
+
+Der fünfte Tag verdient also, was früher jeder Tag verdient hat. Wer täglich
+wechselt, verliert gegenüber vorher; wer durchhält, gewinnt ab etwa der ersten
+Woche — und genau das war der Zweck.
 
 ### Warum 1.x abgelöst wurde
 
@@ -56,7 +97,9 @@ Ab etwa Tag 40 maß die App nur noch „Tage seit dem letzten Orgasmus"; ob 24 o
 4 Stunden getragen wurde, war rechnerisch Rauschen. Der Orgasmus kostete nominal
 −10, real aber den ganzen Streak — unbezifferbar und nirgends sichtbar. Und
 „Ungeöffnet" hieß *kein Eintrag an dem Tag*, mit der höchsten Basis im Modell:
-die App nicht zu benutzen zahlte sich am besten aus.
+die App nicht zu benutzen zahlte sich am besten aus. Den Namen gibt es in 2.0
+wieder, die Bedeutung nicht: er zählt jetzt die Zeit am Stück im selben Käfig
+(siehe unten) und bringt keine Punkte.
 
 ## Modelle sind Daten
 
@@ -67,18 +110,49 @@ ist ein Eintrag, kein Release.
 
 Der **Verschluss-Zustand** ist eine Auswahl aus dreien:
 
-| | verdient | zählt als | Phase „verschlossen seit" |
-|---|---|---|---|
-| **Verschlossen** | Stundensatz + Durchgehend-Bonus | verschlossene Zeit | läuft |
-| **Unterbrechung** | nichts (Satz 0) | weder noch | läuft weiter |
-| **Offen** | kostet den Stundensatz | offene Zeit | beginnt neu |
+| | verdient | zählt als | „verschlossen seit" | „ungeöffnet seit" |
+|---|---|---|---|---|
+| **Verschlossen** | Stundensatz + Ungeöffnet-Zuschlag | verschlossene Zeit | läuft | läuft, solange dasselbe Modell bleibt |
+| **Unterbrechung** | nichts (Satz 0) | weder noch | läuft weiter | beginnt neu |
+| **Offen** | kostet den Stundensatz | offene Zeit | beginnt neu | beginnt neu |
 
 Die **Unterbrechung** gibt es, weil die Reinigung sonst als Öffnung gebucht
 werden müsste: zehn Minuten am Waschbecken hätten die verschlossene Phase auf
-null gesetzt und den Tagesbonus gekostet — eine Aussage über den Käfig, die
-niemand gemeint hat. Einen Deckel braucht sie nicht: sie verdient nichts, eine
-lange „Reinigung" kostet also von allein jede Stunde, die der Käfig gebracht
-hätte.
+null gesetzt — eine Aussage über den Käfig, die niemand gemeint hat, denn danach
+ist es derselbe wie davor. Sie schützt die Phase und die Stundenkosten, nicht
+mehr: die ungeöffnete Strecke beendet sie sehr wohl, und das ist richtig so,
+denn sie steht in der Datei genau dann, wenn der Käfig dafür herunter kam. Einen
+Deckel braucht sie nicht: sie verdient nichts, eine lange „Reinigung" kostet
+also von allein jede Stunde, die der Käfig gebracht hätte.
+
+### Zwei Uhren: „verschlossen" und „ungeöffnet"
+
+Auf der Eintrag-Seite stehen beide nebeneinander, und sie beantworten
+verschiedene Fragen. **Verschlossen** misst den Verschluss und läuft über
+Modellwechsel und Reinigungen hinweg — wer zweimal täglich den Käfig tauscht,
+war trotzdem durchgehend zu. **Ungeöffnet** ist die strengere Frage: der
+zusammenhängende Lauf desselben Modells. Jeder Wechsel setzt sie zurück, eine
+Unterbrechung ebenso, denn die steht in der Datei genau dann, wenn der Käfig
+dafür herunter kam. Was ohne Öffnen geht — die Düse unter der Dusche — erzeugt
+keinen Eintrag und lässt die Strecke laufen.
+
+Damit ist „ungeöffnet" nie länger als „verschlossen", und der Abstand zwischen
+beiden ist genau das, was die Wechsel gekostet haben.
+
+Bezahlt wird die Strecke **je vollendetem Tag**, und ein Tag sind 24 Stunden ab
+dem Verschluss: `min(1 × Tage am Stück, 7)`, gutgeschrieben an dem Datum, an dem
+der Block abläuft. Beide Kacheln zählen deshalb auch in vollendeten
+24-h-Abschnitten und nicht in Kalendertagen — dieselbe Einheit, in der bezahlt
+wird, und die einzige, die zu den Stunden daneben passt. („Orgasmusfrei" zählt
+weiter Kalendertage, weil der Multiplikator ein Tagesfaktor ist.)
+
+Ein Tag ohne Eintrag zählt dabei als ungeöffnet, weil der Zustand des Vortags
+fortgilt — das ist *nicht* die 1.x-Falle, in der die Abwesenheit von Einträgen
+selbst belohnt wurde. Dort war ein leerer Tag der beste Tag, egal was war; hier
+hängt der Zuschlag am fortgeschriebenen Zustand: wer als „offen" fortgilt,
+bekommt nichts und zahlt weiter Stundenkosten. Die Belohnung setzt voraus, dass
+Öffnungen eingetragen werden — dieselbe Voraussetzung, auf der auch der
+Stundensatz steht.
 
 Zwei weitere Eigenschaften trägt das Programm mit und sichert sie gegen Unsinn ab:
 
@@ -315,6 +389,48 @@ laufenden WebView und nichts vom Sync — der nächste Speichervorgang der App
 sichtbare App ist eine Sekunde langsamer und dafür dieselbe Wahrheit wie jeder
 andere Eintrag.
 
+## Die Inaktivitäts-Regel zählt Lebenszeichen, keine Einträge
+
+Wer die App tagelang nicht anfasst, hat trotzdem etwas getan — nur nicht
+eingetragen. Nach der eingestellten Frist bietet die App deshalb an, das
+Fehlende nachzutragen: eine Öffnung und ab dann täglich einen Orgasmus. Sie
+*schlägt* das vor und schreibt nichts von allein; erfundene Einträge wären
+später nicht mehr von echten zu unterscheiden.
+
+Gezählt wird ab dem letzten **Lebenszeichen**, und davon gibt es drei — der
+späteste gewinnt:
+
+| | zählt, weil |
+|---|---|
+| ein Eintrag | er den Stand ändert; auch von Uhr oder Automation, dafür muss die App nicht auf sein |
+| ein verworfener Vorschlag | die Antwort schon gegeben wurde |
+| ein Blick in die App | der Stand offenbar noch stimmt |
+
+Der dritte Fall ist der Grund für die Unterscheidung. Wer eine Woche im selben
+Käfig steckt, hat nichts einzutragen — der Zustand hat sich ja nicht geändert.
+Nach dem letzten *Eintrag* gerechnet sieht das aus wie Verschwinden, und die
+Regel bietet an, eine Öffnung und tägliche Orgasmen nachzutragen, die es nie
+gab. Genau in dem Fall wäre der Vorschlag nicht nur unnötig, sondern falsch.
+
+Als Blick zählt die App erst, wenn sie lange genug offen war — zwei Sekunden in
+den Standardregeln, einstellbar bis auf null. Ein Fehlgriff in der Hosentasche,
+der sie kurz aufblitzen lässt, soll die Frist nicht zurücksetzen. Steht die App
+offen auf dem Schreibtisch, frischt sich die Marke minütlich auf; festgehalten
+wird sie höchstens stündlich, denn die Frist zählt in Tagen und jede Marke ist
+eine Datei-Änderung.
+
+Ein Blick **verhindert** einen Vorschlag, er nimmt ihn nicht zurück: steht schon
+einer an, bleibt er stehen, bis er übernommen oder verworfen ist. Sonst
+verschwände die Karte zwei Sekunden nach dem Öffnen — genau dann, wenn sie
+gebraucht wird.
+
+Die Marke steht als `meta.lastSeenAt` in der Datei und wandert mit: der jüngere
+Blick gewinnt, egal an welchem Gerät er passiert ist. Sonst mahnte das Telefon
+eine Woche lang etwas an, das am PC längst nachgesehen wurde — und schlimmer:
+böte dort an, falsche Einträge in dieselbe Datei zu schreiben. In der Kopfzeile
+erscheint dafür kein „ungespeichert": wer die App nur ansieht, hat nichts
+eingegeben.
+
 ## Der Umstieg von 1.x
 
 Beim ersten Start rechnet `www/js/core/legacy.js` die alte Formel ein letztes Mal
@@ -348,7 +464,7 @@ www/
       legacy.js       die alte Formel, eingefroren
       migrate.js      1.x → 2.0, Stichtag, Archiv
       merge.js        Drei-Wege-Merge für den Sync
-      escalation.js   Inaktivitäts-Vorschläge
+      escalation.js   Inaktivitäts-Vorschläge, „zuletzt gesehen"
       command.js      Kommandos aus einer URL: lesen, auflösen, planen
     sync/             auth.js · onedrive.js · files.js
     ui/               eintrag · dashboard · einstellungen · daten · charts
@@ -487,7 +603,9 @@ electron-builder dort setzt.
                 "startedAt": "…",        // optional, nur wenn von Hand gesetzt
                 "updatedAt": "…" },
   "legacy":   { "punkte": …, "von": "…", "bis": "…" },   // fehlt bei Neuinstallation
-  "days": {}, "notes": {}, "meta": {}
+  "days": {}, "notes": {},
+  "meta":     { "lastSeenAt": "…",                 // letzter Blick in die App
+                "escalationDismissedAt": "…" }     // letzter verworfener Vorschlag
 }
 ```
 

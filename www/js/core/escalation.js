@@ -6,6 +6,18 @@
  * nichts von allein: erfundene Einträge wären später nicht mehr von echten zu
  * unterscheiden und würden die Datengrundlage entwerten.
  *
+ * Gezählt wird ab dem letzten *Lebenszeichen*, nicht ab dem letzten Eintrag.
+ * Der Unterschied ist der Fall, für den die Regel sonst genau falsch liegt: wer
+ * eine Woche im selben Käfig steckt, hat nichts einzutragen — der Zustand hat
+ * sich ja nicht geändert. Nach dem letzten Eintrag gerechnet sähe das aus wie
+ * Verschwinden, und die Regel böte an, eine Öffnung und tägliche Orgasmen
+ * nachzutragen, die es nie gab. Ein Blick in die App sagt dagegen genau das,
+ * worauf es ankommt: der Stand hier stimmt noch.
+ *
+ * „Gesehen" hält `meta.lastSeenAt` fest; wie lange die App dafür offen gewesen
+ * sein muss, steht in den Regeln (`seenAfterSeconds`) und entscheidet die
+ * Oberfläche — hier zählt nur der Zeitstempel.
+ *
  * Welches Modell als "geöffnet" eingetragen wird, kommt aus der Registry —
  * es kann umbenannt werden, ohne dass hier etwas anzupassen wäre.
  */
@@ -22,6 +34,32 @@ export function lastRealInteractionMs(events) {
 }
 
 /**
+ * Zeitpunkt des letzten Blicks in die App, oder 0.
+ *
+ * Nach oben auf „jetzt" begrenzt: die Marke wandert zwischen Geräten mit, und
+ * eine Uhr, die vorgeht, dürfte die Frist nicht in die Zukunft schieben.
+ */
+export function lastSeenMs(data, nowMs) {
+  const t = Date.parse((data && data.meta && data.meta.lastSeenAt) || '');
+  if (!isFinite(t)) return 0;
+  return Math.min(t, (typeof nowMs === 'number') ? nowMs : Date.now());
+}
+
+/**
+ * Ab wann die Inaktivität zählt: der jüngste Beleg dafür, dass der Stand stimmt.
+ *
+ * Drei Dinge belegen das, und der späteste gewinnt — ein Eintrag (auch von Uhr
+ * oder Automation, denn dafür muss die App nicht auf sein), ein verworfener
+ * Vorschlag und ein Blick in die App.
+ */
+export function attentionAnchorMs(data, nowMs) {
+  const eintrag = lastRealInteractionMs((data && data.events) || []) || 0;
+  const verworfen = Date.parse((data && data.meta && data.meta.escalationDismissedAt) || '') || 0;
+  const anchor = Math.max(eintrag, verworfen, lastSeenMs(data, nowMs));
+  return anchor > 0 ? anchor : null;
+}
+
+/**
  * Was die Regel vorschlagen würde — ohne etwas zu schreiben.
  * @param {object} data   { events, meta, settings }
  * @param {object} [opts] { now?: Date }
@@ -35,13 +73,10 @@ export function pendingEscalation(data, opts) {
   const events = (data && data.events) || [];
   const leer = { faellig: false, seitMs: 0, anchorMs: null, offen: null, orgasmen: [], anzahl: 0 };
 
-  const lastMs = lastRealInteractionMs(events);
-  if (!lastMs) return leer;
-
-  // Ein verworfener Vorschlag setzt die Uhr neu — sonst käme er bei jedem Start wieder.
-  const dismissedAt = data && data.meta && data.meta.escalationDismissedAt;
-  const dismissedMs = dismissedAt ? new Date(dismissedAt).getTime() : 0;
-  const anchorMs = Math.max(lastMs, isFinite(dismissedMs) ? dismissedMs : 0);
+  // Ohne einen einzigen echten Eintrag gibt es keinen Zustand, den man
+  // fortschreiben könnte — dann ist auch nichts vorzuschlagen.
+  if (!lastRealInteractionMs(events)) return leer;
+  const anchorMs = attentionAnchorMs(data, now.getTime());
 
   const seitMs = now.getTime() - anchorMs;
   if (seitMs < autoDays * 86400000) return { ...leer, seitMs, anchorMs };

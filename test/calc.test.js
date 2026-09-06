@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { computeAll, computeDayHours, scoreDay, lockPhaseStart, currentOrgasmPrice, regenState, expiredRegenEvents }
+import { computeAll, computeDayHours, scoreDay, lockPhaseStart, unopenedPhaseStart,
+  unopenedRuns, unopenedMarks, currentOrgasmPrice, regenState, expiredRegenEvents }
   from '../www/js/core/calc.js';
 import { normalizeSettings, modelMap, defaultSettings, orgasmPrice } from '../www/js/core/settings.js';
 
@@ -30,34 +31,26 @@ test('Tagesstunden: heute zählt nur bis zur Grenze, spätere Events setzen den 
 
 test('Tageswertung: Einnahmen mal Multiplikator, Kosten unmultipliziert', () => {
   const s = S();
-  const r = scoreDay({ HT: 24 }, [], 50, ctxOf(s), true);
+  const r = scoreDay({ HT: 24 }, [], 50, ctxOf(s), [3]);
   assert.equal(r.verschlossenH, 24);
   assert.equal(r.offenH, 0);
   assert.equal(r.mult, 2, 'Deckel bei 2,0 ist nach 50 Tagen erreicht');
-  assert.equal(r.bonus, 5);
-  assert.equal(r.einnahmen, (24 * 0.5 + 5) * 2);
+  assert.equal(r.uoBonus, 3);
+  assert.equal(r.einnahmen, (24 * 0.5 + 3) * 2);
   assert.equal(r.kosten, 0);
 });
 
-test('Tageswertung: offene Stunden kosten, Bonus entfällt', () => {
+test('Tageswertung: offene Stunden kosten', () => {
   const s = S();
-  const r = scoreDay({ HT: 12, KK: 12 }, [], 0, ctxOf(s), true);
+  const r = scoreDay({ HT: 12, KK: 12 }, [], 0, ctxOf(s));
   assert.equal(r.stundenKosten, 12, 'KK kostet 1 Punkt je Stunde');
-  assert.equal(r.bonus, 0);
+  assert.equal(r.uoBonus, 0, 'ohne vollendeten Block gibt es keinen Zuschlag');
   assert.equal(r.netto, 12 * 0.5 - 12);
-});
-
-test('Tageswertung: kurze Öffnung behält den Bonus', () => {
-  const s = S();
-  const r = scoreDay({ HT: 23.5, KK: 0.5 }, [], 0, ctxOf(s), true);
-  assert.equal(r.durchgehend, true, 'unter der Schwelle von 1 h');
-  assert.equal(r.offenH, 0.5);
-  assert.equal(r.bonus, 5);
 });
 
 test('Der Streak-Multiplikator ist gedeckelt und wächst nicht exponentiell', () => {
   const s = S();
-  const werte = [0, 10, 50, 100, 365, 3650].map(n => scoreDay({ HT: 24 }, [], n, ctxOf(s), true).mult);
+  const werte = [0, 10, 50, 100, 365, 3650].map(n => scoreDay({ HT: 24 }, [], n, ctxOf(s)).mult);
   assert.deepEqual(werte, [1, 1.2, 2, 2, 2, 2]);
 });
 
@@ -88,10 +81,16 @@ test('Durchlauf: Konto läuft mit, Form-Wert klingt ab', () => {
 test('Durchlauf: der Form-Wert läuft gegen einen Grenzwert statt zu explodieren', () => {
   const now = new Date('2029-01-01T23:59:00');
   const data = { events: [ev('2026-01-01', '00:00', 'HT')] };
-  const { totals, days } = computeAll(data, { now });
+  const { totals, days, settings } = computeAll(data, { now });
   assert.ok(days.length > 1000);
-  // Fixpunkt: tagesnetto / (1 − decay). Bei 34/Tag und 0,97 sind das ~1133.
-  assert.ok(totals.form > 1000 && totals.form < 1200, `Form war ${totals.form}`);
+  // Fixpunkt: tagesnetto / (1 − decay). Ein Dauertag bringt am Deckel beider
+  // Strecken (24 × 0,5 + 7) × 2 = 38, macht 38 / 0,03 ≈ 1267. Aus den
+  // Sätzen gerechnet statt hart hingeschrieben: die Aussage ist der Grenzwert,
+  // nicht die Zahl.
+  const P = settings.points;
+  const grenzwert = (24 * 0.5 + P.bonusUngeoeffnetCap) * P.streakCap / (1 - P.formDecay);
+  assert.ok(Math.abs(totals.form - grenzwert) < 1,
+    `Form war ${totals.form}, erwartet ~${grenzwert}`);
 });
 
 test('Durchlauf: vor dem Stichtag zählt nichts ins Konto', () => {
@@ -184,15 +183,223 @@ test('Eine Unterbrechung macht aus einem offenen Zustand keinen verschlossenen',
     'ohne vorherigen Käfig bleibt der offene Startzustand stehen');
 });
 
+test('Ungeöffnet-Zuschlag: steigt mit der Blocknummer und bleibt unter dem Deckel', () => {
+  const s = S();
+  const P = s.points;
+  const tag = (marks) => scoreDay({ HT: 24 }, [], 0, ctxOf(s), marks);
+  assert.equal(tag([]).uoBonus, 0, 'ein Tag ohne vollendeten Block bekommt nichts');
+  assert.equal(tag([1]).uoBonus, P.bonusUngeoeffnet);
+  assert.equal(tag([3]).uoBonus, 3 * P.bonusUngeoeffnet);
+  assert.equal(tag([1000]).uoBonus, P.bonusUngeoeffnetCap, 'der Deckel hält');
+  assert.equal(tag([3]).einnahmen, (24 * 0.5 + 3 * P.bonusUngeoeffnet) * 1,
+    'der Zuschlag liegt in den Einnahmen und geht damit durch den Multiplikator');
+  assert.equal(tag([7, 8]).uoBonus, Math.min(7 * P.bonusUngeoeffnet, P.bonusUngeoeffnetCap)
+    + Math.min(8 * P.bonusUngeoeffnet, P.bonusUngeoeffnetCap),
+    'zwei Marken an einem Tag — 25-Stunden-Tag der Zeitumstellung — zählen beide');
+  assert.equal(tag([7, 8]).uoTage, 8, 'angezeigt wird die höchste');
+});
+
+test('Tageswertung: der Multiplikator wirkt auf Stunden und Zuschlag', () => {
+  const s = S();
+  const r = scoreDay({ HT: 24 }, [], 30, ctxOf(s), [4]);
+  // Genau diese Zerlegung zeigt die Aufschlüsselung in der App Zeile für Zeile;
+  // wer hier etwas hinzufügt, muss es dort mit abziehen.
+  assert.equal(r.einnahmen, (r.verdienstBasis + r.uoBonus) * r.mult);
+});
+
+test('Ungeöffnet-Zuschlag: der Satz 0 schaltet die Belohnung ab', () => {
+  const s = normalizeSettings({ points: { bonusUngeoeffnet: 0 } });
+  assert.equal(scoreDay({ HT: 24 }, [], 0, ctxOf(s), [99]).uoBonus, 0);
+});
+
+test('Strecken: ein Wechsel beendet, derselbe Käfig noch einmal nicht', () => {
+  const s = S();
+  const runs = unopenedRuns([
+    ev('2026-03-01', '08:00', 'HT'),
+    ev('2026-03-02', '08:00', 'HT'),   // kein Wechsel
+    ev('2026-03-03', '09:00', 'NS'),   // Wechsel
+    ev('2026-03-04', '09:00', 'KK'),   // Öffnung
+    ev('2026-03-05', '09:00', 'CLEAN'),// Unterbrechung: keine Strecke
+    ev('2026-03-06', '09:00', 'HT'),
+  ], s);
+  assert.equal(runs.length, 3);
+  assert.deepEqual(runs.map(r => r.model), ['HT', 'NS', 'HT']);
+  assert.equal(new Date(runs[0].von).getDate(), 1, 'der zweite HT-Eintrag verschiebt den Beginn nicht');
+  assert.equal(new Date(runs[0].bis).getDate(), 3);
+  assert.equal(runs[2].bis, null, 'die letzte läuft noch');
+});
+
+test('Marken: alle 24 Stunden eine, unabhängig von Mitternacht', () => {
+  const s = S();
+  // Um 01:00 zugesperrt und 46 Stunden durchgehalten: kein einziger ganzer
+  // Kalendertag, aber ein voller Tag am Verschluss.
+  const marks = unopenedMarks([ev('2026-03-01', '01:00', 'HT')], s,
+    new Date('2026-03-02T23:00:00'));
+  assert.deepEqual(marks, { '2026-03-02': [1] });
+
+  const laenger = unopenedMarks([ev('2026-03-01', '23:00', 'HT')], s,
+    new Date('2026-03-04T12:00:00'));
+  assert.deepEqual(laenger, { '2026-03-02': [1], '2026-03-03': [2] },
+    'die Marke fällt auf 23:00 des jeweiligen Tages, nicht auf Mitternacht');
+});
+
+test('Marken: eine abgebrochene Strecke verliert nur den angefangenen Block', () => {
+  const s = S();
+  const marks = unopenedMarks([
+    ev('2026-03-01', '08:00', 'HT'),
+    ev('2026-03-03', '20:00', 'KK'),   // nach 60 h geöffnet
+  ], s, new Date('2026-03-05T12:00:00'));
+  assert.deepEqual(marks, { '2026-03-02': [1], '2026-03-03': [2] },
+    'zwei volle Blöcke bleiben gutgeschrieben, der dritte war noch nicht um');
+});
+
+test('Marken: die Zukunft wird nicht vorweggenommen', () => {
+  const s = S();
+  const marks = unopenedMarks([ev('2026-03-01', '08:00', 'HT')], s,
+    new Date('2026-03-02T07:59:00'));
+  assert.deepEqual(marks, {}, 'eine Minute vor der Marke gibt es noch nichts');
+});
+
+test('Durchlauf: der Zuschlag fällt auf den Tag, an dem der Block voll wird', () => {
+  const now = new Date('2026-03-06T23:59:00');
+  const { byDate } = computeAll({ events: [ev('2026-03-01', '20:00', 'HT')] }, { now });
+  assert.equal(byDate['2026-03-01'].uoTage, 0, 'am Tag des Anlegens ist noch nichts um');
+  assert.equal(byDate['2026-03-02'].uoTage, 1);
+  assert.equal(byDate['2026-03-05'].uoTage, 4);
+  assert.equal(byDate['2026-03-05'].uoBonus, 4);
+  assert.equal(byDate['2026-03-06'].uoBonus, 5);
+});
+
+test('Durchlauf: eine Reinigung bricht die Strecke, ein Orgasmus nicht', () => {
+  const now = new Date('2026-03-08T23:59:00');
+  const mitReinigung = computeAll({ events: [
+    ev('2026-03-01', '08:00', 'HT'),
+    ev('2026-03-04', '09:00', 'CLEAN'), ev('2026-03-04', '09:20', 'HT'),
+  ] }, { now }).byDate;
+  assert.equal(mitReinigung['2026-03-03'].uoTage, 2);
+  assert.equal(mitReinigung['2026-03-04'].uoTage, 3,
+    'der dritte Block war um 08:00 voll — die Reinigung um 09:00 kommt zu spät, um ihn zu nehmen');
+  assert.equal(mitReinigung['2026-03-05'].uoTage, 1,
+    'für die Reinigung kam der Käfig herunter: die Strecke zählt von vorn, nicht als vierter Tag');
+  assert.equal(mitReinigung['2026-03-06'].uoTage, 2);
+
+  const mitOrgasmus = computeAll({ events: [
+    ev('2026-03-01', '08:00', 'HT'),
+    ev('2026-03-04', '09:00', 'OR'),
+  ] }, { now }).byDate;
+  assert.equal(mitOrgasmus['2026-03-04'].uoTage, 3, 'ein Orgasmus sagt über den Verschluss nichts');
+  assert.equal(mitOrgasmus['2026-03-04'].orgasmusfrei, false, 'der Orgasmus-Streak bricht sehr wohl');
+});
+
+test('Durchlauf: heute zählt nur, was bis jetzt abgelaufen ist — und das endgültig', () => {
+  const data = { events: [ev('2026-03-01', '08:00', 'HT')] };
+  const vorher = computeAll(data, { now: new Date('2026-03-03T07:00:00') }).byDate['2026-03-03'];
+  assert.equal(vorher.uoBonus, 0, 'die Marke um 08:00 ist noch nicht gefallen');
+  const nachher = computeAll(data, { now: new Date('2026-03-03T09:00:00') }).byDate['2026-03-03'];
+  assert.equal(nachher.uoTage, 2);
+
+  // Eine Öffnung am Abend nimmt den vollendeten Block nicht mehr weg — genau
+  // das war an Kalendertagen anders.
+  const geoeffnet = computeAll({ events: [
+    ev('2026-03-01', '08:00', 'HT'), ev('2026-03-03', '20:00', 'KK'),
+  ] }, { now: new Date('2026-03-03T21:00:00') }).byDate['2026-03-03'];
+  assert.equal(geoeffnet.uoTage, 2);
+  assert.equal(geoeffnet.uoBonus, 2);
+});
+
+test('Totals: längste Strecke und Summe der Zuschläge', () => {
+  const now = new Date('2026-03-10T23:59:00');
+  const { totals } = computeAll({ events: [
+    ev('2026-03-01', '08:00', 'HT'),
+    ev('2026-03-05', '09:00', 'NS'),
+  ] }, { now });
+  assert.equal(totals.bestUoStreak.days, 5, 'die zweite Strecke läuft seit dem 5.');
+  assert.equal(totals.bestUoStreak.end, '2026-03-10');
+  assert.equal(totals.tageUngeoeffnet, 9, '4 volle Tage vor dem Wechsel, 5 danach');
+  assert.ok(totals.uoEinnahmen > 0);
+});
+
+test('Ungeöffnet endet beim Modellwechsel, verschlossen läuft weiter', () => {
+  const s = S();
+  const events = [
+    ev('2026-03-01', '20:00', 'HT'),
+    ev('2026-03-03', '09:00', 'NS'),
+  ];
+  const ref = new Date('2026-03-04T12:00:00').getTime();
+  assert.equal(new Date(lockPhaseStart(events, s, ref).ms).toISOString().slice(0, 10), '2026-03-01');
+  const uo = unopenedPhaseStart(events, s, ref);
+  assert.equal(uo.model, 'NS');
+  assert.equal(new Date(uo.ms).toISOString().slice(0, 10), '2026-03-03',
+    'für den Wechsel musste der Käfig auf — die Strecke beginnt dort neu');
+});
+
+test('Ungeöffnet: derselbe Käfig zweimal eingetragen ist kein Wechsel', () => {
+  const s = S();
+  const events = [
+    ev('2026-03-01', '20:00', 'HT'),
+    ev('2026-03-02', '08:00', 'HT'),
+    ev('2026-03-03', '08:00', 'HT'),
+  ];
+  const uo = unopenedPhaseStart(events, s, new Date('2026-03-04T12:00:00').getTime());
+  assert.equal(new Date(uo.ms).toISOString().slice(0, 10), '2026-03-01',
+    'der Lauf beginnt beim ersten der gleichen Einträge');
+});
+
+test('Ungeöffnet: eine Unterbrechung setzt zurück, die verschlossene Phase nicht', () => {
+  const s = S();
+  const events = [
+    ev('2026-03-01', '20:00', 'HT'),
+    ev('2026-03-03', '09:00', 'CLEAN'),
+    ev('2026-03-03', '09:20', 'HT'),
+  ];
+  const ref = new Date('2026-03-04T12:00:00').getTime();
+  assert.equal(new Date(lockPhaseStart(events, s, ref).ms).toISOString().slice(0, 10), '2026-03-01');
+  const uo = unopenedPhaseStart(events, s, ref);
+  assert.equal(new Date(uo.ms).getHours(), 9);
+  assert.equal(new Date(uo.ms).getMinutes(), 20,
+    'die Reinigung steht in der Datei, weil der Käfig dafür herunter kam');
+});
+
+test('Ungeöffnet: während der Unterbrechung und im offenen Zustand läuft nichts', () => {
+  const s = S();
+  const inReinigung = [ev('2026-03-01', '20:00', 'HT'), ev('2026-03-03', '09:00', 'CLEAN')];
+  assert.equal(unopenedPhaseStart(inReinigung, s, new Date('2026-03-03T09:30:00').getTime()), null);
+
+  const offen = [ev('2026-03-01', '20:00', 'HT'), ev('2026-03-03', '09:00', 'KK')];
+  assert.equal(unopenedPhaseStart(offen, s, new Date('2026-03-04T12:00:00').getTime()), null);
+
+  assert.equal(unopenedPhaseStart([], s, Date.now()), null, 'ohne Historie ist der Startzustand offen');
+});
+
+test('Ungeöffnet: ein Orgasmus für sich öffnet nichts', () => {
+  const s = S();
+  const events = [ev('2026-03-01', '20:00', 'HT'), ev('2026-03-03', '09:00', 'OR')];
+  const uo = unopenedPhaseStart(events, s, new Date('2026-03-04T12:00:00').getTime());
+  assert.equal(new Date(uo.ms).toISOString().slice(0, 10), '2026-03-01',
+    'wer dafür aufgemacht hat, trägt die Öffnung ein — das Ereignis selbst sagt nichts');
+});
+
+test('Ungeöffnet ist nie länger als verschlossen', () => {
+  const s = S();
+  const events = [
+    ev('2026-03-01', '08:00', 'HT'), ev('2026-03-01', '20:00', 'NS'),
+    ev('2026-03-02', '07:00', 'CLEAN'), ev('2026-03-02', '07:30', 'NS'),
+    ev('2026-03-03', '12:00', 'HT'),
+  ];
+  const ref = new Date('2026-03-04T18:00:00').getTime();
+  const lock = lockPhaseStart(events, s, ref);
+  const uo = unopenedPhaseStart(events, s, ref);
+  assert.ok(uo.ms >= lock.ms);
+});
+
 test('Unterbrechungsstunden zählen weder als verschlossen noch als offen', () => {
   const s = S();
-  const r = scoreDay({ HT: 21, CLEAN: 3 }, [], 0, ctxOf(s), true);
+  const r = scoreDay({ HT: 21, CLEAN: 3 }, [], 0, ctxOf(s));
   assert.equal(r.verschlossenH, 21);
   assert.equal(r.offenH, 0, 'die Reinigung ist keine Öffnung');
   assert.equal(r.pauseH, 3);
-  assert.equal(r.bonus, 5, 'der Durchgehend-Bonus überlebt drei Stunden Reinigung');
-  assert.equal(r.stundenKosten, 0);
-  assert.equal(r.einnahmen, 21 * 0.5 + 5, 'verdient wird in der Pause nichts');
+  assert.equal(r.stundenKosten, 0, 'sie kostet auch keine offenen Stunden');
+  assert.equal(r.einnahmen, 21 * 0.5, 'verdient wird in der Pause nichts');
 });
 
 test('Aktueller Orgasmus-Preis richtet sich nach dem letzten Eintrag', () => {

@@ -83,9 +83,10 @@ export function computeDayHours(dayEvents, startModel, endMin, ctx, startMin) {
  * @param {object} hours        { modellId: stunden }
  * @param {Array}  orgasmen     [{ model, price }]
  * @param {number} streakTage   orgasmusfreie Tage *vor* diesem Tag
- * @param {boolean} vollstaendig  ist der Tag zu Ende (kein Bonus-Vorgriff)
+ * @param {number[]} [uoMarks]  die an diesem Tag vollendeten 24-h-Blöcke der
+ *                              ungeöffneten Strecke, als ihre Nummern
  */
-export function scoreDay(hours, orgasmen, streakTage, ctx, vollstaendig) {
+export function scoreDay(hours, orgasmen, streakTage, ctx, uoMarks) {
   const P = ctx.settings.points;
   let verdienstBasis = 0, stundenKosten = 0, verschlossenH = 0, offenH = 0, pauseH = 0;
 
@@ -104,22 +105,30 @@ export function scoreDay(hours, orgasmen, streakTage, ctx, vollstaendig) {
     else stundenKosten += h * -m.rate;
   }
 
-  const durchgehend = offenH <= P.bonusMaxOffenH && verschlossenH > 0;
-  const bonus = durchgehend ? P.bonusDurchgehend : 0;
+  // Der Zuschlag wächst mit der Strecke und ist gedeckelt: der fünfte Tag im
+  // selben Käfig ist mehr wert als der erste, der fünfzigste aber nicht mehr
+  // als der Deckel — sonst stünde hier wieder eine Größe, gegen die
+  // Tragestunden und Orgasmuspreis irgendwann nicht mehr ankommen.
+  //
+  // Gutgeschrieben wird je vollendetem 24-h-Block, nicht je Kalendertag. Was
+  // hier ankommt, ist damit endgültig: der Block ist abgelaufen, keine Öffnung
+  // am Abend nimmt ihn nachträglich weg. Ein „vorläufiger" Bonus existiert
+  // deshalb nicht mehr.
+  const marks = Array.isArray(uoMarks) ? uoMarks : [];
+  let uoBonus = 0;
+  for (const n of marks) uoBonus += Math.min(P.bonusUngeoeffnet * n, P.bonusUngeoeffnetCap);
+  const uoTage = marks.length ? Math.max(...marks) : 0;
+
   const mult = Math.min(1 + P.streakK * Math.max(0, streakTage), P.streakCap);
-  const einnahmen = (verdienstBasis + bonus) * mult;
+  const einnahmen = (verdienstBasis + uoBonus) * mult;
   const orgasmKosten = orgasmen.reduce((s, o) => s + o.price, 0);
 
   return {
     verschlossenH, offenH, pauseH,
-    verdienstBasis, bonus, mult, einnahmen,
+    verdienstBasis, uoBonus, uoTage, mult, einnahmen,
     stundenKosten, orgasmKosten,
     kosten: stundenKosten + orgasmKosten,
     netto: einnahmen - stundenKosten - orgasmKosten,
-    durchgehend,
-    // Für heute ist der Bonus eine Prognose: eine Öffnung am Abend nimmt ihn
-    // wieder weg. Die UI kennzeichnet das, statt eine sichere Zahl vorzutäuschen.
-    bonusVorlaeufig: durchgehend && !vollstaendig,
   };
 }
 
@@ -143,6 +152,7 @@ export function computeAll(data, opts) {
     return { days: [], byDate: {}, totals: emptyTotals(), settings, ctx, startedAt: null };
   }
 
+  const uoMarks = unopenedMarks(events, settings, now);
   const today = isoOf(now);
   const start = allDates[0];
   const lastDate = allDates[allDates.length - 1];
@@ -165,7 +175,6 @@ export function computeAll(data, opts) {
     // dadurch mit, statt morgens schon vollständig dazustehen.
     const zukunft = cursor > today;
     const limitMin = cursor === today ? minutesOf(now) : (zukunft ? 0 : 1440);
-    const vollstaendig = cursor < today;
     const startMin = (cursor === start && evs.length) ? timeToMin(evs[0].time) : 0;
     const { hours, endModel } = computeDayHours(evs, prevEndModel, limitMin, ctx, startMin);
 
@@ -189,7 +198,9 @@ export function computeAll(data, opts) {
       lastOrgasmMs = t;
     }
 
-    const score = scoreDay(hours, orgasmen, streakTage, ctx, vollstaendig);
+    // Die ungeöffnete Strecke läuft in echter Zeit, nicht in Kalendertagen: der
+    // Tag bekommt die Blöcke gutgeschrieben, die *an* ihm vollendet wurden.
+    const score = scoreDay(hours, orgasmen, streakTage, ctx, uoMarks[cursor]);
     // Vor dem Stichtag wird nichts gutgeschrieben: die alte Ära liegt
     // eingefroren im Archiv, das neue Konto startet bei null.
     const zaehlt = cursor >= startedAt;
@@ -228,11 +239,15 @@ export function emptyTotals() {
     avgNetto: 0, avgStdTag: 0,
     stundenVerschlossen: 0, stundenOffen: 0, stundenPause: 0,
     hoursByModel: {},
-    tageDurchgehend: 0, tageMitOrgasmus: 0,
+    tageUngeoeffnet: 0, tageMitOrgasmus: 0,
     orgasmen: 0, orgasmenAuto: 0, orgasmKosten: 0,
+    /** Was die ungeöffneten Strecken eingebracht haben — mit Multiplikator,
+     *  also das, was tatsächlich im Konto steht, nicht der rohe Zuschlag. */
+    uoEinnahmen: 0,
     besterTag: 0, schlechtesterTag: 0,
     monatlich: [],
     bestOfStreak: { days: 0, end: null },
+    bestUoStreak: { days: 0, end: null },
     byWeekday: Array.from({ length: 7 }, () => ({ netto: 0, tage: 0 })),
   };
 }
@@ -260,7 +275,8 @@ export function computeTotals(days) {
     t.orgasmKosten        += d.orgasmKosten;
     t.orgasmen            += d.orgasmen.length;
     t.orgasmenAuto        += d.orgasmen.filter(o => o.event.auto_inactivity).length;
-    if (d.durchgehend) t.tageDurchgehend++;
+    t.uoEinnahmen         += d.uoBonus * d.mult;
+    if (d.uoTage) t.tageUngeoeffnet++;
     if (d.orgasmen.length) t.tageMitOrgasmus++;
     if (d.tracked) {
       if (d.netto > t.besterTag) t.besterTag = d.netto;
@@ -272,6 +288,9 @@ export function computeTotals(days) {
 
     if (d.orgasmusfrei) { curOf++; if (curOf > t.bestOfStreak.days) t.bestOfStreak = { days: curOf, end: d.date }; }
     else curOf = 0;
+    // Die Blocknummern zählen innerhalb einer Strecke selbst hoch — die längste
+    // steht damit einfach als größte Nummer da, ohne zweiten Zähler.
+    if (d.uoTage > t.bestUoStreak.days) t.bestUoStreak = { days: d.uoTage, end: d.date };
   }
 
   const last = gezaehlt[gezaehlt.length - 1];
@@ -338,6 +357,92 @@ export function lockPhaseStart(events, settings, refMs) {
     pauseModel: laufend.m.pause ? laufend.e.type : null,
     pauseSince: laufend.m.pause ? laufend.t : null,
   };
+}
+
+// =========================== UNGEÖFFNET-STRECKEN ===========================
+/** Ein Tag im Sinne der Strecke: 24 Stunden am Verschluss, nicht bis Mitternacht. */
+export const TAG_MS = 24 * 3600000;
+
+/**
+ * Alle ungeöffneten Strecken der Historie: `[{ von, bis, model }]` in ms,
+ * `bis === null` für die laufende.
+ *
+ * „Verschlossen" und „ungeöffnet" sind zwei verschiedene Fragen, und die zweite
+ * ist die strengere. Wer zweimal am Tag vom Holy Trainer auf den Neosteel
+ * wechselt, war durchgehend verschlossen — aufgemacht hat er trotzdem, zweimal.
+ * Die verschlossene Phase soll darüber hinweglaufen, das ist ihr Sinn: sie misst
+ * den Verschluss, nicht das Modell. Diese hier soll es genau nicht.
+ *
+ * Eine Strecke ist deshalb der zusammenhängende Lauf *desselben* Modells. Ein
+ * Wechsel beendet sie, egal auf welches, und eine Unterbrechung (Reinigung)
+ * ebenso: sie steht in der Datei genau dann, wenn der Käfig dafür herunter kam.
+ * Was ohne Öffnen geht — die Düse unter der Dusche — erzeugt keinen Eintrag und
+ * lässt die Strecke laufen. Damit ist „ungeöffnet" nie länger als
+ * „verschlossen", und die Differenz zwischen beiden ist genau das, was ein
+ * Modellwechsel kostet.
+ *
+ * Derselbe Käfig zweimal hintereinander eingetragen ist kein Wechsel — die
+ * Strecke läuft ab dem ersten der beiden. Ein Orgasmus sagt hier so wenig über
+ * den Verschluss aus wie in `lockPhaseStart()`: wer dafür geöffnet hat, hat die
+ * Öffnung eingetragen.
+ */
+export function unopenedRuns(events, settings) {
+  const map = modelMap(settings);
+  const evs = (events || [])
+    .map(e => ({ e, m: resolveModel(settings, map, e.type), t: eventMs(e) }))
+    .filter(x => x.m.kind === KIND_MODEL && isFinite(x.t))
+    .sort((a, b) => a.t - b.t);
+
+  const runs = [];
+  let laufend = null;
+  let vorher = null;                          // null = offener Startzustand
+  for (const x of evs) {
+    if (x.e.type === vorher) continue;        // kein Wechsel, also kein Bruch
+    if (laufend) { laufend.bis = x.t; runs.push(laufend); laufend = null; }
+    if (x.m.locked) laufend = { von: x.t, bis: null, model: x.e.type };
+    vorher = x.e.type;
+  }
+  if (laufend) runs.push(laufend);
+  return runs;
+}
+
+/**
+ * Beginn der laufenden ungeöffneten Strecke — oder null, wenn der Käfig gerade
+ * offen oder abgelegt ist.
+ */
+export function unopenedPhaseStart(events, settings, refMs) {
+  const ref = (typeof refMs === 'number') ? refMs : Date.now();
+  const runs = unopenedRuns((events || []).filter(e => eventMs(e) <= ref), settings);
+  const letzte = runs[runs.length - 1];
+  return (letzte && letzte.bis == null) ? { ms: letzte.von, model: letzte.model } : null;
+}
+
+/**
+ * Die an jedem Datum vollendeten 24-h-Blöcke: `{ "2026-03-04": [7] }`.
+ *
+ * Warum nicht einfach Kalendertage: dann hinge die Belohnung daran, wann
+ * Mitternacht fällt. Wer um 01:00 zusperrt und 46 Stunden durchhält, hätte
+ * keinen einzigen ganzen Kalendertag — wer um 23:00 zusperrt, nach 26 Stunden
+ * schon einen. Gemessen wird deshalb ab dem Verschluss: nach 24 Stunden ist ein
+ * Tag voll, egal wie die Uhr dazu steht.
+ *
+ * Gebucht wird die Marke auf das Datum, an dem sie fällt — der laufende Tag
+ * bekommt also nur, was bis jetzt wirklich abgelaufen ist. Zwei Marken an einem
+ * Datum sind selten, aber möglich: ein Tag der Zeitumstellung hat 25 Stunden.
+ */
+export function unopenedMarks(events, settings, now) {
+  const nowMs = (now instanceof Date) ? now.getTime()
+    : (typeof now === 'number' ? now : Date.now());
+  const marks = {};
+  for (const run of unopenedRuns(events, settings)) {
+    const ende = Math.min(run.bis == null ? nowMs : run.bis, nowMs);
+    for (let n = 1; ; n++) {
+      const t = run.von + n * TAG_MS;
+      if (t > ende) break;
+      (marks[isoOf(new Date(t))] ||= []).push(n);
+    }
+  }
+  return marks;
 }
 
 /** Zeitpunkt des letzten Orgasmus vor `refMs`, oder null. */

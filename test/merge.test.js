@@ -73,6 +73,19 @@ test('meta: der spätere Verwurf gewinnt', () => {
   assert.equal(data.meta.escalationDismissedAt, '2026-03-05T10:00:00Z');
 });
 
+test('meta: der jüngere Blick in die App gewinnt, egal von welchem Gerät', () => {
+  const spaeterDrueben = mergeData(null,
+    { events: [], meta: { lastSeenAt: '2026-03-01T10:00:00Z' } },
+    { events: [], meta: { lastSeenAt: '2026-03-05T10:00:00Z' } });
+  assert.equal(spaeterDrueben.data.meta.lastSeenAt, '2026-03-05T10:00:00Z');
+
+  const spaeterHier = mergeData(null,
+    { events: [], meta: { lastSeenAt: '2026-03-05T10:00:00Z' } },
+    { events: [], meta: { lastSeenAt: '2026-03-01T10:00:00Z' } });
+  assert.equal(spaeterHier.data.meta.lastSeenAt, '2026-03-05T10:00:00Z',
+    'der ältere Stand von drüben überschreibt den eigenen nicht');
+});
+
 test('Ein vollständiger Datensatz verliert beim Merge kein Feld', () => {
   const lokal = {
     version: 3,

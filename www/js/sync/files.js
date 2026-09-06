@@ -136,14 +136,17 @@ export async function exportXlsx(calcResult) {
 
   const modelIds = s.models.filter(m => m.kind !== KIND_ORGASM).map(m => m.id);
   const dayRows = [[
-    'Datum', 'Zählt', 'Verschlossen h', 'Offen h', 'Unterbrechung h', 'Multiplikator', 'Bonus',
+    'Datum', 'Zählt', 'Verschlossen h', 'Offen h', 'Unterbrechung h', 'Multiplikator',
+    // Ohne diese beiden Spalten ginge die Rechnung im Export nicht mehr auf:
+    // der Zuschlag steckt in den Einnahmen, stünde aber nirgends.
+    'Ungeöffnet T', 'Ungeöffnet-Zuschlag',
     'Einnahmen', 'Stundenkosten', 'Orgasmuskosten', 'Netto', 'Konto', 'Form',
     'Orgasmen', ...modelIds.map(id => `h ${id}`),
   ]];
   for (const d of calcResult.days) {
     dayRows.push([
       d.date, d.zaehlt ? 'x' : '', r2(d.verschlossenH), r2(d.offenH), r2(d.pauseH),
-      r2(d.mult), r2(d.bonus),
+      r2(d.mult), d.uoTage, r2(d.uoBonus),
       r2(d.einnahmen), r2(d.stundenKosten), r2(d.orgasmKosten), r2(d.netto), r2(d.konto), r2(d.form),
       d.orgasmen.length, ...modelIds.map(id => r2(d.hours[id] || 0)),
     ]);
@@ -169,7 +172,7 @@ export async function exportXlsx(calcResult) {
       ['von', l.von], ['bis', l.bis], ['Stichtag', l.stichtag],
       ['Punkte', r2(l.punkte)], ['Tage mit Einträgen', l.tage], ['Kalendertage', l.kalendertage],
       ['Stunden verschlossen', r2(l.stundenVerschlossen)], ['Orgasmen', l.orgasmen],
-      ['Beste orgasmusfreie Strecke', l.bestOfStreak.days]];
+      ['Beste orgasmusfreie Strecke', l.bestOfStreak.days]];   // „ungeöffnet" hieß in 1.x etwas anderes
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(lRows), 'Archiv');
   }
   XLSX.writeFile(wb, `locked-export-${stamp()}.xlsx`);

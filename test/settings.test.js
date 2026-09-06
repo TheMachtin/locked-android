@@ -122,12 +122,12 @@ test('Höchstens ein Regenerations-Modell', () => {
 test('Unsinnige Zahlen werden auf brauchbare Werte gezogen', () => {
   const s = normalizeSettings({
     models: [{ id: 'A', label: 'A', rate: 'viel' }, { id: 'O', label: 'O', isOpen: true }],
-    points: { streakCap: -3, formDecay: 5, bonusMaxOffenH: 99, streakK: NaN },
+    points: { streakCap: -3, formDecay: 5, bonusUngeoeffnet: -8, streakK: NaN },
   });
   assert.equal(s.models[0].rate, 0);
   assert.ok(s.points.streakCap >= 1);
   assert.ok(s.points.formDecay < 1);
-  assert.equal(s.points.bonusMaxOffenH, 24);
+  assert.equal(s.points.bonusUngeoeffnet, 0, 'eine Belohnung, die Punkte abzieht, wäre keine');
   assert.equal(s.points.streakK, defaultSettings().points.streakK);
 });
 
