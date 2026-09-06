@@ -49,6 +49,13 @@ export const DEFAULT_POINTS = {
   bonusDurchgehend: 5,
   /** Bis zu wie vielen offenen Stunden der Zuschlag noch gilt. */
   bonusMaxOffenH: 1,
+  /**
+   * Zuschlag je Tag am Stück im selben Käfig, ansteigend und gedeckelt:
+   * der n-te ungeöffnete Tag bringt min(n × Satz, Deckel) obendrauf.
+   * Ein Modellwechsel oder eine Unterbrechung setzt die Strecke zurück.
+   */
+  bonusUngeoeffnet: 1,
+  bonusUngeoeffnetCap: 7,
   /** Einnahmen-Multiplikator: 1 + streakK × orgasmusfreie Tage, gedeckelt. */
   streakK: 0.02,
   streakCap: 2.0,
@@ -249,6 +256,10 @@ export function normalizeSettings(raw) {
     points: {
       bonusDurchgehend: clamp(num(p.bonusDurchgehend, DEFAULT_POINTS.bonusDurchgehend), -1000, 1000),
       bonusMaxOffenH:   clamp(num(p.bonusMaxOffenH,   DEFAULT_POINTS.bonusMaxOffenH), 0, 24),
+      // Nicht negativ: eine „Belohnung", die Punkte abzieht, wäre keine, und
+      // 0 schaltet die Strecke sauber ab.
+      bonusUngeoeffnet:    clamp(num(p.bonusUngeoeffnet,    DEFAULT_POINTS.bonusUngeoeffnet), 0, 1000),
+      bonusUngeoeffnetCap: clamp(num(p.bonusUngeoeffnetCap, DEFAULT_POINTS.bonusUngeoeffnetCap), 0, 10000),
       streakK:          clamp(num(p.streakK,          DEFAULT_POINTS.streakK), 0, 10),
       streakCap:        clamp(num(p.streakCap,        DEFAULT_POINTS.streakCap), 1, 100),
       formDecay:        clamp(num(p.formDecay,        DEFAULT_POINTS.formDecay), 0.5, 0.9999),

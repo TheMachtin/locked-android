@@ -149,7 +149,11 @@ function renderDetails(t) {
     + r('Schlechtester Tag', fmtSigned(t.schlechtesterTag))
     + r('Längste orgasmusfreie Strecke', `${t.bestOfStreak.days} T`
         + (t.bestOfStreak.end ? ` <span style="color:var(--muted);font-size:11px">bis ${fmtDateShort(t.bestOfStreak.end)}</span>` : ''))
+    + r('Längste ungeöffnete Strecke', `${t.bestUoStreak.days} T`
+        + (t.bestUoStreak.end ? ` <span style="color:var(--muted);font-size:11px">bis ${fmtDateShort(t.bestUoStreak.end)}</span>` : ''))
     + r('Tage durchgehend verschlossen', fmtInt(t.tageDurchgehend))
+    + r('Tage ungeöffnet', fmtInt(t.tageUngeoeffnet) + (t.uoEinnahmen
+        ? ` <span style="color:var(--muted);font-size:11px">+${fmtInt(t.uoEinnahmen)} Punkte</span>` : ''))
     + r('Tage mit Orgasmus', fmtInt(t.tageMitOrgasmus))
     + r('Einnahmen gesamt', fmtInt(t.einnahmen))
     + r('Kosten gesamt', fmtInt(t.kosten));

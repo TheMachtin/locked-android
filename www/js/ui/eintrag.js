@@ -249,9 +249,23 @@ function breakdownHtml(d, s) {
     zeilen.push(zeile(`Durchgehend verschlossen${d.bonusVorlaeufig ? ' <span class="hint">(vorläufig)</span>' : ''}`,
       d.bonus, 'plus'));
   }
+  if (d.uoBonus) {
+    // Zwei Klammern hintereinander liest niemand — „(Deckel, vorläufig)" ist
+    // dieselbe Auskunft in einem Blick.
+    const hinweise = [
+      d.uoBonus >= s.points.bonusUngeoeffnetCap ? 'Deckel' : '',
+      d.uoVorlaeufig ? 'vorläufig' : '',
+    ].filter(Boolean);
+    zeilen.push(zeile(`Ungeöffnet · ${d.uoTage}. Tag am Stück`
+      + (hinweise.length ? ` <span class="hint">(${hinweise.join(', ')})</span>` : ''),
+      d.uoBonus, 'plus'));
+  }
   if (d.mult !== 1) {
+    // Alles, worauf der Multiplikator wirkt, muss hier abgezogen werden —
+    // sonst stünde der Ungeöffnet-Zuschlag zweimal in der Liste und die Zeilen
+    // summierten sich nicht mehr auf das Tagesergebnis.
     zeilen.push(zeile(`Streak-Multiplikator × ${fmtNum(d.mult, 2)}`,
-      d.einnahmen - (d.verdienstBasis + d.bonus), 'plus'));
+      d.einnahmen - (d.verdienstBasis + d.bonus + d.uoBonus), 'plus'));
   }
   for (const o of d.orgasmen) {
     const wartezeit = isFinite(o.abstandTage) ? `nach ${fmtNum(o.abstandTage, 1)} T` : 'erster erfasster';
@@ -291,10 +305,14 @@ function renderStreakRow(iso, days, d, s, refMs, lock) {
     {
       days: uo ? calendarDaysBetween(uo.ms, refMs) : 0, label: 'Ungeöffnet',
       ms: uo ? Math.max(0, refMs - uo.ms) : null,
-      // Steht hier keine Strecke, ist die interessante Auskunft *warum* nicht —
-      // vor allem im Fall, in dem die Kachel daneben weiterläuft: der Käfig ist
-      // gerade zur Reinigung ab.
-      since: uo ? seitStempel(uo.ms)
+      // Was die Strecke *einbringt*, gehört an die Strecke — sonst steht die
+      // Belohnung nur in der Aufschlüsselung, und dort erst, wenn sie schon
+      // verdient ist. Steht keine Strecke, ist die interessante Auskunft warum
+      // nicht: vor allem im Fall, in dem die Kachel daneben weiterläuft.
+      since: uo
+        ? (d && d.uoBonus
+            ? `+${fmtNum(d.uoBonus, d.uoBonus % 1 ? 1 : 0)} heute · ${seitStempel(uo.ms)}`
+            : seitStempel(uo.ms))
         : (lock && lock.paused
             ? `${escapeHtml(labelOf(s, lock.pauseModel))} läuft`
             : 'gerade offen'),

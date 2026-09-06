@@ -48,6 +48,11 @@ export function groupByDay(events) {
  * bis zum ersten Eintrag als „offen" zu werten hieße, eine Annahme in Rechnung
  * zu stellen. Wer abends um 20 Uhr seinen ersten Käfig einträgt, soll nicht mit
  * zwanzig Strafstunden anfangen.
+ *
+ * `gewechselt` meldet, ob an dem Tag überhaupt etwas am getragenen Zustand
+ * geändert wurde — die Auskunft, aus der der Ungeöffnet-Bonus entsteht. Zweimal
+ * dasselbe Modell ist kein Wechsel; ein Wechsel, der zum Ausgangsmodell
+ * zurückführt (HT → NS → HT), sehr wohl.
  */
 export function computeDayHours(dayEvents, startModel, endMin, ctx, startMin) {
   const limit = (typeof endMin === 'number') ? Math.max(0, Math.min(1440, endMin)) : 1440;
@@ -58,11 +63,13 @@ export function computeDayHours(dayEvents, startModel, endMin, ctx, startMin) {
   let cur = startModel;
   let curMin = beginn;
   let endModel = cur;
+  let gewechselt = false;
   for (const ev of dayEvents) {
     const m = resolveModel(ctx.settings, ctx.map, ev.type);
     if (m.kind !== KIND_MODEL) continue;      // Orgasmus ändert den Zustand nicht
     const t = timeToMin(ev.time);
     if (t <= limit) {
+      if (ev.type !== cur) gewechselt = true;
       if (t > curMin) add(cur, (t - curMin) / 60);
       cur = ev.type;
       curMin = t;
@@ -70,7 +77,7 @@ export function computeDayHours(dayEvents, startModel, endMin, ctx, startMin) {
     endModel = ev.type;
   }
   if (curMin < limit) add(cur, (limit - curMin) / 60);
-  return { hours, endModel };
+  return { hours, endModel, gewechselt };
 }
 
 // =========================== TAGESWERTUNG ===========================
@@ -84,8 +91,10 @@ export function computeDayHours(dayEvents, startModel, endMin, ctx, startMin) {
  * @param {Array}  orgasmen     [{ model, price }]
  * @param {number} streakTage   orgasmusfreie Tage *vor* diesem Tag
  * @param {boolean} vollstaendig  ist der Tag zu Ende (kein Bonus-Vorgriff)
+ * @param {number} [uoTage]     der wievielte Tag am Stück ohne Öffnung dieser
+ *                              ist; 0 heißt: an dem Tag wurde geöffnet
  */
-export function scoreDay(hours, orgasmen, streakTage, ctx, vollstaendig) {
+export function scoreDay(hours, orgasmen, streakTage, ctx, vollstaendig, uoTage) {
   const P = ctx.settings.points;
   let verdienstBasis = 0, stundenKosten = 0, verschlossenH = 0, offenH = 0, pauseH = 0;
 
@@ -106,13 +115,23 @@ export function scoreDay(hours, orgasmen, streakTage, ctx, vollstaendig) {
 
   const durchgehend = offenH <= P.bonusMaxOffenH && verschlossenH > 0;
   const bonus = durchgehend ? P.bonusDurchgehend : 0;
+
+  // Der Ungeöffnet-Bonus wächst mit der Strecke und ist gedeckelt: der fünfte
+  // Tag im selben Käfig ist mehr wert als der erste, der fünfzigste aber nicht
+  // mehr als der Deckel — sonst stünde hier wieder eine Größe, gegen die
+  // Tragestunden und Orgasmuspreis irgendwann nicht mehr ankommen.
+  const uoLauf = Math.max(0, Math.floor(uoTage || 0));
+  const uoBonus = (uoLauf > 0 && verschlossenH > 0)
+    ? Math.min(P.bonusUngeoeffnet * uoLauf, P.bonusUngeoeffnetCap)
+    : 0;
+
   const mult = Math.min(1 + P.streakK * Math.max(0, streakTage), P.streakCap);
-  const einnahmen = (verdienstBasis + bonus) * mult;
+  const einnahmen = (verdienstBasis + bonus + uoBonus) * mult;
   const orgasmKosten = orgasmen.reduce((s, o) => s + o.price, 0);
 
   return {
     verschlossenH, offenH, pauseH,
-    verdienstBasis, bonus, mult, einnahmen,
+    verdienstBasis, bonus, uoBonus, uoTage: uoLauf, mult, einnahmen,
     stundenKosten, orgasmKosten,
     kosten: stundenKosten + orgasmKosten,
     netto: einnahmen - stundenKosten - orgasmKosten,
@@ -120,6 +139,7 @@ export function scoreDay(hours, orgasmen, streakTage, ctx, vollstaendig) {
     // Für heute ist der Bonus eine Prognose: eine Öffnung am Abend nimmt ihn
     // wieder weg. Die UI kennzeichnet das, statt eine sichere Zahl vorzutäuschen.
     bonusVorlaeufig: durchgehend && !vollstaendig,
+    uoVorlaeufig: uoBonus > 0 && !vollstaendig,
   };
 }
 
@@ -154,6 +174,7 @@ export function computeAll(data, opts) {
   let cursor = start;
   let prevEndModel = openId;
   let streakTage = 0;          // orgasmusfreie Tage vor dem aktuellen
+  let uoLauf = 0;              // ungeöffnete Tage am Stück bis gestern
   let konto = 0, form = 0;
   let lastOrgasmMs = null;
   const days = [];
@@ -167,7 +188,15 @@ export function computeAll(data, opts) {
     const limitMin = cursor === today ? minutesOf(now) : (zukunft ? 0 : 1440);
     const vollstaendig = cursor < today;
     const startMin = (cursor === start && evs.length) ? timeToMin(evs[0].time) : 0;
-    const { hours, endModel } = computeDayHours(evs, prevEndModel, limitMin, ctx, startMin);
+    const { hours, endModel, gewechselt } = computeDayHours(evs, prevEndModel, limitMin, ctx, startMin);
+
+    // Ungeöffnet ist ein Tagesmerkmal: der Tag lief von Anfang bis Ende im
+    // selben verschlossenen Modell. „Von Anfang" heißt aus dem Vortag heraus —
+    // der Tag, an dem der Käfig zugeht, ist der Tag, an dem er offen war. Der
+    // laufende Tag zählt bis jetzt, ein künftiger gar nicht (limitMin = 0).
+    const startLocked = resolveModel(ctx.settings, ctx.map, prevEndModel).locked;
+    const ungeoeffnet = startLocked && !gewechselt && limitMin > startMin;
+    const uoTage = ungeoeffnet ? uoLauf + 1 : 0;
 
     // Orgasmen des Tages bepreisen — in zeitlicher Reihenfolge, weil jeder den
     // Abstand für den nächsten bestimmt.
@@ -189,7 +218,7 @@ export function computeAll(data, opts) {
       lastOrgasmMs = t;
     }
 
-    const score = scoreDay(hours, orgasmen, streakTage, ctx, vollstaendig);
+    const score = scoreDay(hours, orgasmen, streakTage, ctx, vollstaendig, uoTage);
     // Vor dem Stichtag wird nichts gutgeschrieben: die alte Ära liegt
     // eingefroren im Archiv, das neue Konto startet bei null.
     const zaehlt = cursor >= startedAt;
@@ -203,6 +232,7 @@ export function computeAll(data, opts) {
       hours, endModel, prevEndModel,
       orgasmen,
       orgasmusfrei: orgasmen.length === 0,
+      ungeoeffnet,
       ...score,
       netto, zaehlt,
       konto, form,
@@ -211,7 +241,10 @@ export function computeAll(data, opts) {
     days.push(rec);
     byDate[cursor] = rec;
 
-    if (!zukunft) streakTage = orgasmen.length ? 0 : streakTage + 1;
+    if (!zukunft) {
+      streakTage = orgasmen.length ? 0 : streakTage + 1;
+      uoLauf = uoTage;
+    }
     prevEndModel = endModel;
     cursor = isoDateAdd(cursor, 1);
   }
@@ -228,11 +261,15 @@ export function emptyTotals() {
     avgNetto: 0, avgStdTag: 0,
     stundenVerschlossen: 0, stundenOffen: 0, stundenPause: 0,
     hoursByModel: {},
-    tageDurchgehend: 0, tageMitOrgasmus: 0,
+    tageDurchgehend: 0, tageUngeoeffnet: 0, tageMitOrgasmus: 0,
     orgasmen: 0, orgasmenAuto: 0, orgasmKosten: 0,
+    /** Was die ungeöffneten Strecken eingebracht haben — mit Multiplikator,
+     *  also das, was tatsächlich im Konto steht, nicht die rohe Zulage. */
+    uoEinnahmen: 0,
     besterTag: 0, schlechtesterTag: 0,
     monatlich: [],
     bestOfStreak: { days: 0, end: null },
+    bestUoStreak: { days: 0, end: null },
     byWeekday: Array.from({ length: 7 }, () => ({ netto: 0, tage: 0 })),
   };
 }
@@ -243,7 +280,7 @@ export function computeTotals(days) {
   t.kalendertage = gezaehlt.length;
   t.tage = gezaehlt.filter(d => d.tracked).length;
 
-  let curOf = 0;
+  let curOf = 0, curUo = 0;
   for (const d of days) {
     // Alles hier zählt nur ab dem Stichtag — sonst stünde im selben Bild eine
     // Kachel für die neue Ära neben einem Donut über die gesamte Historie.
@@ -260,7 +297,9 @@ export function computeTotals(days) {
     t.orgasmKosten        += d.orgasmKosten;
     t.orgasmen            += d.orgasmen.length;
     t.orgasmenAuto        += d.orgasmen.filter(o => o.event.auto_inactivity).length;
+    t.uoEinnahmen         += d.uoBonus * d.mult;
     if (d.durchgehend) t.tageDurchgehend++;
+    if (d.ungeoeffnet) t.tageUngeoeffnet++;
     if (d.orgasmen.length) t.tageMitOrgasmus++;
     if (d.tracked) {
       if (d.netto > t.besterTag) t.besterTag = d.netto;
@@ -272,6 +311,8 @@ export function computeTotals(days) {
 
     if (d.orgasmusfrei) { curOf++; if (curOf > t.bestOfStreak.days) t.bestOfStreak = { days: curOf, end: d.date }; }
     else curOf = 0;
+    if (d.ungeoeffnet) { curUo++; if (curUo > t.bestUoStreak.days) t.bestUoStreak = { days: curUo, end: d.date }; }
+    else curUo = 0;
   }
 
   const last = gezaehlt[gezaehlt.length - 1];

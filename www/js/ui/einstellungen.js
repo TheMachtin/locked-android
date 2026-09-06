@@ -276,6 +276,12 @@ const PUNKT_FELDER = [
   { key: 'bonusMaxOffenH', name: 'Bis zu wie viel offener Zeit der Bonus noch gilt',
     desc: 'In Stunden, und gemeint ist wirklich offene Zeit. Für Reinigungspausen gibt es den Verschluss-Zustand „Unterbrechung" — die zählt hier gar nicht erst mit.',
     step: 0.5 },
+  { key: 'bonusUngeoeffnet', name: 'Zuschlag je Tag am Stück im selben Käfig',
+    desc: 'Steigt mit der Strecke: der fünfte ungeöffnete Tag bringt das Fünffache. Jeder Modellwechsel und jede Unterbrechung setzt sie zurück. 0 schaltet die Belohnung ab.',
+    step: 0.5 },
+  { key: 'bonusUngeoeffnetCap', name: 'Höchster Zuschlag für die ungeöffnete Strecke',
+    desc: 'Der Deckel des Anstiegs — bei Satz 1 also der Tag, ab dem es nicht mehr weiter steigt. Ohne ihn wüchse die Strecke über alles andere hinaus.',
+    step: 1 },
   { key: 'streakK', name: 'Multiplikator-Zuwachs je orgasmusfreiem Tag',
     desc: '0,02 heißt: nach 25 Tagen zählt jede Stunde anderthalbfach.', step: 0.005 },
   { key: 'streakCap', name: 'Höchster Multiplikator',
@@ -320,16 +326,22 @@ function renderVorschau() {
   const satz = s.models.find(m => m.kind === KIND_MODEL && m.locked && !m.archived);
   const offenM = s.models.find(m => m.isOpen);
   if (!satz) { $('settingsPreview').innerHTML = ''; return; }
-  const rechne = (verschlH, streak) => {
+  const rechne = (verschlH, streak, uoTage = 0) => {
     const offenH = 24 - verschlH;
     const bonus = offenH <= P.bonusMaxOffenH ? P.bonusDurchgehend : 0;
+    const uoBonus = uoTage > 0 && verschlH > 0
+      ? Math.min(P.bonusUngeoeffnet * uoTage, P.bonusUngeoeffnetCap) : 0;
     const mult = Math.min(1 + P.streakK * streak, P.streakCap);
-    return (verschlH * satz.rate + bonus) * mult + offenH * Math.min(0, offenM ? offenM.rate : 0);
+    return (verschlH * satz.rate + bonus + uoBonus) * mult + offenH * Math.min(0, offenM ? offenM.rate : 0);
   };
   const zeilen = [
     ['24 h verschlossen, Streak 0', rechne(24, 0)],
     ['24 h verschlossen, Streak 30', rechne(24, 30)],
     ['24 h verschlossen, Deckel erreicht', rechne(24, 1e6)],
+    // Ohne diese Zeile bliebe die teuerste Stellschraube des Tages unsichtbar:
+    // ein gewechselter Tag rechnet sich wie der erste, ein durchgehaltener wie
+    // der letzte.
+    ['24 h verschlossen, Streak 30, 7. Tag ungeöffnet', rechne(24, 30, 7)],
     ['12 h offen, Streak 30', rechne(12, 30)],
   ];
   const grenzwert = rechne(24, 30) / (1 - P.formDecay);

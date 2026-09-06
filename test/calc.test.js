@@ -89,10 +89,17 @@ test('Durchlauf: Konto läuft mit, Form-Wert klingt ab', () => {
 test('Durchlauf: der Form-Wert läuft gegen einen Grenzwert statt zu explodieren', () => {
   const now = new Date('2029-01-01T23:59:00');
   const data = { events: [ev('2026-01-01', '00:00', 'HT')] };
-  const { totals, days } = computeAll(data, { now });
+  const { totals, days, settings } = computeAll(data, { now });
   assert.ok(days.length > 1000);
-  // Fixpunkt: tagesnetto / (1 − decay). Bei 34/Tag und 0,97 sind das ~1133.
-  assert.ok(totals.form > 1000 && totals.form < 1200, `Form war ${totals.form}`);
+  // Fixpunkt: tagesnetto / (1 − decay). Ein Dauertag bringt am Deckel beider
+  // Strecken (24 × 0,5 + 5 + 7) × 2 = 48, macht 48 / 0,03 = 1600. Aus den
+  // Sätzen gerechnet statt hart hingeschrieben: die Aussage ist der Grenzwert,
+  // nicht die Zahl.
+  const P = settings.points;
+  const grenzwert = (24 * 0.5 + P.bonusDurchgehend + P.bonusUngeoeffnetCap) * P.streakCap
+    / (1 - P.formDecay);
+  assert.ok(Math.abs(totals.form - grenzwert) < 1,
+    `Form war ${totals.form}, erwartet ~${grenzwert}`);
 });
 
 test('Durchlauf: vor dem Stichtag zählt nichts ins Konto', () => {
@@ -183,6 +190,103 @@ test('Eine Unterbrechung macht aus einem offenen Zustand keinen verschlossenen',
   const nurReinigung = [ev('2026-03-01', '20:00', 'CLEAN')];
   assert.equal(lockPhaseStart(nurReinigung, s, new Date('2026-03-01T21:00:00').getTime()), null,
     'ohne vorherigen Käfig bleibt der offene Startzustand stehen');
+});
+
+test('Ungeöffnet-Bonus: steigt mit der Strecke und bleibt unter dem Deckel', () => {
+  const s = S();
+  const P = s.points;
+  const tag = (uoTage) => scoreDay({ HT: 24 }, [], 0, ctxOf(s), true, uoTage);
+  assert.equal(tag(0).uoBonus, 0, 'ein Tag mit Öffnung bekommt nichts');
+  assert.equal(tag(1).uoBonus, P.bonusUngeoeffnet);
+  assert.equal(tag(3).uoBonus, 3 * P.bonusUngeoeffnet);
+  assert.equal(tag(1000).uoBonus, P.bonusUngeoeffnetCap, 'der Deckel hält');
+  assert.equal(tag(3).einnahmen, (24 * 0.5 + P.bonusDurchgehend + 3 * P.bonusUngeoeffnet) * 1,
+    'der Zuschlag liegt in den Einnahmen und geht damit durch den Multiplikator');
+});
+
+test('Tageswertung: der Multiplikator wirkt auf Basis, Bonus und Zuschlag', () => {
+  const s = S();
+  const r = scoreDay({ HT: 24 }, [], 30, ctxOf(s), true, 4);
+  // Genau diese Zerlegung zeigt die Aufschlüsselung in der App Zeile für Zeile;
+  // wer hier etwas hinzufügt, muss es dort mit abziehen.
+  assert.equal(r.einnahmen, (r.verdienstBasis + r.bonus + r.uoBonus) * r.mult);
+});
+
+test('Ungeöffnet-Bonus: ohne verschlossene Stunden gibt es ihn nicht', () => {
+  const s = S();
+  assert.equal(scoreDay({ KK: 24 }, [], 0, ctxOf(s), true, 5).uoBonus, 0);
+});
+
+test('Ungeöffnet-Bonus: der Deckel lässt sich mit 0 abschalten', () => {
+  const s = normalizeSettings({ points: { bonusUngeoeffnet: 0 } });
+  assert.equal(scoreDay({ HT: 24 }, [], 0, ctxOf(s), true, 99).uoBonus, 0);
+});
+
+test('Durchlauf: die Strecke zählt Tag für Tag hoch und bricht beim Wechsel', () => {
+  const now = new Date('2026-03-06T23:59:00');
+  const data = { events: [
+    ev('2026-03-01', '08:00', 'HT'),   // an dem Tag ging er zu: der Tag war offen
+    ev('2026-03-04', '09:00', 'NS'),   // Wechsel: Bruch
+  ] };
+  const { byDate } = computeAll(data, { now });
+  assert.equal(byDate['2026-03-01'].ungeoeffnet, false, 'der Tag des Anlegens zählt nicht');
+  assert.equal(byDate['2026-03-02'].uoTage, 1);
+  assert.equal(byDate['2026-03-03'].uoTage, 2);
+  assert.equal(byDate['2026-03-04'].uoTage, 0, 'der Wechseltag bricht die Strecke');
+  assert.equal(byDate['2026-03-05'].uoTage, 1, 'und beginnt sie neu');
+  assert.equal(byDate['2026-03-06'].uoTage, 2);
+});
+
+test('Durchlauf: eine Reinigung bricht die Strecke, ein Orgasmus nicht', () => {
+  const now = new Date('2026-03-06T23:59:00');
+  const mitReinigung = computeAll({ events: [
+    ev('2026-03-01', '08:00', 'HT'),
+    ev('2026-03-04', '09:00', 'CLEAN'), ev('2026-03-04', '09:20', 'HT'),
+  ] }, { now }).byDate;
+  assert.equal(mitReinigung['2026-03-03'].uoTage, 2);
+  assert.equal(mitReinigung['2026-03-04'].uoTage, 0, 'für die Reinigung kam der Käfig herunter');
+  assert.equal(mitReinigung['2026-03-05'].uoTage, 1);
+
+  const mitOrgasmus = computeAll({ events: [
+    ev('2026-03-01', '08:00', 'HT'),
+    ev('2026-03-04', '09:00', 'OR'),
+  ] }, { now }).byDate;
+  assert.equal(mitOrgasmus['2026-03-04'].uoTage, 3, 'ein Orgasmus sagt über den Verschluss nichts');
+  assert.equal(mitOrgasmus['2026-03-04'].orgasmusfrei, false, 'der Orgasmus-Streak bricht sehr wohl');
+});
+
+test('Durchlauf: derselbe Käfig zweimal am Tag ist kein Wechsel', () => {
+  const now = new Date('2026-03-04T23:59:00');
+  const { byDate } = computeAll({ events: [
+    ev('2026-03-01', '08:00', 'HT'),
+    ev('2026-03-03', '07:00', 'HT'), ev('2026-03-03', '19:00', 'HT'),
+  ] }, { now });
+  assert.equal(byDate['2026-03-03'].uoTage, 2);
+  assert.equal(byDate['2026-03-04'].uoTage, 3);
+});
+
+test('Durchlauf: heute ist der Zuschlag vorläufig, die Öffnung am Abend nimmt ihn weg', () => {
+  const heute = { events: [ev('2026-03-01', '08:00', 'HT')] };
+  const mittags = computeAll(heute, { now: new Date('2026-03-03T12:00:00') }).byDate['2026-03-03'];
+  assert.ok(mittags.uoBonus > 0);
+  assert.equal(mittags.uoVorlaeufig, true);
+
+  const geoeffnet = { events: [ev('2026-03-01', '08:00', 'HT'), ev('2026-03-03', '20:00', 'KK')] };
+  const abends = computeAll(geoeffnet, { now: new Date('2026-03-03T21:00:00') }).byDate['2026-03-03'];
+  assert.equal(abends.uoBonus, 0);
+  assert.equal(abends.ungeoeffnet, false);
+});
+
+test('Totals: längste ungeöffnete Strecke und Summe der Zuschläge', () => {
+  const now = new Date('2026-03-10T23:59:00');
+  const { totals } = computeAll({ events: [
+    ev('2026-03-01', '08:00', 'HT'),
+    ev('2026-03-05', '09:00', 'NS'),
+  ] }, { now });
+  assert.equal(totals.bestUoStreak.days, 5, '06.–10. März sind fünf ganze Tage');
+  assert.equal(totals.bestUoStreak.end, '2026-03-10');
+  assert.equal(totals.tageUngeoeffnet, 8, 'plus 02.–04. März vor dem Wechsel');
+  assert.ok(totals.uoEinnahmen > 0);
 });
 
 test('Ungeöffnet endet beim Modellwechsel, verschlossen läuft weiter', () => {
