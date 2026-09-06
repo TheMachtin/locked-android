@@ -45,14 +45,17 @@ export const DEFAULT_MODELS = [
 ];
 
 export const DEFAULT_POINTS = {
-  /** Zuschlag für einen Tag, der (fast) durchgehend verschlossen war. */
-  bonusDurchgehend: 5,
-  /** Bis zu wie vielen offenen Stunden der Zuschlag noch gilt. */
-  bonusMaxOffenH: 1,
   /**
-   * Zuschlag je Tag am Stück im selben Käfig, ansteigend und gedeckelt:
-   * der n-te ungeöffnete Tag bringt min(n × Satz, Deckel) obendrauf.
-   * Ein Modellwechsel oder eine Unterbrechung setzt die Strecke zurück.
+   * Zuschlag je vollendeten Tag am Stück im selben Käfig, ansteigend und
+   * gedeckelt: der n-te ungeöffnete Tag bringt min(n × Satz, Deckel) obendrauf.
+   * Ein Modellwechsel oder eine Unterbrechung setzt die Strecke zurück, und ein
+   * Tag sind 24 Stunden am Verschluss, nicht bis Mitternacht.
+   *
+   * Vorgänger war ein starrer Zuschlag für einen Tag mit höchstens einer
+   * offenen Stunde. Der maß die falsche Größe: zwei Modellwechsel am Tag
+   * ergeben keine einzige offene Stunde und bekamen ihn voll, während zehn
+   * ehrlich eingetragene Minuten am Waschbecken nichts daran änderten. Was den
+   * Unterschied macht, ist nicht die offene Stunde, sondern das Öffnen.
    */
   bonusUngeoeffnet: 1,
   bonusUngeoeffnetCap: 7,
@@ -254,8 +257,6 @@ export function normalizeSettings(raw) {
     // sie bei jedem Start erneut anstoßen.
     schema: Math.max(SETTINGS_SCHEMA, schema),
     points: {
-      bonusDurchgehend: clamp(num(p.bonusDurchgehend, DEFAULT_POINTS.bonusDurchgehend), -1000, 1000),
-      bonusMaxOffenH:   clamp(num(p.bonusMaxOffenH,   DEFAULT_POINTS.bonusMaxOffenH), 0, 24),
       // Nicht negativ: eine „Belohnung", die Punkte abzieht, wäre keine, und
       // 0 schaltet die Strecke sauber ab.
       bonusUngeoeffnet:    clamp(num(p.bonusUngeoeffnet,    DEFAULT_POINTS.bonusUngeoeffnet), 0, 1000),

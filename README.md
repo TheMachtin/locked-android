@@ -16,7 +16,7 @@ Alle Installationen teilen sich dieselbe OneDrive-Datei und führen parallele
 ## Wie die Punkte entstehen
 
 ```
-Einnahmen = (verschlossene Stunden × Satz + Bonus + Ungeöffnet-Zuschlag) × Streak-Multiplikator
+Einnahmen = (verschlossene Stunden × Satz + Ungeöffnet-Zuschlag) × Streak-Multiplikator
 Kosten    = offene Stunden × Satz + Preis je Orgasmus
 Konto     = Summe aller Tagesergebnisse seit dem Stichtag
 Form      = Form gestern × 0,97 + Tagesergebnis
@@ -29,12 +29,20 @@ Tage`, gedeckelt bei 2,0. Er verstärkt, was tatsächlich getan wurde — ohne K
 gibt es auch mit 200 Tagen Streak nichts.
 
 **Die ungeöffnete Strecke steigt und ist gedeckelt.** `min(1 × Tage am Stück, 7)`
-obendrauf, je Tag. Sie bezahlt das, was der Stundensatz nicht sieht: zwei
-Modellwechsel am Tag ergeben dieselben 24 verschlossenen Stunden wie ein Tag, an
-dem der Käfig gar nicht auf war — nur ist das nicht dasselbe. Der Anstieg bildet
-ab, dass der fünfte Tag mehr verlangt als der erste; der Deckel verhindert, dass
-daraus wieder eine Größe wird, gegen die Tragestunden und Orgasmuspreis nicht
-mehr ankommen. Am Deckel sind es 7 von rund 24 Rohpunkten eines vollen Tages.
+obendrauf, je vollendetem Tag. Sie bezahlt das, was der Stundensatz nicht sieht:
+zwei Modellwechsel am Tag ergeben dieselben 24 verschlossenen Stunden wie ein
+Tag, an dem der Käfig gar nicht auf war — nur ist das nicht dasselbe. Der Anstieg
+bildet ab, dass der fünfte Tag mehr verlangt als der erste; der Deckel
+verhindert, dass daraus wieder eine Größe wird, gegen die Tragestunden und
+Orgasmuspreis nicht mehr ankommen. Am Deckel sind es 7 von 19 Rohpunkten eines
+vollen Tages.
+
+**Ein Tag sind 24 Stunden am Verschluss, nicht bis Mitternacht.** Sonst hinge die
+Belohnung daran, wann die Uhr steht: wer um 01:00 zusperrt und 46 Stunden
+durchhält, hätte keinen einzigen ganzen Kalendertag — wer um 23:00 zusperrt, nach
+26 Stunden schon einen. Gutgeschrieben wird an dem Datum, an dem der Block
+abläuft, und was einmal abgelaufen ist, bleibt: eine Öffnung am Abend nimmt den
+Block nicht mehr weg, den der Morgen voll gemacht hat.
 
 **Der Orgasmus hat einen sichtbaren Preis.** `15 + 45 × 2^(−Wartetage/7)`: heute
 nach dem letzten kostet er 60, nach einer Woche 37, nach einem Monat 17. Die App
@@ -47,6 +55,31 @@ dadurch über Jahre vergleichbar: ein Ausrutscher dellt sie, zerstört sie nicht
 und zwei ruhige Wochen bauen sie spürbar ab.
 
 Jede Zahl darin steht im Tab **Regeln** und liegt in der Datei, nicht im Programm.
+
+### Was der Ungeöffnet-Zuschlag ersetzt hat
+
+Bis dahin stand an dieser Stelle ein starrer Bonus von 5 Punkten für einen Tag
+mit höchstens einer offenen Stunde. Der maß die falsche Größe. Zwei
+Modellwechsel am Tag ergeben keine einzige offene Stunde — der Käfig geht auf,
+der nächste kommt dran, dazwischen liegt keine Zeit, die als „offen" gebucht
+würde. Dieser Tag bekam den Bonus voll, genau wie ein Tag, an dem nichts
+passiert ist. Was den Unterschied macht, ist nicht die offene Stunde, sondern
+das Öffnen selbst; und wie oft geöffnet wurde, stand nirgends in der Rechnung.
+
+Der Zuschlag misst dasselbe Anliegen an der richtigen Größe und macht daraus
+eine Skala statt eines Schalters. Ein Vergleich mit den Standardsätzen, jeweils
+ein voll verschlossener Tag ohne Multiplikator:
+
+| | vorher | jetzt |
+|---|---|---|
+| Tag mit Modellwechsel | 17 | 12 |
+| 1. Tag am Stück | 17 | 13 |
+| 5. Tag am Stück | 17 | 17 |
+| 7. Tag am Stück und weiter | 17 | 19 |
+
+Der fünfte Tag verdient also, was früher jeder Tag verdient hat. Wer täglich
+wechselt, verliert gegenüber vorher; wer durchhält, gewinnt ab etwa der ersten
+Woche — und genau das war der Zweck.
 
 ### Warum 1.x abgelöst wurde
 
@@ -79,16 +112,18 @@ Der **Verschluss-Zustand** ist eine Auswahl aus dreien:
 
 | | verdient | zählt als | „verschlossen seit" | „ungeöffnet seit" |
 |---|---|---|---|---|
-| **Verschlossen** | Stundensatz + Durchgehend-Bonus + Ungeöffnet-Zuschlag | verschlossene Zeit | läuft | läuft, solange dasselbe Modell bleibt |
+| **Verschlossen** | Stundensatz + Ungeöffnet-Zuschlag | verschlossene Zeit | läuft | läuft, solange dasselbe Modell bleibt |
 | **Unterbrechung** | nichts (Satz 0) | weder noch | läuft weiter | beginnt neu |
 | **Offen** | kostet den Stundensatz | offene Zeit | beginnt neu | beginnt neu |
 
 Die **Unterbrechung** gibt es, weil die Reinigung sonst als Öffnung gebucht
 werden müsste: zehn Minuten am Waschbecken hätten die verschlossene Phase auf
-null gesetzt und den Tagesbonus gekostet — eine Aussage über den Käfig, die
-niemand gemeint hat. Einen Deckel braucht sie nicht: sie verdient nichts, eine
-lange „Reinigung" kostet also von allein jede Stunde, die der Käfig gebracht
-hätte.
+null gesetzt — eine Aussage über den Käfig, die niemand gemeint hat, denn danach
+ist es derselbe wie davor. Sie schützt die Phase und die Stundenkosten, nicht
+mehr: die ungeöffnete Strecke beendet sie sehr wohl, und das ist richtig so,
+denn sie steht in der Datei genau dann, wenn der Käfig dafür herunter kam. Einen
+Deckel braucht sie nicht: sie verdient nichts, eine lange „Reinigung" kostet
+also von allein jede Stunde, die der Käfig gebracht hätte.
 
 ### Zwei Uhren: „verschlossen" und „ungeöffnet"
 
@@ -104,20 +139,20 @@ keinen Eintrag und lässt die Strecke laufen.
 Damit ist „ungeöffnet" nie länger als „verschlossen", und der Abstand zwischen
 beiden ist genau das, was die Wechsel gekostet haben.
 
-Bezahlt wird die Strecke **tageweise**: ein Kalendertag, der von Anfang bis Ende
-im selben verschlossenen Modell lief, bringt `min(1 × Tage am Stück, 7)` extra.
-Der Tag, an dem der Käfig zugeht, gehört nicht dazu — an dem war er ja offen; die
-Strecke beginnt am ersten ganzen Tag. Für heute ist der Zuschlag vorläufig und
-in der Aufschlüsselung als solcher gekennzeichnet: eine Öffnung am Abend nimmt
-ihn wieder weg.
+Bezahlt wird die Strecke **je vollendetem Tag**, und ein Tag sind 24 Stunden ab
+dem Verschluss: `min(1 × Tage am Stück, 7)`, gutgeschrieben an dem Datum, an dem
+der Block abläuft. Beide Kacheln zählen deshalb auch in vollendeten
+24-h-Abschnitten und nicht in Kalendertagen — dieselbe Einheit, in der bezahlt
+wird, und die einzige, die zu den Stunden daneben passt. („Orgasmusfrei" zählt
+weiter Kalendertage, weil der Multiplikator ein Tagesfaktor ist.)
 
 Ein Tag ohne Eintrag zählt dabei als ungeöffnet, weil der Zustand des Vortags
 fortgilt — das ist *nicht* die 1.x-Falle, in der die Abwesenheit von Einträgen
 selbst belohnt wurde. Dort war ein leerer Tag der beste Tag, egal was war; hier
 hängt der Zuschlag am fortgeschriebenen Zustand: wer als „offen" fortgilt,
 bekommt nichts und zahlt weiter Stundenkosten. Die Belohnung setzt voraus, dass
-Öffnungen eingetragen werden — dieselbe Voraussetzung, auf der auch Stundensatz
-und Durchgehend-Bonus stehen.
+Öffnungen eingetragen werden — dieselbe Voraussetzung, auf der auch der
+Stundensatz steht.
 
 Zwei weitere Eigenschaften trägt das Programm mit und sichert sie gegen Unsinn ab:
 

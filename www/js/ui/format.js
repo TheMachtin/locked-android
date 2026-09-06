@@ -26,6 +26,8 @@ export function fmtHours(h) {
 }
 
 export function msToHours(ms) { return Math.floor(Math.max(0, ms) / 3600000); }
+/** Vollendete 24-h-Abschnitte — die Einheit, in der Strecken bezahlt werden. */
+export function msToDays(ms) { return Math.floor(Math.max(0, ms) / 86400000); }
 
 /** ms → "12 T 5 h" bzw. "5 h 12 min" */
 export function fmtDurationShort(ms) {

@@ -11,10 +11,10 @@
 import { STATE, calc, mutate, withUndo, settings as getSettings } from '../state.js';
 import { showToast } from './toast.js';
 import {
-  fmtInt, fmtNum, fmtSigned, fmtDateShort, fmtDurationShort, fmtDurationLong, fmtAgo, fmtCountdownHM, fmtCountdownDH, msToHours, escapeHtml, weekdayOf, refTimeFor, MONTHS_DE,
+  fmtInt, fmtNum, fmtSigned, fmtDateShort, fmtDurationShort, fmtDurationLong, fmtAgo, fmtCountdownHM, fmtCountdownDH, msToHours, msToDays, escapeHtml, weekdayOf, refTimeFor, MONTHS_DE,
 } from './format.js';
 import { dayTimeline } from './charts.js';
-import { isoOf, isoDateAdd, hmOf, eventMs, calendarDaysBetween } from '../core/time.js';
+import { isoOf, isoDateAdd, hmOf, eventMs } from '../core/time.js';
 import { lockPhaseStart, unopenedPhaseStart, currentOrgasmPrice, regenState, expiredRegenEvents } from '../core/calc.js';
 import { resolveModel, modelMap, labelOf, KIND_ORGASM } from '../core/settings.js';
 import { pendingEscalation, escalationEvents } from '../core/escalation.js';
@@ -237,35 +237,23 @@ function breakdownHtml(d, s) {
       betrag, betrag >= 0 ? 'plus' : 'minus'));
   }
   // Eine Unterbrechung hat den Satz 0 und fiele aus der Aufschlüsselung heraus —
-  // zusammen mit der Erklärung, warum der Durchgehend-Bonus trotz abgelegtem
-  // Käfig noch steht.
+  // zusammen mit der Erklärung, warum die Stunden nirgends auftauchen.
   if (d.pauseH > 0.004) {
     const namen = stunden.filter(x => x.m.pause).map(x => escapeHtml(x.m.label)).join(', ')
       || 'Unterbrechung';
     zeilen.push(`<div class="row hint"><span>${namen} · ${fmtNum(d.pauseH, 1)} h`
       + ` — zählt nicht als offen</span><b>±0</b></div>`);
   }
-  if (d.bonus) {
-    zeilen.push(zeile(`Durchgehend verschlossen${d.bonusVorlaeufig ? ' <span class="hint">(vorläufig)</span>' : ''}`,
-      d.bonus, 'plus'));
-  }
   if (d.uoBonus) {
-    // Zwei Klammern hintereinander liest niemand — „(Deckel, vorläufig)" ist
-    // dieselbe Auskunft in einem Blick.
-    const hinweise = [
-      d.uoBonus >= s.points.bonusUngeoeffnetCap ? 'Deckel' : '',
-      d.uoVorlaeufig ? 'vorläufig' : '',
-    ].filter(Boolean);
-    zeilen.push(zeile(`Ungeöffnet · ${d.uoTage}. Tag am Stück`
-      + (hinweise.length ? ` <span class="hint">(${hinweise.join(', ')})</span>` : ''),
-      d.uoBonus, 'plus'));
+    const deckel = d.uoBonus >= s.points.bonusUngeoeffnetCap ? ' <span class="hint">(Deckel)</span>' : '';
+    zeilen.push(zeile(`Ungeöffnet · ${d.uoTage}. Tag am Stück${deckel}`, d.uoBonus, 'plus'));
   }
   if (d.mult !== 1) {
     // Alles, worauf der Multiplikator wirkt, muss hier abgezogen werden —
     // sonst stünde der Ungeöffnet-Zuschlag zweimal in der Liste und die Zeilen
     // summierten sich nicht mehr auf das Tagesergebnis.
     zeilen.push(zeile(`Streak-Multiplikator × ${fmtNum(d.mult, 2)}`,
-      d.einnahmen - (d.verdienstBasis + d.bonus + d.uoBonus), 'plus'));
+      d.einnahmen - (d.verdienstBasis + d.uoBonus), 'plus'));
   }
   for (const o of d.orgasmen) {
     const wartezeit = isFinite(o.abstandTage) ? `nach ${fmtNum(o.abstandTage, 1)} T` : 'erster erfasster';
@@ -290,9 +278,12 @@ function renderStreakRow(iso, days, d, s, refMs, lock) {
   const seitStempel = (ms) => `seit ${fmtDateShort(isoOf(new Date(ms)))} ${hmOf(new Date(ms))}`;
 
   // Paarweise: oben die beiden Uhren am Käfig, unten die beiden am Orgasmus.
+  // Die beiden oberen zählen vollendete 24-h-Abschnitte, nicht Kalendertage —
+  // dieselbe Einheit, in der die Strecke bezahlt wird, und die einzige, die zu
+  // den Stunden daneben passt.
   const eintraege = [
     {
-      days: lock ? calendarDaysBetween(lock.ms, refMs) : 0, label: 'Verschlossen',
+      days: lock ? msToDays(refMs - lock.ms) : 0, label: 'Verschlossen',
       ms: lock ? Math.max(0, refMs - lock.ms) : null,
       // Läuft gerade eine Unterbrechung, gehört das in die Kachel und nicht in
       // einen Tooltip — auf dem Telefon gibt es kein Darüberfahren.
@@ -303,7 +294,7 @@ function renderStreakRow(iso, days, d, s, refMs, lock) {
             : ''),
     },
     {
-      days: uo ? calendarDaysBetween(uo.ms, refMs) : 0, label: 'Ungeöffnet',
+      days: uo ? msToDays(refMs - uo.ms) : 0, label: 'Ungeöffnet',
       ms: uo ? Math.max(0, refMs - uo.ms) : null,
       // Was die Strecke *einbringt*, gehört an die Strecke — sonst steht die
       // Belohnung nur in der Aufschlüsselung, und dort erst, wenn sie schon

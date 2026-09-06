@@ -99,7 +99,7 @@ function modelRow(m) {
 /** Die drei Verschluss-Zustände, in der Reihenfolge, in der sie zu erklären sind. */
 const LOCK_WAHL = [
   { v: 'locked', l: 'Verschlossen',
-    t: 'Zählt als verschlossene Zeit, verdient den Stundensatz und trägt den Durchgehend-Bonus.' },
+    t: 'Zählt als verschlossene Zeit, verdient den Stundensatz und trägt die ungeöffnete Strecke.' },
   { v: 'pause', l: 'Unterbrechung',
     t: 'Reinigung und dergleichen: verdient nichts, kostet nichts — und beendet die verschlossene Phase nicht.' },
   { v: 'open', l: 'Offen',
@@ -270,14 +270,8 @@ function neuesModell(kind) {
 
 // =========================== PUNKTE UND REGELN ===========================
 const PUNKT_FELDER = [
-  { key: 'bonusDurchgehend', name: 'Bonus für einen ganz verschlossenen Tag',
-    desc: 'Einmal pro Tag, zusätzlich zu den Stunden. Wird ebenfalls mit dem Streak-Multiplikator verrechnet.',
-    step: 1 },
-  { key: 'bonusMaxOffenH', name: 'Bis zu wie viel offener Zeit der Bonus noch gilt',
-    desc: 'In Stunden, und gemeint ist wirklich offene Zeit. Für Reinigungspausen gibt es den Verschluss-Zustand „Unterbrechung" — die zählt hier gar nicht erst mit.',
-    step: 0.5 },
   { key: 'bonusUngeoeffnet', name: 'Zuschlag je Tag am Stück im selben Käfig',
-    desc: 'Steigt mit der Strecke: der fünfte ungeöffnete Tag bringt das Fünffache. Jeder Modellwechsel und jede Unterbrechung setzt sie zurück. 0 schaltet die Belohnung ab.',
+    desc: 'Ein Tag sind 24 Stunden ab dem Verschluss. Der Zuschlag steigt mit der Strecke — der fünfte ungeöffnete Tag bringt das Fünffache — und jeder Modellwechsel wie jede Unterbrechung setzt sie zurück. 0 schaltet die Belohnung ab.',
     step: 0.5 },
   { key: 'bonusUngeoeffnetCap', name: 'Höchster Zuschlag für die ungeöffnete Strecke',
     desc: 'Der Deckel des Anstiegs — bei Satz 1 also der Tag, ab dem es nicht mehr weiter steigt. Ohne ihn wüchse die Strecke über alles andere hinaus.',
@@ -328,23 +322,21 @@ function renderVorschau() {
   if (!satz) { $('settingsPreview').innerHTML = ''; return; }
   const rechne = (verschlH, streak, uoTage = 0) => {
     const offenH = 24 - verschlH;
-    const bonus = offenH <= P.bonusMaxOffenH ? P.bonusDurchgehend : 0;
-    const uoBonus = uoTage > 0 && verschlH > 0
-      ? Math.min(P.bonusUngeoeffnet * uoTage, P.bonusUngeoeffnetCap) : 0;
+    const uoBonus = uoTage > 0 ? Math.min(P.bonusUngeoeffnet * uoTage, P.bonusUngeoeffnetCap) : 0;
     const mult = Math.min(1 + P.streakK * streak, P.streakCap);
-    return (verschlH * satz.rate + bonus + uoBonus) * mult + offenH * Math.min(0, offenM ? offenM.rate : 0);
+    return (verschlH * satz.rate + uoBonus) * mult + offenH * Math.min(0, offenM ? offenM.rate : 0);
   };
+  // Erster und siebter Tag stehen nebeneinander, weil dazwischen die ganze
+  // Wirkung der Strecke liegt — sonst dreht man an einem Satz, dessen Folge
+  // erst eine Woche später sichtbar wird.
   const zeilen = [
-    ['24 h verschlossen, Streak 0', rechne(24, 0)],
-    ['24 h verschlossen, Streak 30', rechne(24, 30)],
-    ['24 h verschlossen, Deckel erreicht', rechne(24, 1e6)],
-    // Ohne diese Zeile bliebe die teuerste Stellschraube des Tages unsichtbar:
-    // ein gewechselter Tag rechnet sich wie der erste, ein durchgehaltener wie
-    // der letzte.
-    ['24 h verschlossen, Streak 30, 7. Tag ungeöffnet', rechne(24, 30, 7)],
+    ['24 h verschlossen, Tag des Wechsels', rechne(24, 30, 0)],
+    ['24 h verschlossen, 1. Tag am Stück', rechne(24, 30, 1)],
+    ['24 h verschlossen, 7. Tag am Stück', rechne(24, 30, 7)],
+    ['24 h verschlossen, beide Deckel erreicht', rechne(24, 1e6, 1e6)],
     ['12 h offen, Streak 30', rechne(12, 30)],
   ];
-  const grenzwert = rechne(24, 30) / (1 - P.formDecay);
+  const grenzwert = rechne(24, 30, 7) / (1 - P.formDecay);
   $('settingsPreview').innerHTML = `<div class="breakdown" style="border-top:none;padding-top:0">
     ${zeilen.map(([l, v]) => `<div class="row ${v >= 0 ? 'plus' : 'minus'}"><span>${l}</span><b>${v >= 0 ? '+' : ''}${fmtNum(v, 1)}</b></div>`).join('')}
     <div class="row"><span>Form pendelt sich ein bei etwa</span><b>${fmtNum(grenzwert, 0)}</b></div>
