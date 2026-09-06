@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { pendingEscalation, escalationEvents, lastRealInteractionMs } from '../www/js/core/escalation.js';
+import { pendingEscalation, escalationEvents, lastRealInteractionMs, attentionAnchorMs, lastSeenMs }
+  from '../www/js/core/escalation.js';
 import { normalizeSettings } from '../www/js/core/settings.js';
 
 const ev = (date, time, type, extra) => ({ date, time, type, ...extra });
@@ -30,6 +31,43 @@ test('Nach der Frist werden Öffnung und Orgasmen vorgeschlagen, aber nichts ges
   assert.equal(v.orgasmen.length, 2, 'ab dem Tag nach der Öffnung: 06. und 07.');
   assert.deepEqual(v.orgasmen.map(o => o.date), ['2026-03-06', '2026-03-07']);
   assert.equal(events.length, 1, 'die Daten bleiben unangetastet');
+});
+
+test('Ein Blick in die App setzt die Frist neu — auch ohne Eintrag', () => {
+  // Der Fall, für den die Regel sonst falsch liegt: eine Woche im selben Käfig,
+  // nichts einzutragen, weil sich nichts geändert hat.
+  const data = {
+    events: [ev('2026-03-01', '10:00', 'HT')],
+    meta: { lastSeenAt: '2026-03-06T21:00:00' },
+  };
+  assert.equal(pendingEscalation(data, { now: new Date('2026-03-07T10:00:00') }).faellig, false,
+    'sechs Tage nach dem Eintrag, aber gestern nachgesehen');
+  assert.equal(pendingEscalation(data, { now: new Date('2026-03-11T10:00:00') }).faellig, true,
+    'vier Tage nach dem letzten Blick greift die Regel wieder');
+});
+
+test('Der Anker ist der jüngste Beleg — Eintrag, Blick oder Verwerfen', () => {
+  const events = [ev('2026-03-05', '10:00', 'HT')];
+  const now = new Date('2026-03-10T10:00:00').getTime();
+  assert.equal(attentionAnchorMs({ events }, now), new Date('2026-03-05T10:00:00').getTime());
+  assert.equal(attentionAnchorMs({ events, meta: { lastSeenAt: '2026-03-08T09:00:00' } }, now),
+    new Date('2026-03-08T09:00:00').getTime(), 'der spätere Blick gewinnt');
+  assert.equal(attentionAnchorMs({ events, meta: { lastSeenAt: '2026-03-02T09:00:00' } }, now),
+    new Date('2026-03-05T10:00:00').getTime(), 'ein älterer Blick ändert nichts');
+  assert.equal(attentionAnchorMs({ events: [] }, now), null, 'ohne alles gibt es keinen Anker');
+});
+
+test('Eine vorgehende Uhr schiebt die Frist nicht in die Zukunft', () => {
+  const now = new Date('2026-03-10T10:00:00').getTime();
+  const data = { events: [ev('2026-03-05', '10:00', 'HT')], meta: { lastSeenAt: '2027-01-01T00:00:00' } };
+  assert.equal(lastSeenMs(data, now), now);
+  const v = pendingEscalation(data, { now: new Date(now) });
+  assert.ok(v.seitMs >= 0, 'kein negativer Abstand aus einer fremden Uhr');
+});
+
+test('Ohne einen einzigen Eintrag wird nichts vorgeschlagen, auch nach langem Blick', () => {
+  const data = { events: [], meta: { lastSeenAt: '2026-03-01T10:00:00' } };
+  assert.equal(pendingEscalation(data, { now: new Date('2026-03-20T10:00:00') }).faellig, false);
 });
 
 test('Ein verworfener Vorschlag setzt die Frist neu', () => {

@@ -6,7 +6,7 @@
  */
 
 import {
-  STATE, subscribe, loadLocal, loadSyncBase, setData, registerSaver, notify,
+  STATE, subscribe, loadLocal, loadSyncBase, setData, registerSaver, notify, mutate,
 } from './state.js';
 import { showToast } from './ui/toast.js';
 import { escapeHtml } from './ui/format.js';
@@ -22,7 +22,7 @@ import {
 import { initPullToRefresh } from './ui/pull.js';
 import * as shortcuts from './shortcuts.js';
 import { pad2 } from './core/time.js';
-import { lastRealInteractionMs } from './core/escalation.js';
+import { attentionAnchorMs, lastSeenMs, pendingEscalation } from './core/escalation.js';
 import { settings as getSettings } from './state.js';
 import {
   IS_NATIVE, IS_ELECTRON, initPersistence, loadNativeFile, setupBackButton,
@@ -137,11 +137,52 @@ function refreshBeiRueckkehr() {
   refresh({ silent: true });
 }
 
+// =========================== GESEHEN ===========================
+/**
+ * Ein Blick in die App ist die Auskunft, die die Inaktivitäts-Regel braucht:
+ * der Stand stimmt noch. Festgehalten wird er erst, wenn die App lange genug
+ * offen war — ein Fehlgriff in der Hosentasche, der sie eine Sekunde zeigt,
+ * soll die Frist nicht zurücksetzen. Wie lange, steht in den Regeln.
+ *
+ * Ein Blick *verhindert* einen Vorschlag, er nimmt ihn nicht zurück: steht
+ * schon einer an, bleibt der Anker stehen, bis er übernommen oder verworfen
+ * ist. Sonst verschwände die Karte zwei Sekunden nach dem Öffnen — genau dann,
+ * wenn sie gebraucht wird, und die Regel liefe leer.
+ *
+ * Öfter als stündlich lohnt das Festhalten nicht: die Frist zählt in Tagen, und
+ * jede Marke ist eine Datei-Änderung, die mit OneDrive hochgeht. Deshalb auch
+ * `dirty: false` — wer die App nur ansieht, hat nichts eingegeben und soll in
+ * der Kopfzeile kein ungespeichertes Werk vorfinden.
+ */
+const GESEHEN_MIN_ABSTAND_MS = 3600000;
+let gesehenTimer = null;
+
+function markiereGesehen() {
+  const jetzt = Date.now();
+  if (jetzt - lastSeenMs(STATE.data, jetzt) < GESEHEN_MIN_ABSTAND_MS) return;
+  if (pendingEscalation(STATE.data, { settings: getSettings(), now: new Date(jetzt) }).faellig) return;
+  mutate(data => {
+    data.meta ||= {};
+    data.meta.lastSeenAt = new Date(jetzt).toISOString();
+  }, { dirty: false });
+  reminderNeu();
+}
+
+/** Die Verweildauer-Uhr neu stellen: läuft, solange die App sichtbar ist. */
+function beobachteVerweildauer() {
+  clearTimeout(gesehenTimer);
+  gesehenTimer = null;
+  if (document.visibilityState === 'hidden') return;
+  const ms = Math.round((getSettings().rules.seenAfterSeconds || 0) * 1000);
+  if (ms <= 0) { markiereGesehen(); return; }
+  gesehenTimer = setTimeout(() => { gesehenTimer = null; markiereGesehen(); }, ms);
+}
+
 // =========================== BENACHRICHTIGUNGEN ===========================
 async function reminderNeu() {
   if (!IS_NATIVE) return;
   const s = getSettings();
-  const lastMs = lastRealInteractionMs(STATE.data.events);
+  const lastMs = attentionAnchorMs(STATE.data);
   if (!lastMs) return;
   const erst = new Date(lastMs + s.rules.inactivityReminderDays * 86400000);
   if (erst.getTime() < Date.now()) {
@@ -150,7 +191,7 @@ async function reminderNeu() {
     if (t.getTime() < Date.now()) t.setDate(t.getDate() + 1);
     erst.setTime(t.getTime());
   }
-  await scheduleReminder(erst, `Zeit für einen Eintrag — ab Tag ${s.rules.inactivityAutoDays} schlägt die App fehlende vor.`);
+  await scheduleReminder(erst, `Die App hat lange nichts von dir gehört — ab Tag ${s.rules.inactivityAutoDays} schlägt sie fehlende Einträge vor. Ein Blick genügt.`);
 }
 
 // =========================== UPDATE-BANNER ===========================
@@ -295,16 +336,26 @@ async function start() {
   reminderNeu();
 
   // Laufende Zähler (Regen-Countdown, Stunden, „jetzt"-Marke) jede Minute.
-  setInterval(() => { if (aktiverTab === 'eintrag') eintrag.render(); }, 60000);
+  // Dieselbe Minute frischt die Gesehen-Marke auf: eine App, die tagelang offen
+  // auf dem Schreibtisch steht, hätte sonst nur den Zeitpunkt des Öffnens und
+  // mahnte irgendwann, während sie angeschaut wird.
+  setInterval(() => {
+    if (document.visibilityState === 'visible') markiereGesehen();
+    if (aktiverTab === 'eintrag') eintrag.render();
+  }, 60000);
 
   // Drei Wege in den Vordergrund: Capacitor meldet es nativ am sichersten,
   // `visibilitychange` deckt PWA und WebView ab, `focus` den Desktop. Der
   // Mindestabstand in refreshBeiRueckkehr macht die Überschneidung folgenlos.
-  onAppResume(refreshBeiRueckkehr);
+  onAppResume(() => { refreshBeiRueckkehr(); beobachteVerweildauer(); });
   document.addEventListener('visibilitychange', () => {
+    // Auch beim Verschwinden: die Uhr wird dabei gestoppt, damit ein kurzes
+    // Aufblitzen im Hintergrund nicht doch noch als Blick durchgeht.
+    beobachteVerweildauer();
     if (document.visibilityState === 'visible') refreshBeiRueckkehr();
   });
   window.addEventListener('focus', refreshBeiRueckkehr);
+  beobachteVerweildauer();
 
   // Ohne OneDrive gibt es nichts zu holen — dann bleibt die Geste aus, statt
   // jedes Hochziehen mit derselben Fehlermeldung zu beantworten. Der Knopf in

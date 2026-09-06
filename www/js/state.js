@@ -114,13 +114,20 @@ export function setData(raw, opts) {
 
 /**
  * Eine Änderung anwenden.
+ *
+ * `dirty: false` ist für Randnotizen, die niemand eingegeben hat — die Marke
+ * „zuletzt gesehen" etwa. Sie gehört in die Datei, aber sie soll in der
+ * Kopfzeile kein ungespeichertes Werk anzeigen und niemanden zum Speichern
+ * auffordern: mit OneDrive geht sie ohnehin gleich mit hoch, ohne wartet sie
+ * auf das nächste echte Speichern.
+ *
  * @param {function} fn        bekommt `STATE.data` und ändert es
- * @param {object} [opts]      { save?: boolean, silent?: boolean }
+ * @param {object} [opts]      { save?: boolean, silent?: boolean, dirty?: boolean }
  */
 export function mutate(fn, opts) {
   const o = opts || {};
   fn(STATE.data);
-  STATE.dirty = true;
+  if (o.dirty !== false) STATE.dirty = true;
   persistLocal();
   if (o.save !== false && saver) saver();
   if (!o.silent) notify();

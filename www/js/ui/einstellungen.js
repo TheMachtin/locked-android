@@ -286,8 +286,9 @@ const PUNKT_FELDER = [
     step: 0.005 },
 ];
 const REGEL_FELDER = [
-  { key: 'inactivityReminderDays', name: 'Erinnerung nach … Tagen ohne Eintrag', desc: 'Nur Android: die tägliche Benachrichtigung.', step: 1 },
-  { key: 'inactivityAutoDays', name: 'Vorschläge nach … Tagen ohne Eintrag', desc: 'Ab hier schlägt die App fehlende Einträge vor — geschrieben wird erst nach deiner Bestätigung.', step: 1 },
+  { key: 'inactivityReminderDays', name: 'Erinnerung nach … Tagen ohne Lebenszeichen', desc: 'Nur Android: die Benachrichtigung. Gezählt wird ab dem letzten Eintrag oder dem letzten Blick in die App — je nachdem, was später war.', step: 1 },
+  { key: 'inactivityAutoDays', name: 'Vorschläge nach … Tagen ohne Lebenszeichen', desc: 'Ab hier schlägt die App fehlende Einträge vor — geschrieben wird erst nach deiner Bestätigung.', step: 1 },
+  { key: 'seenAfterSeconds', name: 'Als Blick zählt die App ab … Sekunden', desc: 'So lange muss sie offen sein, damit die Frist neu beginnt. Ein Fehlgriff in der Hosentasche soll das nicht können. 0 lässt jedes Öffnen zählen.', step: 1 },
 ];
 
 function renderZahlen() {

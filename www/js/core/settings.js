@@ -69,6 +69,12 @@ export const DEFAULT_POINTS = {
 export const DEFAULT_RULES = {
   inactivityReminderDays: 2,
   inactivityAutoDays: 4,
+  /**
+   * So lange muss die App offen sein, damit der Blick als „gesehen" zählt und
+   * die Inaktivitäts-Frist neu beginnt. Ein Fehlgriff in der Hosentasche, der
+   * sie eine Sekunde zeigt, soll das nicht können.
+   */
+  seenAfterSeconds: 2,
 };
 
 /**
@@ -268,6 +274,7 @@ export function normalizeSettings(raw) {
     rules: {
       inactivityReminderDays: clamp(num(r.inactivityReminderDays, DEFAULT_RULES.inactivityReminderDays), 1, 365),
       inactivityAutoDays:     clamp(num(r.inactivityAutoDays,     DEFAULT_RULES.inactivityAutoDays), 1, 365),
+      seenAfterSeconds:       clamp(num(r.seenAfterSeconds,       DEFAULT_RULES.seenAfterSeconds), 0, 3600),
     },
   };
   // Der Stichtag ist normalerweise *abgeleitet* (siehe stichtagOf) und steht nur

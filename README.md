@@ -389,6 +389,48 @@ laufenden WebView und nichts vom Sync — der nächste Speichervorgang der App
 sichtbare App ist eine Sekunde langsamer und dafür dieselbe Wahrheit wie jeder
 andere Eintrag.
 
+## Die Inaktivitäts-Regel zählt Lebenszeichen, keine Einträge
+
+Wer die App tagelang nicht anfasst, hat trotzdem etwas getan — nur nicht
+eingetragen. Nach der eingestellten Frist bietet die App deshalb an, das
+Fehlende nachzutragen: eine Öffnung und ab dann täglich einen Orgasmus. Sie
+*schlägt* das vor und schreibt nichts von allein; erfundene Einträge wären
+später nicht mehr von echten zu unterscheiden.
+
+Gezählt wird ab dem letzten **Lebenszeichen**, und davon gibt es drei — der
+späteste gewinnt:
+
+| | zählt, weil |
+|---|---|
+| ein Eintrag | er den Stand ändert; auch von Uhr oder Automation, dafür muss die App nicht auf sein |
+| ein verworfener Vorschlag | die Antwort schon gegeben wurde |
+| ein Blick in die App | der Stand offenbar noch stimmt |
+
+Der dritte Fall ist der Grund für die Unterscheidung. Wer eine Woche im selben
+Käfig steckt, hat nichts einzutragen — der Zustand hat sich ja nicht geändert.
+Nach dem letzten *Eintrag* gerechnet sieht das aus wie Verschwinden, und die
+Regel bietet an, eine Öffnung und tägliche Orgasmen nachzutragen, die es nie
+gab. Genau in dem Fall wäre der Vorschlag nicht nur unnötig, sondern falsch.
+
+Als Blick zählt die App erst, wenn sie lange genug offen war — zwei Sekunden in
+den Standardregeln, einstellbar bis auf null. Ein Fehlgriff in der Hosentasche,
+der sie kurz aufblitzen lässt, soll die Frist nicht zurücksetzen. Steht die App
+offen auf dem Schreibtisch, frischt sich die Marke minütlich auf; festgehalten
+wird sie höchstens stündlich, denn die Frist zählt in Tagen und jede Marke ist
+eine Datei-Änderung.
+
+Ein Blick **verhindert** einen Vorschlag, er nimmt ihn nicht zurück: steht schon
+einer an, bleibt er stehen, bis er übernommen oder verworfen ist. Sonst
+verschwände die Karte zwei Sekunden nach dem Öffnen — genau dann, wenn sie
+gebraucht wird.
+
+Die Marke steht als `meta.lastSeenAt` in der Datei und wandert mit: der jüngere
+Blick gewinnt, egal an welchem Gerät er passiert ist. Sonst mahnte das Telefon
+eine Woche lang etwas an, das am PC längst nachgesehen wurde — und schlimmer:
+böte dort an, falsche Einträge in dieselbe Datei zu schreiben. In der Kopfzeile
+erscheint dafür kein „ungespeichert": wer die App nur ansieht, hat nichts
+eingegeben.
+
 ## Der Umstieg von 1.x
 
 Beim ersten Start rechnet `www/js/core/legacy.js` die alte Formel ein letztes Mal
@@ -422,7 +464,7 @@ www/
       legacy.js       die alte Formel, eingefroren
       migrate.js      1.x → 2.0, Stichtag, Archiv
       merge.js        Drei-Wege-Merge für den Sync
-      escalation.js   Inaktivitäts-Vorschläge
+      escalation.js   Inaktivitäts-Vorschläge, „zuletzt gesehen"
       command.js      Kommandos aus einer URL: lesen, auflösen, planen
     sync/             auth.js · onedrive.js · files.js
     ui/               eintrag · dashboard · einstellungen · daten · charts
@@ -561,7 +603,9 @@ electron-builder dort setzt.
                 "startedAt": "…",        // optional, nur wenn von Hand gesetzt
                 "updatedAt": "…" },
   "legacy":   { "punkte": …, "von": "…", "bis": "…" },   // fehlt bei Neuinstallation
-  "days": {}, "notes": {}, "meta": {}
+  "days": {}, "notes": {},
+  "meta":     { "lastSeenAt": "…",                 // letzter Blick in die App
+                "escalationDismissedAt": "…" }     // letzter verworfener Vorschlag
 }
 ```
 
