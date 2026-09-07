@@ -260,25 +260,35 @@ schreibt, lässt eine Momentaufnahme wie eine Live-Übertragung aussehen.
 **Ein nicht erreichbarer Abruf verwirft nichts.** Der letzte Stand bleibt stehen
 und läuft weiter, mit dem Hinweis, dass er älter ist. Er ist nicht falsch.
 
-### Wenn die laufende Datei nicht durchkommt
+### Warum die laufende Datei über OneDrive nicht geht
 
-`api.onedrive.com` gibt eine anonyme Freigabe nicht ohne Weiteres an fremdes
-JavaScript heraus — der reguläre Weg antwortet mit `401`. Ob eine andere
-Adressform es tut, lässt sich nur dort feststellen, wo die Verbindung besteht,
-und nicht im Code durch Raten. Dafür gibt es **Diagnose-Link kopieren**:
-`jetzt.html#diag=…` probiert die Formen der Reihe nach durch und schreibt hin,
-welche mit welchem Status antwortet.
+Gemessen am 07.09.2026, mit einer anonym lesbaren Freigabe:
 
-Die Unterscheidung, auf die es dabei ankommt, ist die zwischen einer
-*Statuszeile* und einem *Block*. Eine Antwort mit lesbarem Status hat die
-CORS-Prüfung bestanden und scheitert nur an der Berechtigung; ein Block kommt
-gar nicht erst bis zum Status und steht deshalb als „blockiert" da. Die
-Adressen selbst zeigt die Seite nicht — sie enthalten die Freigabe-Kennung, und
-dieser Zettel ist zum Herzeigen gedacht.
+| Adressform | Antwort |
+|---|---|
+| `shares/…/root/content` | `401` |
+| `shares/…/driveItem/content` | `401` |
+| `graph/shares/…/driveItem/content` | `401` |
+| Freigabelink mit `download=1` | von CORS blockiert |
+| Freigabelink direkt | von CORS blockiert |
 
-Sagt keine Form `200`, gibt OneDrive anonyme Dateien nicht CORS-fähig heraus.
-Dann bleibt für „live" nur ein Host, der das tut, und für alles andere die
-Momentaufnahme.
+Zwei verschiedene Absagen. Die drei API-Wege *antworten* — Microsoft schickt
+dort CORS-Header —, verlangen aber einen Token, obwohl dieselbe Freigabe im
+Browser ohne Anmeldung lesbar ist. Die beiden direkten Wege lassen fremdes
+JavaScript gar nicht erst bis zum Status kommen.
+
+**OneDrive gibt anonyme Dateien nicht an fremdes JavaScript heraus.** Für eine
+Ansicht, die neue Einträge zeigt, braucht es deshalb einen Host, der das tut;
+bis dahin ist die Momentaufnahme der Weg.
+
+Nachmessen lässt sich das jederzeit mit **Diagnose-Link kopieren**:
+`jetzt.html#diag=…` probiert die Formen durch und schreibt hin, welche mit
+welchem Status antwortet. Die Unterscheidung, auf die es ankommt, ist die
+zwischen einer *Statuszeile* und einem *Block* — die erste hat die CORS-Prüfung
+bestanden und scheitert nur an der Berechtigung. Die Adressen selbst zeigt die
+Seite nicht: sie enthalten die Freigabe-Kennung, und dieser Zettel ist zum
+Herzeigen gedacht. Dieselbe Diagnose prüft auch jede andere Quelle — sie ist
+nicht auf OneDrive festgelegt.
 
 Ohne Freigabelink gibt es den Knopf **Momentaufnahme**: der packt das Paket in
 den Link selbst (`jetzt.html#d=…`, rund 700 Zeichen). Die Uhren laufen darin
