@@ -228,14 +228,28 @@
     </div>
 
     <div class="card">
-      <h2>Live-Ansicht <span class="sub">nur lesen</span></h2>
+      <h2>Jemanden zusehen lassen <span class="sub">nur lesen</span></h2>
       <div class="small" style="margin-top:0">
-        Legt neben der Historie eine kleine <code>jetzt.json</code> ab — nur der
-        Block „Jetzt“, ohne Einträge und ohne Einstellungen. Wer ihren
-        Freigabelink hat, sieht den laufenden Zustand im Browser und sonst
-        nichts; ändern kann die Seite nichts, sie hat keinen Zugang dafür.
+        Der Block „Jetzt“ als Link — ohne Einträge, ohne Einstellungen, ohne
+        Konto. Die Uhren darin laufen beim Betrachter weiter und der Preis
+        fällt; für neue Einträge braucht es einen neuen Link.
       </div>
       <div style="height:10px"></div>
+      <button class="btn primary full" id="btnJetztSnapshot" type="button">Momentaufnahme kopieren</button>
+
+      <!-- Der Weg über eine laufende Datei ist gebaut und geprüft, führt über
+           OneDrive aber ins Leere (siehe README). Er steht deshalb zugeklappt
+           da statt gelöscht: an einem Ort, der Dateien herausgibt, trägt er
+           sofort. -->
+      <button class="btn ghost full collapse-toggle" id="jetztLiveToggle" type="button"
+              style="margin-top:10px">Laufende Datei ▾</button>
+      <div id="jetztLiveSection" class="hide">
+        <div class="small" style="margin-top:0">
+          <b>Geht über OneDrive derzeit nicht.</b> Anonyme Dateien werden dort
+          nicht an fremdes JavaScript herausgegeben — gemessen am 07.09.26, alle
+          Adressformen abschlägig. Der Aufbau bleibt trotzdem stehen: er trägt,
+          sobald <code>jetzt.json</code> an einem Ort liegt, der das tut.
+        </div>
       <div class="setting schalter">
         <label for="jetztAktiv">jetzt.json mitschreiben</label>
         <input type="checkbox" id="jetztAktiv">
@@ -253,11 +267,10 @@
       <div class="small" id="jetztHinweis"></div>
       <div style="height:10px"></div>
       <div class="row2">
-        <button class="btn primary" id="btnJetztLink" type="button">Link kopieren</button>
-        <button class="btn ghost" id="btnJetztSnapshot" type="button">Momentaufnahme</button>
+        <button class="btn ghost" id="btnJetztLink" type="button">Link kopieren</button>
+        <button class="btn ghost" id="btnJetztDiagnose" type="button">Diagnose-Link</button>
       </div>
-      <div style="height:8px"></div>
-      <button class="btn ghost full" id="btnJetztDiagnose" type="button">Diagnose-Link kopieren</button>
+      </div>
     </div>
 
     <div class="card hide" id="umzugCard">

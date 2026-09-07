@@ -224,10 +224,21 @@ Anker hat, kann die Uhren selbst weiterlaufen lassen: die Stunden zählen hoch,
 der Preis fällt, die Strecke wächst um Mitternacht. Nichts davon braucht ein
 einziges Ereignis.
 
-Die App legt dafür neben `locked2.json` eine kleine `jetzt.json` ab. Darin steht
-nur, was der Block zeigt: keine Einträge, keine Einstellungen, kein Kontostand.
+Im Daten-Tab steht dafür ein Knopf: **Momentaufnahme kopieren**. Der packt das
+Paket in den Link selbst (`jetzt.html#d=…`, rund 700 Zeichen) — keine Datei,
+keine Freigabe, kein Konto beim Empfänger. Die Uhren laufen darin weiter, neue
+Einträge erscheinen nicht; dafür braucht es einen neuen Link.
 
-Ein Knopf im Daten-Tab macht den Rest: **Freigabelink erzeugen** schaltet das
+### Der Weg über eine laufende Datei — gebaut, aber zugeklappt
+
+Darunter liegt zugeklappt, was eine *mitlaufende* Ansicht bräuchte: die App legt
+neben `locked2.json` eine kleine `jetzt.json` ab, gibt sie frei, und die
+Anzeigeseite holt sie minütlich nach. Alles davon ist gebaut und geprüft — es
+führt über OneDrive nur ins Leere (siehe unten). Gelöscht ist es deshalb nicht:
+sobald `jetzt.json` an einem Ort liegt, der Dateien herausgibt, trägt der Aufbau
+sofort.
+
+Ein Knopf dort macht den Rest: **Freigabelink erzeugen** schaltet das
 Mitschreiben ein, legt die Datei an und holt den Anzeigen-Link über
 `createLink` von OneDrive — in einem Schritt. Der dafür nötige Scope
 (`Files.ReadWrite`) ist derselbe, mit dem die App ohnehin schreibt; eine neue
@@ -290,12 +301,9 @@ Seite nicht: sie enthalten die Freigabe-Kennung, und dieser Zettel ist zum
 Herzeigen gedacht. Dieselbe Diagnose prüft auch jede andere Quelle — sie ist
 nicht auf OneDrive festgelegt.
 
-Ohne Freigabelink gibt es den Knopf **Momentaufnahme**: der packt das Paket in
-den Link selbst (`jetzt.html#d=…`, rund 700 Zeichen). Die Uhren laufen darin
-weiter, neue Einträge erscheinen nicht — für einen Blick zwischendurch reicht
-das, für dauerhaftes Zusehen nicht. Beides landet im Adress-Fragment hinter
-`#`, und das schickt kein Browser an einen Server: der Freigabelink taucht in
-keinem Zugriffsprotokoll auf.
+Beides landet im Adress-Fragment hinter `#`, und das schickt kein Browser an
+einen Server: weder das Paket noch ein Freigabelink taucht in einem
+Zugriffsprotokoll auf.
 
 Was bleibt: ein Freigabelink ist ein Ausweis. Wer ihn hat, sieht den Block, auch
 wenn er ihn weitergereicht bekommen hat. Zurücknehmen geht — dafür der Knopf —,
