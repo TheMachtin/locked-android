@@ -15,9 +15,19 @@ import {
   STATE, calc, setData, setSyncBase, persistLocal, notify, invalidate,
 } from '../state.js';
 
-function graphUrl(pfad) {
+/** Eine Aktion an der Datei unter `pfad` — `content`, `createLink`, `permissions/…`. */
+function graphAktion(pfad, aktion) {
   const enc = String(pfad).split('/').map(encodeURIComponent).join('/');
-  return `https://graph.microsoft.com/v1.0/me/drive/root:${enc}:/content`;
+  return `https://graph.microsoft.com/v1.0/me/drive/root:${enc}:/${aktion}`;
+}
+
+const graphUrl = (pfad) => graphAktion(pfad, 'content');
+
+/** Die Begründung aus einer Graph-Fehlerantwort ziehen — sie ist meist brauchbar. */
+async function graphFehler(res) {
+  const body = await res.json().catch(() => null);
+  const grund = body && body.error && body.error.message;
+  return new Error(grund || `Graph ${res.status}`);
 }
 
 /** Rohen Dateiinhalt holen. @returns {{json, etag}} oder null bei 404. */
@@ -170,6 +180,52 @@ export function vergissJetztStand() { letztesJetzt = null; }
 // ohne `stand`: der Schreibzeitpunkt ist bei jedem Aufruf ein anderer und wäre
 // als Unterschied genau der, der nichts bedeutet.
 let letztesJetzt = null;
+
+/**
+ * Einen Anzeigen-Link für die `jetzt.json` erzeugen.
+ *
+ * `createLink` ist wiederholbar: gibt es für dieselbe Art und Reichweite schon
+ * einen Link, kommt derselbe zurück statt eines zweiten. Zweimal drücken legt
+ * also keine zweite Freigabe an.
+ *
+ * `Files.ReadWrite` genügt dafür — es ist derselbe Scope, mit dem die App
+ * ohnehin schreibt, also keine neue Zustimmung nötig. Was scheitern *kann*, ist
+ * die Reichweite: bei einem Geschäftskonto darf die Verwaltung anonyme Links
+ * abschalten. Dann kommt die Begründung von Graph zurück und wandert unverändert
+ * in die Meldung — geraten wäre hier schlechter als zitiert.
+ *
+ * @returns {{url: string, permissionId: string|null}}
+ */
+export async function erzeugeFreigabe() {
+  const token = await getToken();
+  const res = await fetch(graphAktion(jetztPfad(), 'createLink'), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'view', scope: 'anonymous' }),
+  });
+  if (!res.ok) throw await graphFehler(res);
+  const body = await res.json();
+  const url = body && body.link && body.link.webUrl;
+  if (!url) throw new Error('Antwort ohne Adresse');
+  return { url, permissionId: body.id || null };
+}
+
+/**
+ * Die Freigabe wieder einziehen.
+ *
+ * Der Gegenpart gehört dazu: eine App, die Links vergibt, aber zum Zurücknehmen
+ * auf die OneDrive-Oberfläche verweist, überlässt genau den Schritt von Hand,
+ * auf den es ankommt. Ein 404 heißt, die Freigabe ist schon weg — das ist das
+ * Ziel und kein Fehler.
+ */
+export async function entferneFreigabe(permissionId) {
+  const token = await getToken();
+  const res = await fetch(graphAktion(jetztPfad(), `permissions/${encodeURIComponent(permissionId)}`), {
+    method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 404) throw await graphFehler(res);
+  return true;
+}
 
 export async function schreibeJetzt() {
   if (!jetztVeroeffentlichen() || !isSignedIn()) return false;

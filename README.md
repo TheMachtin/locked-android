@@ -224,11 +224,25 @@ Anker hat, kann die Uhren selbst weiterlaufen lassen: die Stunden zählen hoch,
 der Preis fällt, die Strecke wächst um Mitternacht. Nichts davon braucht ein
 einziges Ereignis.
 
-Die App legt dafür neben `locked2.json` eine kleine `jetzt.json` ab (Daten-Tab →
-**Live-Ansicht**, standardmäßig aus). Darin steht nur, was der Block zeigt:
-keine Einträge, keine Einstellungen, kein Kontostand. Von dieser Datei erzeugt
-man in OneDrive einen Freigabelink zum *Anzeigen* und setzt ihn im Daten-Tab
-ein; der Knopf daneben liefert die fertige Adresse für den Zuschauer.
+Die App legt dafür neben `locked2.json` eine kleine `jetzt.json` ab. Darin steht
+nur, was der Block zeigt: keine Einträge, keine Einstellungen, kein Kontostand.
+
+Ein Knopf im Daten-Tab macht den Rest: **Freigabelink erzeugen** schaltet das
+Mitschreiben ein, legt die Datei an und holt den Anzeigen-Link über
+`createLink` von OneDrive — in einem Schritt. Der dafür nötige Scope
+(`Files.ReadWrite`) ist derselbe, mit dem die App ohnehin schreibt; eine neue
+Zustimmung braucht es nicht. Zweimal drücken legt keine zweite Freigabe an:
+Graph liefert für dieselbe Art und Reichweite denselben Link zurück.
+
+**Freigabe zurücknehmen** zieht sie wieder ein. Das gehört dazu — eine App, die
+Links vergibt, aber zum Widerrufen auf die OneDrive-Oberfläche verweist,
+überlässt genau den Schritt von Hand, auf den es ankommt.
+
+Scheitern kann die Reichweite: bei einem Geschäftskonto darf die Verwaltung
+anonyme Links abschalten. Dann steht die Begründung von Microsoft unverändert in
+der Meldung, und der Weg über die OneDrive-Oberfläche bleibt — ein von Hand
+eingesetzter Link funktioniert genauso, die App weiß dann nur nichts von ihm und
+kann ihn nicht zurücknehmen.
 
 Die Seite dahinter ist `jetzt.html` — dieselbe Web-App, aber eine eigene Seite
 ohne Anmeldung, ohne Token und ohne Schreibweg. Dass sie nichts ändern kann, ist
@@ -254,9 +268,8 @@ das, für dauerhaftes Zusehen nicht. Beides landet im Adress-Fragment hinter
 keinem Zugriffsprotokoll auf.
 
 Was bleibt: ein Freigabelink ist ein Ausweis. Wer ihn hat, sieht den Block, auch
-wenn er ihn weitergereicht bekommen hat. Zurücknehmen lässt er sich in OneDrive,
-indem die Freigabe gelöscht wird — beim Link im Adress-Fragment geht das nicht,
-der veraltet nur.
+wenn er ihn weitergereicht bekommen hat. Zurücknehmen geht — dafür der Knopf —,
+beim Link im Adress-Fragment nicht: der veraltet nur.
 
 ## Wo die Dateien liegen
 

@@ -9,6 +9,7 @@ import { AUTH, login, logout, isSignedIn } from '../sync/auth.js';
 import {
   loadFromCloud, saveToCloud, fetchLegacyFile, sanityCheck,
   schreibeJetzt, jetztVeroeffentlichen, setJetztVeroeffentlichen, vergissJetztStand,
+  erzeugeFreigabe, entferneFreigabe,
 } from '../sync/onedrive.js';
 import {
   cloudOrdner, setCloudOrdner, normalizeOrdner, datenPfad, jetztPfad,
@@ -104,12 +105,63 @@ async function ordnerUebernehmen() {
 
 // =========================== LIVE-ANSICHT ===========================
 const LS_SHARE = 'locked_jetzt_share_v1';
+// Die Kennung der von der App angelegten Freigabe — ohne sie ließe sie sich
+// später nur noch in der OneDrive-Oberfläche zurücknehmen.
+const LS_PERM  = 'locked_jetzt_perm_v1';
 
 function shareUrl() {
   try { return localStorage.getItem(LS_SHARE) || ''; } catch { return ''; }
 }
 function setShareUrl(v) {
   try { localStorage.setItem(LS_SHARE, String(v || '').trim()); } catch (e) { console.warn(e); }
+}
+function permId() {
+  try { return localStorage.getItem(LS_PERM) || ''; } catch { return ''; }
+}
+function setPermId(v) {
+  try {
+    if (v) localStorage.setItem(LS_PERM, String(v));
+    else localStorage.removeItem(LS_PERM);
+  } catch (e) { console.warn(e); }
+}
+
+/**
+ * Freigabelink anlegen — mit allem, was davor nötig ist.
+ *
+ * Ein Link auf eine Datei, die es nicht gibt, wäre nichts wert: der Schalter
+ * geht deshalb mit an und die Datei entsteht, bevor Graph gefragt wird. Das ist
+ * der ganze Sinn des Knopfes — sonst bliebe die Reihenfolge beim Benutzer
+ * hängen, und der einzige Hinweis darauf wäre eine Fehlermeldung.
+ */
+async function freigabeAnlegen() {
+  if (!isSignedIn()) { showToast('Dafür erst mit Microsoft anmelden', true); return; }
+
+  if (!jetztVeroeffentlichen()) setJetztVeroeffentlichen(true);
+  // Den Änderungs-Vergleich absichtlich zurücksetzen: sonst hieße ein „false"
+  // von schreibeJetzt() entweder „unverändert" oder „fehlgeschlagen", und der
+  // Unterschied entschiede darüber, ob die Datei überhaupt da ist.
+  vergissJetztStand();
+  if (!await schreibeJetzt()) {
+    throw new Error('jetzt.json ließ sich nicht schreiben — ohne sie gibt es nichts freizugeben');
+  }
+
+  const { url, permissionId } = await erzeugeFreigabe();
+  setShareUrl(url);
+  setPermId(permissionId);
+  renderJetztKarte();
+  showToast('Freigabelink erzeugt');
+}
+
+async function freigabeZuruecknehmen() {
+  const id = permId();
+  if (!id) return;
+  if (!confirmAction('Die Freigabe zurücknehmen?\n\n'
+    + 'Der Link hört danach auf zu funktionieren — auch bei denen, die ihn schon haben.')) return;
+  await entferneFreigabe(id);
+  setPermId('');
+  setShareUrl('');
+  renderJetztKarte();
+  showToast('Freigabe zurückgenommen');
 }
 
 /** Die Adresse der Anzeigeseite — im Web neben der App, sonst die Web-Fassung. */
@@ -124,17 +176,25 @@ function renderJetztKarte() {
   const feld = $('jetztShareUrl');
   if (document.activeElement !== feld) feld.value = shareUrl();
 
+  // „Zurücknehmen" nur, wenn es etwas zurückzunehmen gibt: eine von Hand in
+  // OneDrive angelegte Freigabe kennt die App nicht und kann sie nicht lösen.
+  $('btnJetztFreigabeWeg').classList.toggle('hide', !permId());
+  $('btnJetztFreigabe').textContent = shareUrl() ? 'Freigabelink erneuern' : 'Freigabelink erzeugen';
+
   const teile = [];
   teile.push(`Datei: <code>${escapeHtml(jetztPfad())}</code>`);
-  if (!an) {
-    teile.push('Solange der Schalter aus ist, entsteht die Datei nicht — es ändert sich nichts.');
-  } else if (!isSignedIn()) {
-    teile.push('<b>Ohne Anmeldung wird nichts geschrieben.</b>');
+  if (!isSignedIn()) {
+    teile.push('<b>Ohne Anmeldung geht hier nichts</b> — weder Schreiben noch Freigeben.');
   } else if (!shareUrl()) {
-    teile.push('Jetzt in OneDrive den Freigabelink dieser Datei erzeugen '
-      + '(<b>Teilen → Jeder mit dem Link → Anzeigen</b>) und hier einsetzen.');
+    teile.push('<b>Freigabelink erzeugen</b> schaltet das Mitschreiben ein, legt die Datei an '
+      + 'und holt den Anzeigen-Link von OneDrive — in einem Schritt.');
   } else {
     teile.push(`Ansicht: <code>${escapeHtml(ansichtLink())}</code>`);
+    if (!an) teile.push('<b>Der Schalter ist aus</b> — der Link zeigt weiter den Stand von zuletzt.');
+    if (!permId()) {
+      teile.push('Diesen Link kennt die App nur als Adresse. Zurücknehmen lässt er sich in OneDrive '
+        + '(<b>Teilen → Zugriff verwalten</b>) — oder hier neu erzeugen lassen.');
+    }
   }
   teile.push('<b>Momentaufnahme</b> braucht keinen Freigabelink: sie steckt im Link selbst. '
     + 'Die Uhren laufen darin weiter, neue Einträge erscheinen aber nicht.');
@@ -341,8 +401,27 @@ export function initDaten() {
 
   $('jetztShareUrl').addEventListener('change', (e) => {
     setShareUrl(e.target.value);
+    // Von Hand eingetragen heißt: nicht mehr die Freigabe, die die App kennt.
+    // Die alte Kennung stehen zu lassen böte ein „Zurücknehmen" an, das etwas
+    // anderes löste als das, was im Feld steht.
+    setPermId('');
     renderJetztKarte();
     showToast(shareUrl() ? 'Freigabelink gemerkt' : 'Freigabelink entfernt');
+  });
+
+  $('btnJetztFreigabe').addEventListener('click', async () => {
+    try { await freigabeAnlegen(); }
+    catch (e) {
+      console.error(e);
+      // Die häufigste echte Absage: ein Geschäftskonto, dem die Verwaltung
+      // anonyme Links verboten hat. Dann hilft nur der Weg über OneDrive.
+      showToast('Freigabe fehlgeschlagen: ' + (e.message || e), true);
+    }
+  });
+
+  $('btnJetztFreigabeWeg').addEventListener('click', async () => {
+    try { await freigabeZuruecknehmen(); }
+    catch (e) { console.error(e); showToast('Zurücknehmen fehlgeschlagen: ' + (e.message || e), true); }
   });
 
   $('btnJetztLink').addEventListener('click', async () => {
