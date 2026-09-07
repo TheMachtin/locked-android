@@ -511,3 +511,8 @@
 .setting.schalter input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent);
   /* Ohne dies zeichnet der Browser ein weißes Kästchen auf dunklen Grund. */
   color-scheme: dark; }
+
+/* Pfade und Adressen im Hinweistext brechen um, statt die Karte breitzuziehen.
+   `anywhere` statt `break-all`, weil nur das auch in die Mindestbreite eingeht —
+   sonst bleibt der Kasten breit und die Seite scrollt seitwärts. */
+.small code { overflow-wrap: anywhere; }
