@@ -17,7 +17,9 @@ import { computeAll } from '../www/js/core/calc.js';
 import { normalizeSettings } from '../www/js/core/settings.js';
 import { statusContext, statusItems } from '../www/js/ui/status.js';
 import { jetztPayload, jetztWerte, istJetztPayload } from '../www/js/core/jetzt.js';
-import { jetztItems, payloadKodieren, payloadDekodieren } from '../www/js/ui/jetzt.js';
+import {
+  jetztItems, payloadKodieren, payloadDekodieren, inhaltsUrl, inhaltsKandidaten,
+} from '../www/js/ui/jetzt.js';
 import { normalizeOrdner } from '../www/js/sync/paths.js';
 
 const ev = (date, time, type) => ({ date, time, type });
@@ -131,4 +133,33 @@ test('Der Ordnerpfad kommt in die Form, die Graph erwartet', () => {
   assert.equal(normalizeOrdner('/'), '', 'die Wurzel hat keinen Namen');
   assert.equal(normalizeOrdner(''), '');
   assert.equal(normalizeOrdner('/A/../B'), '/A/B', 'relative Sprünge fallen weg');
+});
+
+test('Ein Freigabelink wird zur Abrufadresse — und zu Alternativen für die Diagnose', () => {
+  const link = 'https://1drv.ms/u/s!AbCdEf';
+  const k = inhaltsKandidaten(link);
+  assert.ok(k.length > 1, 'mehrere Formen zum Durchprobieren');
+  assert.equal(inhaltsUrl(link), k[0].url, 'die Seite geht den ersten Weg');
+  assert.match(k[0].url, /^https:\/\/api\.onedrive\.com\/v1\.0\/shares\/u![A-Za-z0-9_-]+\/root\/content$/);
+  // Jede Form braucht einen Namen, denn nur der wird angezeigt: die Adressen
+  // enthalten die Freigabe-Kennung und gehören nicht auf einen Zettel, den man
+  // herumzeigt.
+  for (const e of k) {
+    assert.ok(e.name && !e.name.includes('u!'), `Name ohne Kennung: ${e.name}`);
+    assert.ok(/^https:\/\//.test(e.url), `brauchbare Adresse: ${e.name}`);
+  }
+  assert.ok(k.some(e => /download=1/.test(e.url)), 'der Download-Weg ist dabei');
+});
+
+test('Eine fremde Adresse bleibt, wie sie ist', () => {
+  const eigen = 'https://beispiel.invalid/jetzt.json';
+  assert.equal(inhaltsUrl(eigen), eigen);
+  assert.equal(inhaltsKandidaten(eigen).length, 1, 'da gibt es nichts durchzuprobieren');
+});
+
+test('Unbrauchbares ergibt keine Adresse', () => {
+  assert.equal(inhaltsUrl(''), null);
+  assert.equal(inhaltsUrl('kein-link'), null);
+  assert.equal(inhaltsUrl('javascript:alert(1)'), null, 'nur http(s)');
+  assert.deepEqual(inhaltsKandidaten(null), []);
 });

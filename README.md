@@ -260,6 +260,26 @@ schreibt, lässt eine Momentaufnahme wie eine Live-Übertragung aussehen.
 **Ein nicht erreichbarer Abruf verwirft nichts.** Der letzte Stand bleibt stehen
 und läuft weiter, mit dem Hinweis, dass er älter ist. Er ist nicht falsch.
 
+### Wenn die laufende Datei nicht durchkommt
+
+`api.onedrive.com` gibt eine anonyme Freigabe nicht ohne Weiteres an fremdes
+JavaScript heraus — der reguläre Weg antwortet mit `401`. Ob eine andere
+Adressform es tut, lässt sich nur dort feststellen, wo die Verbindung besteht,
+und nicht im Code durch Raten. Dafür gibt es **Diagnose-Link kopieren**:
+`jetzt.html#diag=…` probiert die Formen der Reihe nach durch und schreibt hin,
+welche mit welchem Status antwortet.
+
+Die Unterscheidung, auf die es dabei ankommt, ist die zwischen einer
+*Statuszeile* und einem *Block*. Eine Antwort mit lesbarem Status hat die
+CORS-Prüfung bestanden und scheitert nur an der Berechtigung; ein Block kommt
+gar nicht erst bis zum Status und steht deshalb als „blockiert" da. Die
+Adressen selbst zeigt die Seite nicht — sie enthalten die Freigabe-Kennung, und
+dieser Zettel ist zum Herzeigen gedacht.
+
+Sagt keine Form `200`, gibt OneDrive anonyme Dateien nicht CORS-fähig heraus.
+Dann bleibt für „live" nur ein Host, der das tut, und für alles andere die
+Momentaufnahme.
+
 Ohne Freigabelink gibt es den Knopf **Momentaufnahme**: der packt das Paket in
 den Link selbst (`jetzt.html#d=…`, rund 700 Zeichen). Die Uhren laufen darin
 weiter, neue Einträge erscheinen nicht — für einen Blick zwischendurch reicht
@@ -603,7 +623,7 @@ Keine Build-Kette, kein Framework: ES-Module, die der Browser direkt lädt.
 Derselbe Ordner geht unverändert in die APK, in den Installer und nach Pages.
 
 ```bash
-npm test          # 146 Tests, nur Node-Builtins
+npm test          # 149 Tests, nur Node-Builtins
 npm start         # Desktop-App lokal starten
 npm run build:win # Windows-Installer (auf Windows)
 npx serve www     # Web-Version lokal
