@@ -5,11 +5,19 @@
 import { STATE, calc, setData, clearSyncBase, settings as getSettings } from '../state.js';
 import { showToast, confirmAction } from './toast.js';
 import { fmtDateShort, escapeHtml } from './format.js';
-import { AUTH, CFG, login, logout, isSignedIn } from '../sync/auth.js';
-import { loadFromCloud, saveToCloud, fetchLegacyFile, sanityCheck } from '../sync/onedrive.js';
+import { AUTH, login, logout, isSignedIn } from '../sync/auth.js';
+import {
+  loadFromCloud, saveToCloud, fetchLegacyFile, sanityCheck,
+  schreibeJetzt, jetztVeroeffentlichen, setJetztVeroeffentlichen, vergissJetztStand,
+} from '../sync/onedrive.js';
+import {
+  cloudOrdner, setCloudOrdner, normalizeOrdner, datenPfad, jetztPfad,
+} from '../sync/paths.js';
 import { openFile, saveFile, readJsonFile, backup, exportCsv, exportXlsx } from '../sync/files.js';
 import { importLegacyData } from '../core/migrate.js';
 import { commandUrl, webCommandUrl, shortcutModels, kuerzelMap, MAX_SHORTCUTS } from '../core/command.js';
+import { jetztPayload } from '../core/jetzt.js';
+import { payloadKodieren } from './jetzt.js';
 import { KIND_ORGASM } from '../core/settings.js';
 import {
   platformName, versionLabel, APP_COMMIT, IS_NATIVE, IS_WEB, WEB_APP_URL,
@@ -22,7 +30,7 @@ export function renderAuth() {
   $('authRedirectInfo').innerHTML = AUTH.redirectUri
     ? `Redirect-URI dieser Installation: <code>${escapeHtml(AUTH.redirectUri)}</code>`
     : '';
-  $('cloudPath').innerHTML = `Datei: <code>${escapeHtml(CFG.oneDrivePath)}</code>`;
+  $('cloudPath').innerHTML = `Datei: <code>${escapeHtml(datenPfad())}</code>`;
   const status = $('authStatus');
   if (AUTH.account) {
     status.textContent = `Angemeldet als ${AUTH.account.username || AUTH.account.name}`;
@@ -45,6 +53,113 @@ function renderUmzug() {
   const card = $('umzugCard');
   const leer = (STATE.data.events || []).length === 0 && !STATE.data.legacy;
   card.classList.toggle('hide', !leer);
+}
+
+// =========================== ABLAGEORT ===========================
+/**
+ * Wo die Dateien liegen.
+ *
+ * Der Ordner gilt pro Installation (siehe `sync/paths.js`) — nach einem Umzug
+ * muss er also an jedem Gerät einmal gesetzt werden. Das steht auch so da:
+ * lautlos die halbe Historie am alten Ort zu lassen wäre die schlechtere
+ * Überraschung.
+ */
+function renderOrdner() {
+  const feld = $('cloudFolder');
+  if (!feld) return;
+  if (document.activeElement !== feld) feld.value = cloudOrdner();
+  $('cloudFolderHint').innerHTML =
+    'Gilt für <code>locked2.json</code>, <code>jetzt.json</code> und die alte '
+    + '<code>locked.json</code>. Die Dateien werden dabei <b>nicht</b> verschoben — '
+    + 'erst in OneDrive umlegen, dann hier eintragen. Der Ordner gehört zu dieser '
+    + 'Installation; an den anderen Geräten ist er getrennt zu setzen.';
+}
+
+async function ordnerUebernehmen() {
+  const roh = $('cloudFolder').value;
+  const ordner = normalizeOrdner(roh);
+  if (ordner === cloudOrdner()) { renderOrdner(); showToast('Ordner unverändert'); return; }
+
+  // Am neuen Ort liegt ein anderer Stand, und der ersetzt beim Laden den
+  // hiesigen. Ungespeichertes wäre dann weg — ohne dass jemand danach gefragt
+  // worden wäre.
+  if (STATE.dirty && !confirmAction('Es gibt noch nicht gespeicherte Änderungen.\n\n'
+    + 'Nach dem Wechsel wird der Stand aus dem neuen Ordner geladen und ersetzt sie. '
+    + 'Trotzdem wechseln?')) { renderOrdner(); return; }
+
+  setCloudOrdner(ordner);
+  // Beides gehört zur *alten* Datei: ein ETag von dort ließe das nächste
+  // Speichern gegen eine Version prüfen, die am neuen Ort niemand kennt, und
+  // die Merge-Basis beschriebe eine Historie, die dort vielleicht gar nicht
+  // liegt. Beides muss weg, bevor irgendetwas geschrieben wird.
+  STATE.etag = null;
+  clearSyncBase();
+  renderOrdner();
+  renderAuth();
+
+  if (!isSignedIn()) { showToast('Ordner gemerkt — wirkt nach der Anmeldung'); return; }
+  const r = await loadFromCloud({ onMessage: (m, bad) => showToast(m, bad) });
+  if (r && r.neu) showToast('Kein locked2.json an diesem Ort — beim nächsten Speichern entsteht es dort', true);
+}
+
+// =========================== LIVE-ANSICHT ===========================
+const LS_SHARE = 'locked_jetzt_share_v1';
+
+function shareUrl() {
+  try { return localStorage.getItem(LS_SHARE) || ''; } catch { return ''; }
+}
+function setShareUrl(v) {
+  try { localStorage.setItem(LS_SHARE, String(v || '').trim()); } catch (e) { console.warn(e); }
+}
+
+/** Die Adresse der Anzeigeseite — im Web neben der App, sonst die Web-Fassung. */
+function ansichtBasis() {
+  if (!IS_WEB) return WEB_APP_URL + 'jetzt.html';
+  return location.origin + location.pathname.replace(/[^/]*$/, '') + 'jetzt.html';
+}
+
+function renderJetztKarte() {
+  const an = jetztVeroeffentlichen();
+  $('jetztAktiv').checked = an;
+  const feld = $('jetztShareUrl');
+  if (document.activeElement !== feld) feld.value = shareUrl();
+
+  const teile = [];
+  teile.push(`Datei: <code>${escapeHtml(jetztPfad())}</code>`);
+  if (!an) {
+    teile.push('Solange der Schalter aus ist, entsteht die Datei nicht — es ändert sich nichts.');
+  } else if (!isSignedIn()) {
+    teile.push('<b>Ohne Anmeldung wird nichts geschrieben.</b>');
+  } else if (!shareUrl()) {
+    teile.push('Jetzt in OneDrive den Freigabelink dieser Datei erzeugen '
+      + '(<b>Teilen → Jeder mit dem Link → Anzeigen</b>) und hier einsetzen.');
+  } else {
+    teile.push(`Ansicht: <code>${escapeHtml(ansichtLink())}</code>`);
+  }
+  teile.push('<b>Momentaufnahme</b> braucht keinen Freigabelink: sie steckt im Link selbst. '
+    + 'Die Uhren laufen darin weiter, neue Einträge erscheinen aber nicht.');
+  $('jetztHinweis').innerHTML = teile.map(z => `<div style="margin-top:6px">${z}</div>`).join('');
+}
+
+function ansichtLink() {
+  return `${ansichtBasis()}#q=${encodeURIComponent(shareUrl())}`;
+}
+
+function momentaufnahmeLink() {
+  const paket = jetztPayload(STATE.data, calc(), new Date());
+  return `${ansichtBasis()}#d=${payloadKodieren(paket)}`;
+}
+
+/** Adresse in die Zwischenablage — mit dem Weg für Browser ohne sie. */
+async function kopieren(text, meldung) {
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(meldung);
+  } catch {
+    // Ohne Zwischenablage (alte WebView, unsicherer Kontext) wenigstens zum
+    // Markieren anbieten.
+    window.prompt('Adresse von Hand kopieren:', text);
+  }
 }
 
 /**
@@ -127,6 +242,8 @@ function renderUhrBerechtigung() {
 
 export function render() {
   renderAuth();
+  renderOrdner();
+  renderJetztKarte();
   renderShortcuts();
   const v = versionLabel();
   const commit = APP_COMMIT.startsWith('__') ? null : APP_COMMIT;
@@ -164,6 +281,9 @@ export function initDaten() {
     await logout();
     STATE.etag = null;
     clearSyncBase();
+    // Das nächste Konto hat seine eigene Ablage — der gemerkte Stand der
+    // jetzt.json gehörte zur vorigen.
+    vergissJetztStand();
     showToast('Abgemeldet');
   });
   $('btnReload').addEventListener('click', async () => {
@@ -199,15 +319,40 @@ export function initDaten() {
   $('shortcutList').addEventListener('click', async (e) => {
     const btn = e.target.closest && e.target.closest('button[data-url]');
     if (!btn) return;
-    const url = btn.dataset.url;
-    try {
-      await navigator.clipboard.writeText(url);
-      showToast('Adresse kopiert');
-    } catch {
-      // Ohne Zwischenablage (alte WebView, unsicherer Kontext) wenigstens zum
-      // Markieren anbieten.
-      window.prompt('Adresse von Hand kopieren:', url);
-    }
+    await kopieren(btn.dataset.url, 'Adresse kopiert');
+  });
+
+  $('btnCloudFolder').addEventListener('click', async () => {
+    try { await ordnerUebernehmen(); }
+    catch (e) { console.error(e); showToast('Ordnerwechsel fehlgeschlagen: ' + (e.message || e), true); }
+  });
+
+  $('jetztAktiv').addEventListener('change', async (e) => {
+    const an = !!e.target.checked;
+    setJetztVeroeffentlichen(an);
+    renderJetztKarte();
+    if (!an) { showToast('Wird nicht mehr geschrieben — die vorhandene Datei bleibt liegen'); return; }
+    if (!isSignedIn()) { showToast('Gemerkt — geschrieben wird nach der Anmeldung'); return; }
+    // Gleich anlegen: der Freigabelink lässt sich erst zu einer Datei erzeugen,
+    // die es gibt.
+    showToast(await schreibeJetzt() ? 'jetzt.json angelegt' : 'jetzt.json nicht geschrieben — Konsole prüfen',
+      false);
+  });
+
+  $('jetztShareUrl').addEventListener('change', (e) => {
+    setShareUrl(e.target.value);
+    renderJetztKarte();
+    showToast(shareUrl() ? 'Freigabelink gemerkt' : 'Freigabelink entfernt');
+  });
+
+  $('btnJetztLink').addEventListener('click', async () => {
+    if (!shareUrl()) { showToast('Erst den Freigabelink der jetzt.json eintragen', true); return; }
+    await kopieren(ansichtLink(), 'Link zur Live-Ansicht kopiert');
+  });
+
+  $('btnJetztSnapshot').addEventListener('click', async () => {
+    try { await kopieren(momentaufnahmeLink(), 'Momentaufnahme kopiert'); }
+    catch (e) { console.error(e); showToast('Momentaufnahme fehlgeschlagen', true); }
   });
 
   $('btnBackup').addEventListener('click', () => { backup(); showToast('Backup heruntergeladen'); });

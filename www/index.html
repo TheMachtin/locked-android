@@ -215,6 +215,42 @@
       </div>
       <div class="small" id="cloudPath"></div>
       <div class="small" id="authRedirectInfo"></div>
+      <div style="height:10px"></div>
+      <div class="setting breit">
+        <label for="cloudFolder">Ordner in OneDrive</label>
+        <input type="text" id="cloudFolder" spellcheck="false" autocapitalize="off"
+               placeholder="/Documents/sonstiges/Keuschhaltung">
+      </div>
+      <div class="file-actions">
+        <button class="btn ghost" id="btnCloudFolder" type="button">Ordner übernehmen</button>
+      </div>
+      <div class="small" id="cloudFolderHint"></div>
+    </div>
+
+    <div class="card">
+      <h2>Live-Ansicht <span class="sub">nur lesen</span></h2>
+      <div class="small" style="margin-top:0">
+        Legt neben der Historie eine kleine <code>jetzt.json</code> ab — nur der
+        Block „Jetzt“, ohne Einträge und ohne Einstellungen. Wer ihren
+        Freigabelink hat, sieht den laufenden Zustand im Browser und sonst
+        nichts; ändern kann die Seite nichts, sie hat keinen Zugang dafür.
+      </div>
+      <div style="height:10px"></div>
+      <div class="setting schalter">
+        <label for="jetztAktiv">jetzt.json mitschreiben</label>
+        <input type="checkbox" id="jetztAktiv">
+      </div>
+      <div class="setting breit">
+        <label for="jetztShareUrl">Freigabelink der jetzt.json</label>
+        <input type="text" id="jetztShareUrl" spellcheck="false" autocapitalize="off"
+               placeholder="https://1drv.ms/…">
+      </div>
+      <div class="small" id="jetztHinweis"></div>
+      <div style="height:10px"></div>
+      <div class="row2">
+        <button class="btn primary" id="btnJetztLink" type="button">Link kopieren</button>
+        <button class="btn ghost" id="btnJetztSnapshot" type="button">Momentaufnahme</button>
+      </div>
     </div>
 
     <div class="card hide" id="umzugCard">

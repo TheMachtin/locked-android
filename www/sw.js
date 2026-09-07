@@ -2,16 +2,18 @@
 // Netz zuerst, Cache als Rückfall. Microsoft Graph und Login werden nie
 // gecacht: veraltete Token oder Daten wären schlimmer als ein Fehler.
 
-const CACHE = 'locked-static-v8';
+const CACHE = 'locked-static-v9';
 const PRECACHE = [
-  './', './index.html', './css/app.css', './manifest.webmanifest',
-  './js/main.js', './js/state.js', './js/platform.js', './js/shortcuts.js',
+  './', './index.html', './jetzt.html', './css/app.css', './manifest.webmanifest',
+  './js/main.js', './js/state.js', './js/platform.js', './js/shortcuts.js', './js/jetzt-view.js',
   './js/core/time.js', './js/core/settings.js', './js/core/calc.js',
   './js/core/legacy.js', './js/core/merge.js', './js/core/migrate.js', './js/core/escalation.js',
-  './js/core/command.js',
+  './js/core/command.js', './js/core/jetzt.js',
   './js/sync/auth.js', './js/sync/onedrive.js', './js/sync/files.js', './js/sync/refresh.js',
+  './js/sync/paths.js',
   './js/ui/format.js', './js/ui/toast.js', './js/ui/charts.js', './js/ui/pull.js',
   './js/ui/eintrag.js', './js/ui/dashboard.js', './js/ui/einstellungen.js', './js/ui/daten.js',
+  './js/ui/status.js', './js/ui/jetzt.js',
   './vendor/msal-browser.min.js',
   './favicon.png', './icon-192.png', './icon-512.png',
   './icon-192-maskable.png', './icon-512-maskable.png',

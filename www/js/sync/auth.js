@@ -16,14 +16,13 @@
 
 import { IS_NATIVE, IS_ELECTRON, postForm, openExternal, closeExternal, onAppUrlOpen } from '../platform.js';
 
+// Wo die Dateien liegen, steht in `sync/paths.js` — einstellbar und deshalb
+// keine Konstante mehr. 2.0 schreibt weiterhin bewusst in eine eigene Datei:
+// die alte App kennt weder settings noch legacy und würde beides beim
+// Speichern stillschweigend entfernen.
 export const CFG = {
   clientId: 'ae218dcc-feae-4d39-8190-dd12b272d517',
   authority: 'https://login.microsoftonline.com/common',
-  // Pfad relativ zum OneDrive-Root. 2.0 schreibt bewusst in eine eigene Datei:
-  // die alte App kennt weder settings noch legacy und würde beides beim
-  // Speichern stillschweigend entfernen.
-  oneDrivePath: '/Documents/sonstiges/Keuschhaltung/locked2.json',
-  legacyPath:   '/Documents/sonstiges/Keuschhaltung/locked.json',
   scopes: 'Files.ReadWrite offline_access openid profile',
 };
 
