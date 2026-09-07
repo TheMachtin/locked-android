@@ -494,3 +494,20 @@
     .app { max-width: 1280px; }
     .savebar .inner { max-width: 1280px; }
   }
+
+/* Felder, deren Inhalt breiter ist als 108 px: Pfade und Adressen. Sie stehen
+   unter ihrer Beschriftung statt daneben — ein Ordnerpfad in einer schmalen
+   Spalte ist nicht lesbar, sondern nur vorhanden. */
+.setting.breit { grid-template-columns: 1fr; gap: 6px; }
+.setting.breit > label { font-size: 13px; font-weight: 600; }
+.setting.breit input[type=text] { width: 100%; background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px;
+  font: inherit; font-size: 13px; }
+.setting.breit input[type=text]:focus { border-color: var(--accent); outline: none; }
+
+/* Schalter mit Beschriftung links, Kästchen rechts. */
+.setting.schalter { grid-template-columns: 1fr auto; }
+.setting.schalter > label { font-size: 13px; font-weight: 600; }
+.setting.schalter input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent);
+  /* Ohne dies zeichnet der Browser ein weißes Kästchen auf dunklen Grund. */
+  color-scheme: dark; }

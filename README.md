@@ -215,6 +215,79 @@ Der achte Tag am Stück (12 + 7 = 19) ist „++". Die Legende unter dem Kalender
 rechnet die Schwellen aus den gerade eingestellten Sätzen aus und steht deshalb
 nicht im HTML.
 
+## Jemanden zusehen lassen
+
+Die Karte **Jetzt** lässt sich teilen, ohne die Historie mitzugeben. Möglich ist
+das, weil der Block aus einer Handvoll Zeitstempeln besteht — verschlossen seit,
+ungeöffnet seit, letzter Orgasmus — und alles andere daraus rechnet. Wer die
+Anker hat, kann die Uhren selbst weiterlaufen lassen: die Stunden zählen hoch,
+der Preis fällt, die Strecke wächst um Mitternacht. Nichts davon braucht ein
+einziges Ereignis.
+
+Die App legt dafür neben `locked2.json` eine kleine `jetzt.json` ab. Darin steht
+nur, was der Block zeigt: keine Einträge, keine Einstellungen, kein Kontostand.
+
+Ein Knopf im Daten-Tab macht den Rest: **Freigabelink erzeugen** schaltet das
+Mitschreiben ein, legt die Datei an und holt den Anzeigen-Link über
+`createLink` von OneDrive — in einem Schritt. Der dafür nötige Scope
+(`Files.ReadWrite`) ist derselbe, mit dem die App ohnehin schreibt; eine neue
+Zustimmung braucht es nicht. Zweimal drücken legt keine zweite Freigabe an:
+Graph liefert für dieselbe Art und Reichweite denselben Link zurück.
+
+**Freigabe zurücknehmen** zieht sie wieder ein. Das gehört dazu — eine App, die
+Links vergibt, aber zum Widerrufen auf die OneDrive-Oberfläche verweist,
+überlässt genau den Schritt von Hand, auf den es ankommt.
+
+Scheitern kann die Reichweite: bei einem Geschäftskonto darf die Verwaltung
+anonyme Links abschalten. Dann steht die Begründung von Microsoft unverändert in
+der Meldung, und der Weg über die OneDrive-Oberfläche bleibt — ein von Hand
+eingesetzter Link funktioniert genauso, die App weiß dann nur nichts von ihm und
+kann ihn nicht zurücknehmen.
+
+Die Seite dahinter ist `jetzt.html` — dieselbe Web-App, aber eine eigene Seite
+ohne Anmeldung, ohne Token und ohne Schreibweg. Dass sie nichts ändern kann, ist
+keine Einstellung, die jemand umlegen könnte, sondern eine Eigenschaft ihres
+Aufbaus: sie hat schlicht keinen Zugang dafür. Sie holt die Datei etwa minütlich
+neu und lässt die Uhren dazwischen selbst laufen.
+
+Zwei Dinge stehen dort ausdrücklich dabei, statt verschwiegen zu werden:
+
+**Wie alt der Stand ist.** Unter dem Block steht, wann das Paket geschrieben
+wurde und wann zuletzt geholt. Die Uhren stimmen immer — ein *neues Ereignis*
+sieht der Zuschauer aber erst nach dem nächsten Abruf. Wer das nicht daneben
+schreibt, lässt eine Momentaufnahme wie eine Live-Übertragung aussehen.
+
+**Ein nicht erreichbarer Abruf verwirft nichts.** Der letzte Stand bleibt stehen
+und läuft weiter, mit dem Hinweis, dass er älter ist. Er ist nicht falsch.
+
+Ohne Freigabelink gibt es den Knopf **Momentaufnahme**: der packt das Paket in
+den Link selbst (`jetzt.html#d=…`, rund 700 Zeichen). Die Uhren laufen darin
+weiter, neue Einträge erscheinen nicht — für einen Blick zwischendurch reicht
+das, für dauerhaftes Zusehen nicht. Beides landet im Adress-Fragment hinter
+`#`, und das schickt kein Browser an einen Server: der Freigabelink taucht in
+keinem Zugriffsprotokoll auf.
+
+Was bleibt: ein Freigabelink ist ein Ausweis. Wer ihn hat, sieht den Block, auch
+wenn er ihn weitergereicht bekommen hat. Zurücknehmen geht — dafür der Knopf —,
+beim Link im Adress-Fragment nicht: der veraltet nur.
+
+## Wo die Dateien liegen
+
+Der OneDrive-Ordner steht im Daten-Tab und gilt für alle drei Dateien —
+`locked2.json`, `jetzt.json` und die alte `locked.json`. Verschoben wird dabei
+nichts: erst in OneDrive umlegen, dann hier eintragen.
+
+Der Ordner gehört zur *Installation*, nicht zur Datei — nach einem Umzug ist er
+an jedem Gerät einmal zu setzen. Das ist Absicht: die Einstellungen stehen in
+genau der Datei, die man erst finden muss, um sie zu lesen. Ein Pfad, der sich
+selbst enthält, wäre nicht auflösbar, und ein Merge-Konflikt darüber schickte
+ein Gerät ins Leere.
+
+Beim Wechsel wirft die App ETag und Merge-Basis weg und lädt neu. Beides gehörte
+zur Datei am alten Ort: ein ETag von dort ließe das nächste Speichern gegen eine
+Version prüfen, die am neuen Ort niemand kennt, und die Basis beschriebe eine
+Historie, die dort vielleicht gar nicht liegt.
+
 ## Eintragen, ohne die App zu öffnen
 
 Ein Eintrag ist ein Zeitpunkt und ein Modell. Dafür das Telefon zu entsperren,
@@ -497,6 +570,7 @@ getragene Zustand laufen über den Schnitt hinweg durch. Nur die Punkte beginnen
 ```
 www/
   index.html          nur Struktur
+  jetzt.html          die Live-Ansicht — eine Seite, kein Tab
   css/app.css
   js/
     core/             ohne DOM, in Node testbar
@@ -508,10 +582,14 @@ www/
       merge.js        Drei-Wege-Merge für den Sync
       escalation.js   Inaktivitäts-Vorschläge, „zuletzt gesehen"
       command.js      Kommandos aus einer URL: lesen, auflösen, planen
+      jetzt.js        der Statusblock als Paket: bauen und weiterrechnen
     sync/             auth.js · onedrive.js · files.js
+      paths.js        wo die Dateien in OneDrive liegen (einstellbar)
     ui/               eintrag · dashboard · einstellungen · daten · charts
       status.js       der laufende Zustand, den beide Seiten zeigen
+      jetzt.js        derselbe Block, aus einem Paket statt aus der Historie
     state.js          zentraler Zustand, alle Änderungen über mutate()
+    jetzt-view.js     was die Live-Ansicht tut: holen, ticken, zeichnen
     platform.js       Android / Desktop / Web an einer Stelle
     shortcuts.js      Kommandos ausführen, Kurzbefehle des Launchers setzen
 electron/             main.js · preload.cjs — die Desktop-Hülle
@@ -525,7 +603,7 @@ Keine Build-Kette, kein Framework: ES-Module, die der Browser direkt lädt.
 Derselbe Ordner geht unverändert in die APK, in den Installer und nach Pages.
 
 ```bash
-npm test          # 138 Tests, nur Node-Builtins
+npm test          # 146 Tests, nur Node-Builtins
 npm start         # Desktop-App lokal starten
 npm run build:win # Windows-Installer (auf Windows)
 npx serve www     # Web-Version lokal

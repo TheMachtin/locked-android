@@ -120,11 +120,23 @@ export function statusItems(ctx) {
   ];
 }
 
-export function statusRowHtml(ctx) {
-  return statusItems(ctx).map(x => `<div class="streak-item">
+/**
+ * Die vier Kacheln zeichnen.
+ *
+ * Getrennt von `statusItems()`, weil die Live-Ansicht dieselben Kacheln aus
+ * einem mitgegebenen Paket füllt statt aus der Historie (siehe `ui/jetzt.js`).
+ * Zwei Renderer wären zwei Fassungen desselben Blocks — genau das, was der
+ * Dateikopf vermeiden will.
+ */
+export function statusRowFromItems(items) {
+  return items.map(x => `<div class="streak-item">
     <div class="days">${x.text != null ? x.text : `${x.days} T`}${x.ms != null
       ? ` <span class="hrs" title="${fmtDurationLong(x.ms)}">(${fmtInt(msToHours(x.ms))} h)</span>` : ''}</div>
     <div class="label">${x.label}</div>
     <div class="since">${x.since || '—'}</div>
   </div>`).join('');
+}
+
+export function statusRowHtml(ctx) {
+  return statusRowFromItems(statusItems(ctx));
 }

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#25281b">
+<meta name="robots" content="noindex, nofollow">
+<title>Locked — Jetzt</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Jetzt</h1>
+  </header>
+
+  <div class="card hide" id="jetztKarte">
+    <h2>Laufender Zustand <span class="sub">nur ansehen</span></h2>
+    <div class="current-model" id="jetztModell"></div>
+    <div class="preis hide" id="jetztPreis"></div>
+    <div class="streak-row" id="jetztStreaks"></div>
+  </div>
+
+  <!-- Die Herkunft gehört unter die Zahlen, nicht in die Kopfzeile: sie ist ein
+       ganzer Satz („Momentaufnahme, die Uhren laufen weiter"), und der passt
+       nicht neben eine Überschrift, ohne die Seite breitzudrücken. -->
+  <div class="small" id="jetztStand"></div>
+
+  <div class="card" id="jetztLeer"></div>
+</div>
+
+<script type="module" src="js/jetzt-view.js"></script>
+</body>
+</html>
