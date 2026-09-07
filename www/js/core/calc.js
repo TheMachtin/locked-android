@@ -235,6 +235,11 @@ export function emptyTotals() {
   return {
     tage: 0, kalendertage: 0,
     konto: 0, form: 0,
+    /** Summe der Tagesergebnisse im betrachteten Ausschnitt. Über die ganze
+     *  Historie ist das der Kontostand; über ein einzelnes Jahr ist es das,
+     *  was dieses Jahr beigetragen hat — und nur damit lässt sich ein
+     *  Tagesdurchschnitt bilden, der zum Ausschnitt passt. */
+    netto: 0,
     einnahmen: 0, kosten: 0,
     avgNetto: 0, avgStdTag: 0,
     stundenVerschlossen: 0, stundenOffen: 0, stundenPause: 0,
@@ -267,6 +272,7 @@ export function computeTotals(days) {
     for (const [id, h] of Object.entries(d.hours)) {
       t.hoursByModel[id] = (t.hoursByModel[id] || 0) + h;
     }
+    t.netto               += d.netto;
     t.stundenVerschlossen += d.verschlossenH;
     t.stundenOffen        += d.offenH;
     t.stundenPause        += d.pauseH;
@@ -296,7 +302,10 @@ export function computeTotals(days) {
   const last = gezaehlt[gezaehlt.length - 1];
   t.konto = last ? last.konto : 0;
   t.form  = last ? last.form  : 0;
-  t.avgNetto  = t.kalendertage ? t.konto / t.kalendertage : 0;
+  // Der Durchschnitt teilt die Summe des Ausschnitts, nicht den mitlaufenden
+  // Kontostand: sonst stünde im Jahresfilter 2026 das Konto vom Ende 2026 —
+  // inklusive allem aus 2025 — über den Tagen von 2026.
+  t.avgNetto  = t.kalendertage ? t.netto / t.kalendertage : 0;
   t.avgStdTag = t.kalendertage ? t.stundenVerschlossen / t.kalendertage : 0;
 
   const monthMap = {};

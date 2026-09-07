@@ -176,25 +176,101 @@ export function modellDonut(hoursByModel, settings) {
 }
 
 // =========================== KALENDER ===========================
-function heatColor(netto) {
-  if (netto == null) return '#3a3024';
-  if (netto < -20) return '#c2553f';
-  if (netto < 0)   return '#8a5a48';
-  if (netto < 10)  return '#5a4b39';
-  if (netto < 25)  return '#3f5212';
-  if (netto < 35)  return '#65a30d';
-  return '#84cc16';
+export const LEER_FARBE = '#3a3024';
+
+/**
+ * Die Farbskala des Kalenders — abgeleitet aus den eigenen Sätzen, nicht fest
+ * verdrahtet.
+ *
+ * Feste Schwellen (früher: „++ ab 25") messen an einem Maßstab, den die Datei
+ * gar nicht kennt. Wer seinen Stundensatz halbiert, käme nie wieder über „+",
+ * und wer ihn verdoppelt, hätte ab dem ersten Tag nur noch „+++" — die Farbe
+ * sagte dann etwas über die Einstellungen aus statt über den Tag.
+ *
+ * Zwei Bezugsgrößen spannen die Skala auf:
+ *   `voll` — ein Tag durchgehend verschlossen, ohne jeden Zuschlag
+ *            (24 h × bester Satz eines verschlossenen Modells).
+ *   `best` — der beste denkbare Tag: derselbe Tag mit vollem Ungeöffnet-Zuschlag
+ *            und dem gedeckelten Streak-Multiplikator.
+ *
+ * Daraus die Bänder: ein ganzer verschlossener Tag ist „++" — nicht die
+ * Ausnahme, sondern das, was ein guter Tag hier heißt. „+++" beginnt auf halbem
+ * Weg von dort zum Maximum, ist also den Strecken und dem Multiplikator
+ * vorbehalten. Mit den Standardsätzen: voll = 12, best = 38, „++" ab 12,
+ * „+++" ab 25.
+ */
+/**
+ * Eine Schwelle der Skala als Text. Krumme Sätze ergeben krumme Schwellen — dann
+ * steht die Nachkommastelle da, sonst nicht. Typografisches Minus statt des
+ * Bindestrichs aus `toLocaleString`: daneben steht „−−" als Zeichen, zwei
+ * verschiedene Striche in einem Feld sähen nach Zufall aus.
+ */
+const schwelle = (n) => (Number.isInteger(n) ? fmtInt(n) : fmtNum(n, 1)).replace('-', '−');
+
+export function heatScale(settings) {
+  const saetze = settings.models
+    .filter(m => m.kind !== KIND_ORGASM && m.locked && m.rate > 0)
+    .map(m => m.rate);
+  // Ohne einen verschlossenen Satz (alles auf 0 gestellt) bliebe die Skala
+  // stehen. Dann trägt der Ungeöffnet-Zuschlag den Maßstab allein.
+  const voll = saetze.length ? 24 * Math.max(...saetze) : Math.max(1, settings.points.bonusUngeoeffnetCap);
+  const best = (voll + settings.points.bonusUngeoeffnetCap) * settings.points.streakCap;
+  const spitze = (voll + best) / 2;
+  const klein = voll / 4;
+  return [
+    { bis: -voll,    zeichen: '−−',  farbe: '#c2553f', vorn: '#fff',
+      text: `unter ${schwelle(-voll)}` },
+    { bis: 0,        zeichen: '−',   farbe: '#8a5a48', vorn: '#fff',
+      text: `${schwelle(-voll)} bis 0` },
+    { bis: klein,    zeichen: '0',   farbe: '#5a4b39', vorn: 'var(--text)',
+      text: `0 bis ${schwelle(klein)}` },
+    { bis: voll,     zeichen: '+',   farbe: '#3f5212', vorn: 'var(--accent)',
+      text: `${schwelle(klein)} bis ${schwelle(voll)}` },
+    { bis: spitze,   zeichen: '++',  farbe: '#65a30d', vorn: '#fff',
+      text: `${schwelle(voll)} bis ${schwelle(spitze)}` },
+    { bis: Infinity, zeichen: '+++', farbe: '#84cc16', vorn: '#1a1a0e',
+      text: `ab ${schwelle(spitze)}` },
+  ];
 }
 
-export function heatmap(days) {
+/** Das Band, in das ein Tagesergebnis fällt. `null` für „nichts erfasst". */
+export function heatBand(netto, scale) {
+  if (netto == null) return null;
+  return scale.find(b => netto < b.bis) || scale[scale.length - 1];
+}
+
+/**
+ * Die Legende mit den Zahlen, die gerade gelten — die Frage „nach was
+ * berechnet sich die Farbe" soll unter dem Kalender beantwortet sein und nicht
+ * im Quelltext.
+ */
+export function heatLegend(scale, settings) {
+  const voll = scale[3].bis;
+  const felder = scale.map(b => `<div class="hl" style="background:${b.farbe};color:${b.vorn}">
+    <div class="z">${b.zeichen}</div><div class="r">${b.text}</div></div>`).join('');
+  return `<div class="heat-legend">${felder}</div>
+    <div class="legend" style="text-align:left">
+      Die Farbe zeigt das <b>Tagesergebnis</b> in Punkten — dieselbe Zahl, die im
+      Eintrag-Tab groß über dem Tag steht. Die Schwellen kommen aus deinen eigenen
+      Sätzen: ein Tag durchgehend verschlossen bringt <b>${schwelle(voll)}</b> Punkte,
+      und ab da ist ein Tag „++". „+++" beginnt bei <b>${schwelle(scale[4].bis)}</b>,
+      also auf halbem Weg zum besten denkbaren Tag
+      (${schwelle((voll + settings.points.bonusUngeoeffnetCap) * settings.points.streakCap)}
+      Punkte, mit vollem Ungeöffnet-Zuschlag und Streak-Deckel).
+      Ein leeres Kästchen heißt „nichts erfasst".
+    </div>`;
+}
+
+export function heatmap(days, settings) {
   const gezaehlt = days.filter(d => d.zaehlt);
   if (!gezaehlt.length) return leer('Noch keine Daten');
+  const scale = heatScale(settings);
   const byYear = {};
   for (const d of gezaehlt) (byYear[d.date.slice(0, 4)] ||= {})[d.date] = d;
-  return Object.keys(byYear).sort().map(y => heatmapYear(y, byYear[y])).join('');
+  return Object.keys(byYear).sort().map(y => heatmapYear(y, byYear[y], scale)).join('');
 }
 
-function heatmapYear(year, byIso) {
+function heatmapYear(year, byIso, scale) {
   const jahr = parseInt(year, 10);
   const start = new Date(jahr, 0, 1);
   const ende = new Date(jahr, 11, 31);
@@ -223,11 +299,12 @@ function heatmapYear(year, byIso) {
       letzterMonat = d.getMonth();
       svg += `<text x="${x}" y="${padT - 4}" font-size="8" fill="var(--muted)">${MON_KURZ[d.getMonth()]}</text>`;
     }
+    const band = heatBand(rec ? rec.netto : null, scale);
     const titel = rec
-      ? `${fmtDateShort(iso)}: ${fmtInt(rec.netto)} Punkte, ${fmtNum(rec.verschlossenH, 1)} h verschlossen`
+      ? `${fmtDateShort(iso)}: ${fmtInt(rec.netto)} Punkte (${band.zeichen}), ${fmtNum(rec.verschlossenH, 1)} h verschlossen`
       : `${fmtDateShort(iso)}: nichts erfasst`;
     svg += `<rect class="hm-cell" data-iso="${iso}" x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2" `
-      + `fill="${heatColor(rec ? rec.netto : null)}" style="cursor:pointer"><title>${titel}</title></rect>`;
+      + `fill="${band ? band.farbe : LEER_FARBE}" style="cursor:pointer"><title>${titel}</title></rect>`;
   });
   return svg + '</svg></div>';
 }
