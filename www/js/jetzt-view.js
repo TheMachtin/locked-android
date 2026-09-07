@@ -17,7 +17,10 @@
  */
 
 import { istJetztPayload } from './core/jetzt.js';
-import { jetztItems, jetztModellHtml, jetztPreisHtml, payloadDekodieren } from './ui/jetzt.js';
+import {
+  jetztItems, jetztModellHtml, jetztPreisHtml, payloadDekodieren,
+  inhaltsUrl, inhaltsKandidaten,
+} from './ui/jetzt.js';
 import { statusRowFromItems } from './ui/status.js';
 import { hmOf, isoOf } from './core/time.js';
 import { fmtDateShort, escapeHtml } from './ui/format.js';
@@ -33,29 +36,16 @@ let geholtAm = null;
 let fehler = null;
 
 // =========================== QUELLE ===========================
-/**
- * Aus einem OneDrive-Freigabelink die Adresse des Inhalts machen.
- *
- * Microsoft nimmt den Link base64-kodiert mit `u!` davor entgegen und liefert
- * den Dateiinhalt zurück. Alles andere wird unverändert benutzt — das ist der
- * Weg für eine Datei, die woanders liegt.
- */
-export function inhaltsUrl(roh) {
-  const url = String(roh || '').trim();
-  if (!url) return null;
-  let host;
-  try { host = new URL(url).hostname; } catch { return null; }
-  const istFreigabe = /(^|\.)1drv\.ms$|(^|\.)onedrive\.live\.com$|\.sharepoint\.com$/i.test(host);
-  if (!istFreigabe) return url;
-  const b64 = btoa(url).replace(/=+$/, '').replace(/\//g, '_').replace(/\+/g, '-');
-  return `https://api.onedrive.com/v1.0/shares/u!${b64}/root/content`;
-}
+// Wie aus einem Freigabelink eine Abrufadresse wird, steht in `ui/jetzt.js` —
+// dort ist es ohne DOM und damit prüfbar.
 
 function quelleAusHash() {
   const hash = location.hash.replace(/^#/, '');
   const p = new URLSearchParams(hash);
   const q = p.get('q');
   const d = p.get('d');
+  const diag = p.get('diag');
+  if (diag) return { art: 'diagnose', roh: diag };
   if (q) return { art: 'datei', url: inhaltsUrl(q) };
   if (d) return { art: 'paket', roh: d };
   return null;
@@ -128,9 +118,74 @@ function standText(jetzt) {
   return `${alter}${geholt}`;
 }
 
+// =========================== DIAGNOSE ===========================
+/**
+ * Welche Adressform gibt die Freigabe anonym heraus?
+ *
+ * Die Frage ließ sich nur dort beantworten, wo die Verbindung besteht — also
+ * hier, im Browser des Betrachters, statt durch Raten im Code. Probiert werden
+ * die Kandidaten der Reihe nach; was zählt, ist der Unterschied zwischen einer
+ * *Statuszeile* und einer *Ausnahme*: eine Antwort mit lesbarem Status hat die
+ * CORS-Prüfung bestanden und scheitert nur an der Berechtigung. Ein Block
+ * dagegen kommt gar nicht erst bis zum Status.
+ *
+ * Die Adressen selbst werden bewusst nicht angezeigt: sie enthalten die
+ * Freigabe-Kennung, und diese Seite ist zum Herzeigen gedacht.
+ */
+async function pruefeAdresse(url) {
+  if (!url) return 'keine Adresse';
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) return `HTTP ${res.status}`;
+    try {
+      const daten = await res.json();
+      return istJetztPayload(daten) ? 'HTTP 200 · Paket erkannt ✓' : 'HTTP 200 · anderer Inhalt';
+    } catch { return 'HTTP 200 · kein JSON'; }
+  } catch (e) {
+    return `blockiert · ${e.message || e}`;
+  }
+}
+
+async function diagnose(roh) {
+  const karte = $('jetztLeer');
+  const kandidaten = inhaltsKandidaten(roh);
+  karte.classList.remove('hide');
+  $('jetztKarte').classList.add('hide');
+
+  if (!kandidaten.length) {
+    karte.innerHTML = '<b>Diagnose</b><br>Die Adresse im Link ist unbrauchbar.';
+    return;
+  }
+
+  const stand = kandidaten.map(() => 'wartet');
+  const zeichneListe = () => {
+    karte.innerHTML = '<b>Diagnose</b>'
+      + '<div class="small" style="margin-top:0">Welche Adressform gibt die Datei anonym heraus?</div>'
+      + '<div class="breakdown">'
+      + kandidaten.map((k, i) =>
+          `<div class="row"><span>${escapeHtml(k.name)}</span><b>${escapeHtml(stand[i])}</b></div>`).join('')
+      + '</div>'
+      + '<div class="small">Die Adressen selbst stehen hier nicht — sie enthalten die '
+      + 'Freigabe-Kennung, und dieser Zettel ist zum Herzeigen gedacht.</div>';
+  };
+  zeichneListe();
+
+  for (let i = 0; i < kandidaten.length; i++) {
+    stand[i] = 'läuft…';
+    zeichneListe();
+    stand[i] = await pruefeAdresse(kandidaten[i].url);
+    zeichneListe();
+  }
+}
+
 // =========================== START ===========================
 function start() {
   quelle = quelleAusHash();
+
+  if (quelle && quelle.art === 'diagnose') {
+    diagnose(quelle.roh);
+    return;                                  // keine Uhren, kein Nachladen
+  }
 
   if (quelle && quelle.art === 'paket') {
     try {

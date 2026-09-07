@@ -86,6 +86,52 @@ export function jetztPreisHtml(p, now) {
     <div class="l" style="opacity:.8">${warte}</div></div><div class="v">−${fmtInt(preis.price)}</div>`;
 }
 
+// =========================== DIE QUELLE FINDEN ===========================
+/**
+ * Aus einem OneDrive-Freigabelink die Adressen machen, unter denen der Inhalt
+ * liegen könnte.
+ *
+ * Microsoft nimmt die Freigabe als Kennung entgegen: der Link base64-kodiert,
+ * mit `u!` davor. Unter welchem Pfad er den Inhalt dann *anonym* herausgibt,
+ * ist die offene Frage — `shares/…/root/content` antwortet mit 401. Die Liste
+ * steht deshalb hier vollständig: Eintrag 0 ist der Weg, den die Seite geht,
+ * die übrigen probiert der Diagnose-Modus durch, bis einer 200 sagt.
+ *
+ * Alles, was nicht nach OneDrive aussieht, bleibt unverändert — das ist der
+ * Weg für eine Datei, die woanders liegt.
+ */
+export function inhaltsKandidaten(roh) {
+  const url = String(roh || '').trim();
+  if (!/^https?:\/\//i.test(url)) return [];
+  let host;
+  try { host = new URL(url).hostname; } catch { return []; }
+  if (!/(^|\.)1drv\.ms$|(^|\.)onedrive\.live\.com$|\.sharepoint\.com$/i.test(host)) {
+    return [{ name: 'Adresse direkt', url }];
+  }
+  const t = 'u!' + b64urlAus(new TextEncoder().encode(url));
+  return [
+    { name: 'shares · root/content',      url: `https://api.onedrive.com/v1.0/shares/${t}/root/content` },
+    { name: 'shares · driveItem/content', url: `https://api.onedrive.com/v1.0/shares/${t}/driveItem/content` },
+    { name: 'graph · driveItem/content',  url: `https://graph.microsoft.com/v1.0/shares/${t}/driveItem/content` },
+    { name: 'Freigabelink · download=1',  url: mitParameter(url, 'download', '1') },
+    { name: 'Freigabelink direkt',        url },
+  ];
+}
+
+function mitParameter(url, name, wert) {
+  try {
+    const u = new URL(url);
+    u.searchParams.set(name, wert);
+    return u.toString();
+  } catch { return url; }
+}
+
+/** Die Adresse, unter der die Seite den Inhalt holt. */
+export function inhaltsUrl(roh) {
+  const erste = inhaltsKandidaten(roh)[0];
+  return erste ? erste.url : null;
+}
+
 // =========================== PAKET IN EINEN LINK ===========================
 // Für den Fall ohne laufende Quelle: das Paket steckt dann im Link selbst. Die
 // Uhren laufen weiter, neue Einträge erscheinen nicht — anders als bei einer

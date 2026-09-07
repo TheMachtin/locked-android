@@ -211,6 +211,17 @@ function ansichtLink() {
   return `${ansichtBasis()}#q=${encodeURIComponent(shareUrl())}`;
 }
 
+/**
+ * Derselbe Link, aber im Prüfmodus.
+ *
+ * Ob OneDrive eine anonyme Freigabe überhaupt an fremdes JavaScript herausgibt,
+ * lässt sich nur dort feststellen, wo die Verbindung besteht. Die Seite probiert
+ * damit die Adressformen durch und schreibt hin, welche antwortet.
+ */
+function diagnoseLink() {
+  return `${ansichtBasis()}#diag=${encodeURIComponent(shareUrl())}`;
+}
+
 function momentaufnahmeLink() {
   const paket = jetztPayload(STATE.data, calc(), new Date());
   return `${ansichtBasis()}#d=${payloadKodieren(paket)}`;
@@ -433,6 +444,11 @@ export function initDaten() {
   $('btnJetztLink').addEventListener('click', async () => {
     if (!shareUrl()) { showToast('Erst den Freigabelink der jetzt.json eintragen', true); return; }
     await kopieren(ansichtLink(), 'Link zur Live-Ansicht kopiert');
+  });
+
+  $('btnJetztDiagnose').addEventListener('click', async () => {
+    if (!shareUrl()) { showToast('Erst den Freigabelink der jetzt.json eintragen', true); return; }
+    await kopieren(diagnoseLink(), 'Diagnose-Link kopiert');
   });
 
   $('btnJetztSnapshot').addEventListener('click', async () => {
