@@ -83,15 +83,21 @@
 
   <!-- ============ DASHBOARD ============ -->
   <div id="page-dashboard" class="hide">
-    <div class="card">
+    <div class="card" id="cardJetzt">
+      <h2>Jetzt <span class="sub">unabhängig vom Zeitraum</span></h2>
+      <div class="current-model" id="jetztModell"></div>
+      <div class="preis hide" id="jetztPreis"></div>
+      <div class="streak-row" id="jetztStreaks"></div>
+    </div>
+    <div class="card" id="cardZeitraum">
       <h2>Zeitraum</h2>
       <div class="seg" id="yearFilter"></div>
     </div>
-    <div class="card">
+    <div class="card" id="cardUebersicht">
       <h2>Übersicht</h2>
       <div class="kpis" id="dashKpis"></div>
     </div>
-    <div class="card">
+    <div class="card" id="cardVerlauf">
       <h2>Konto und Form <span class="sub">grün = Konto · braun = Form</span></h2>
       <div id="verlaufChart"></div>
       <div class="legend" style="text-align:left">
@@ -100,7 +106,7 @@
         dadurch über Jahre vergleichbar.
       </div>
     </div>
-    <div class="card">
+    <div class="card" id="cardErgebnis">
       <h2>Ergebnis je Zeitraum</h2>
       <div class="seg" id="chartScale" style="margin-bottom:12px">
         <div class="seg-opt active" data-scale="month">Monat</div>
@@ -109,22 +115,17 @@
       </div>
       <div id="punkteChart"></div>
     </div>
-    <div class="card">
+    <div class="card" id="cardModelle">
       <h2>Tragezeit je Modell</h2>
       <div id="modellDonut" style="display:flex;justify-content:center;margin-bottom:8px"></div>
       <div id="modellList"></div>
     </div>
-    <div class="card">
+    <div class="card" id="cardKalender">
       <h2>Kalender</h2>
       <div id="heatmap"></div>
-      <div class="legend" style="text-align:left;margin-top:6px">
-        Tagesergebnis: <span style="background:#c2553f;padding:1px 5px;border-radius:3px;color:#fff">−−</span>
-        <span style="background:#8a5a48;padding:1px 5px;border-radius:3px;color:#fff">−</span>
-        <span style="background:#5a4b39;padding:1px 5px;border-radius:3px">0</span>
-        <span style="background:#3f5212;padding:1px 5px;border-radius:3px;color:var(--accent)">+</span>
-        <span style="background:#65a30d;padding:1px 5px;border-radius:3px;color:#fff">++</span>
-        <span style="background:#84cc16;padding:1px 5px;border-radius:3px;color:#1a1a0e">+++</span>
-      </div>
+      <!-- Die Legende steht nicht hier: ihre Schwellen kommen aus den eigenen
+           Sätzen und ändern sich mit ihnen (siehe heatScale() in charts.js). -->
+      <div id="heatLegend"></div>
     </div>
 
     <div class="card archiv hide" id="archivCard">

@@ -11,13 +11,15 @@
 import { STATE, calc, mutate, withUndo, settings as getSettings } from '../state.js';
 import { showToast } from './toast.js';
 import {
-  fmtInt, fmtNum, fmtSigned, fmtDateShort, fmtDurationShort, fmtDurationLong, fmtAgo, fmtCountdownHM, fmtCountdownDH, msToHours, msToDays, escapeHtml, weekdayOf, refTimeFor, MONTHS_DE,
+  fmtInt, fmtNum, fmtSigned, fmtDateShort, fmtDurationShort, fmtAgo, fmtCountdownHM,
+  fmtCountdownDH, escapeHtml, weekdayOf, refTimeFor, MONTHS_DE,
 } from './format.js';
 import { dayTimeline } from './charts.js';
 import { isoOf, isoDateAdd, hmOf, eventMs } from '../core/time.js';
-import { lockPhaseStart, unopenedPhaseStart, currentOrgasmPrice, regenState, expiredRegenEvents } from '../core/calc.js';
-import { resolveModel, modelMap, labelOf, KIND_ORGASM } from '../core/settings.js';
+import { currentOrgasmPrice, regenState, expiredRegenEvents } from '../core/calc.js';
+import { resolveModel, modelMap, KIND_ORGASM } from '../core/settings.js';
 import { pendingEscalation, escalationEvents } from '../core/escalation.js';
+import { statusContext, currentModelHtml, statusRowHtml } from './status.js';
 
 const $ = id => document.getElementById(id);
 let gewaehltesDatum = isoOf(new Date());
@@ -165,28 +167,9 @@ function renderHero() {
     p.classList.toggle('active', isoDateAdd(heute(), parseInt(p.dataset.offset, 10)) === iso);
   });
 
-  // Aktuelles Modell
-  const map = modelMap(s);
-  let cur = d ? d.prevEndModel : null;
-  let curZeit = '00:00';
-  if (d) {
-    for (const ev of d.events) {
-      if (resolveModel(s, map, ev.type).kind === KIND_ORGASM) continue;
-      cur = ev.type; curZeit = ev.time;
-    }
-  }
-  const refMs = refTimeFor(iso).getTime();
-  const lock = lockPhaseStart(STATE.data.events, s, refMs);
-  const curM = cur ? resolveModel(s, map, cur) : null;
-  // Bei einer laufenden Unterbrechung ist die wichtigere Auskunft, dass die
-  // verschlossene Phase davon unberührt weiterläuft — sonst liest sich
-  // „Modell jetzt: Reinigung" wie ein Abbruch, und genau das ist es nicht.
-  const seit = curM && (curM.locked || curM.pause) ? ` (seit ${curZeit})` : '';
-  const weiter = curM && curM.pause && lock ? ' <span class="hint">— Phase läuft weiter</span>' : '';
-  $('currentModel').innerHTML = curM
-    ? `<span class="dot" style="background:${curM.color}"></span><span>Modell ${iso === heute() ? 'jetzt' : 'Ende ' + fmtDateShort(iso)}: `
-      + `<b>${escapeHtml(curM.label)}</b>${seit}${weiter}</span>`
-    : '';
+  // Aktuelles Modell und die vier Uhren — derselbe Block wie im Dashboard.
+  const ctx = statusContext(iso, { days, byDate, settings: s, events: STATE.data.events });
+  $('currentModel').innerHTML = currentModelHtml(ctx);
 
   // Tageszahl
   const netto = d && d.zaehlt ? d.netto : 0;
@@ -198,22 +181,37 @@ function renderHero() {
 
   $('heroBreakdown').innerHTML = d ? breakdownHtml(d, s) : '';
 
-  // Konto und Form
+  // Konto und Form. Beide Kästen zeigen unter der Zahl, wie sie sich an diesem
+  // Tag bewegt hat — beim Konto stand dort bisher nichts, und ohne den Zusatz
+  // ließ sich einem Kontostand von 1.240 nicht ansehen, ob er heute gestiegen
+  // oder gefallen ist.
   const gestern = byDate[isoDateAdd(iso, -1)];
-  const formDelta = d && gestern ? d.form - gestern.form : 0;
+  const kontoDelta = d ? (gestern ? d.konto - gestern.konto : d.netto) : 0;
+  const formDelta = d && gestern ? d.form - gestern.form : (d ? d.form : 0);
+  const wann = iso === heute() ? 'heute' : fmtDateShort(iso);
   $('kontoRow').innerHTML = `
     <div class="konto-box">
       <div class="v ${(d ? d.konto : totals.konto) < 0 ? 'neg' : ''}">${fmtInt(d ? d.konto : totals.konto)}</div>
       <div class="l">Kontostand</div>
+      ${trendHtml(kontoDelta, wann)}
     </div>
     <div class="konto-box">
       <div class="v">${fmtInt(d ? d.form : totals.form)}</div>
       <div class="l">Form</div>
-      <div class="trend ${formDelta >= 0 ? 'up' : 'down'}">${formDelta >= 0 ? '▲' : '▼'} ${fmtSigned(formDelta)}</div>
+      ${trendHtml(formDelta, wann)}
     </div>`;
 
-  renderStreakRow(iso, days, d, s, refMs, lock);
+  $('streakRow').innerHTML = statusRowHtml(ctx);
   renderPreis(s);
+}
+
+/** Die Veränderung unter einer Zahl. Null ist eine eigene Aussage, kein Pfeil. */
+function trendHtml(delta, wann) {
+  const gerundet = Math.abs(delta) < 0.5 ? 0 : delta;
+  const klasse = gerundet > 0 ? 'up' : gerundet < 0 ? 'down' : 'flat';
+  const pfeil = gerundet > 0 ? '▲ ' : gerundet < 0 ? '▼ ' : '';
+  const wert = gerundet === 0 ? '±0' : fmtSigned(gerundet);
+  return `<div class="trend ${klasse}" title="Veränderung ${wann}">${pfeil}${wert} ${wann}</div>`;
 }
 
 /** Die Aufschlüsselung des Tages, Zeile für Zeile. */
@@ -265,78 +263,6 @@ function breakdownHtml(d, s) {
 }
 function zeile(label, betrag, klasse) {
   return `<div class="row ${klasse}"><span>${label}</span><b>${fmtSigned(betrag, Math.abs(betrag) < 10 ? 1 : 0)}</b></div>`;
-}
-
-function renderStreakRow(iso, days, d, s, refMs, lock) {
-  const idx = d ? days.indexOf(d) : -1;
-
-  let ofTage = 0;
-  for (let i = idx; i >= 0 && days[i].orgasmusfrei; i--) ofTage++;
-  const letzterOr = letzterOrgasmusVor(refMs, s);
-  const uo = unopenedPhaseStart(STATE.data.events, s, refMs);
-
-  const seitStempel = (ms) => `seit ${fmtDateShort(isoOf(new Date(ms)))} ${hmOf(new Date(ms))}`;
-
-  // Paarweise: oben die beiden Uhren am Käfig, unten die beiden am Orgasmus.
-  // Die beiden oberen zählen vollendete 24-h-Abschnitte, nicht Kalendertage —
-  // dieselbe Einheit, in der die Strecke bezahlt wird, und die einzige, die zu
-  // den Stunden daneben passt.
-  const eintraege = [
-    {
-      days: lock ? msToDays(refMs - lock.ms) : 0, label: 'Verschlossen',
-      ms: lock ? Math.max(0, refMs - lock.ms) : null,
-      // Läuft gerade eine Unterbrechung, gehört das in die Kachel und nicht in
-      // einen Tooltip — auf dem Telefon gibt es kein Darüberfahren.
-      since: !lock ? 'gerade offen'
-        : seitStempel(lock.ms)
-          + (lock.paused
-            ? `<br>${escapeHtml(labelOf(s, lock.pauseModel))} seit ${hmOf(new Date(lock.pauseSince))}`
-            : ''),
-    },
-    {
-      days: uo ? msToDays(refMs - uo.ms) : 0, label: 'Ungeöffnet',
-      ms: uo ? Math.max(0, refMs - uo.ms) : null,
-      // Was die Strecke *einbringt*, gehört an die Strecke — sonst steht die
-      // Belohnung nur in der Aufschlüsselung, und dort erst, wenn sie schon
-      // verdient ist. Steht keine Strecke, ist die interessante Auskunft warum
-      // nicht: vor allem im Fall, in dem die Kachel daneben weiterläuft.
-      since: uo
-        ? (d && d.uoBonus
-            ? `+${fmtNum(d.uoBonus, d.uoBonus % 1 ? 1 : 0)} heute · ${seitStempel(uo.ms)}`
-            : seitStempel(uo.ms))
-        : (lock && lock.paused
-            ? `${escapeHtml(labelOf(s, lock.pauseModel))} läuft`
-            : 'gerade offen'),
-    },
-    {
-      days: ofTage, label: 'Orgasmusfrei',
-      ms: letzterOr != null ? Math.max(0, refMs - letzterOr) : null,
-      since: letzterOr != null ? seitStempel(letzterOr) : 'keiner erfasst',
-    },
-    {
-      days: null, label: 'Multiplikator',
-      text: `× ${fmtNum(d ? d.mult : 1, 2)}`,
-      since: d && d.mult >= s.points.streakCap ? 'Deckel erreicht' : `Deckel × ${fmtNum(s.points.streakCap, 2)}`,
-    },
-  ];
-
-  $('streakRow').innerHTML = eintraege.map(x => `<div class="streak-item">
-    <div class="days">${x.text != null ? x.text : `${x.days} T`}${x.ms != null
-      ? ` <span class="hrs" title="${fmtDurationLong(x.ms)}">(${fmtInt(msToHours(x.ms))} h)</span>` : ''}</div>
-    <div class="label">${x.label}</div>
-    <div class="since">${x.since || '—'}</div>
-  </div>`).join('');
-}
-
-function letzterOrgasmusVor(refMs, s) {
-  const map = modelMap(s);
-  let best = null;
-  for (const e of (STATE.data.events || [])) {
-    if (resolveModel(s, map, e.type).kind !== KIND_ORGASM) continue;
-    const t = eventMs(e);
-    if (isFinite(t) && t <= refMs && (best == null || t > best)) best = t;
-  }
-  return best;
 }
 
 /** Das Preisschild — die zentrale Zahl des Modells gehört sichtbar in die App. */

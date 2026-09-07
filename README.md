@@ -6,8 +6,8 @@ ein Quellcode (`www/`), drei Hüllen.
 | Plattform | Bezug | Installation |
 |---|---|---|
 | Android | APK aus dem [neuesten Release](https://github.com/TheMachtin/locked-android/releases) | antippen → „Von unbekannter Quelle zulassen" |
-| Windows | `Locked-Setup-2.1.N.exe` aus demselben Release | ausführen; portable Variante liegt daneben |
-| Linux | `Locked-2.1.N.AppImage` | ausführbar machen und starten |
+| Windows | `Locked-Setup-2.2.N.exe` aus demselben Release | ausführen; portable Variante liegt daneben |
+| Linux | `Locked-2.2.N.AppImage` | ausführbar machen und starten |
 | Browser | <https://themachtin.github.io/locked-android/> | Edge/Chrome → „App installieren" |
 
 Alle Installationen teilen sich dieselbe OneDrive-Datei und führen parallele
@@ -172,6 +172,48 @@ niemand auseinanderhält. `SM` und `SO` stehen dann nicht nur in `locked://log?m
 sondern auch auf dem Knopf der Uhr, denn eine kurze ID, die zum Namen passt,
 *ist* dort das Kürzel. Eine selbst gesetzte ID wandert beim Umbenennen übrigens
 nicht mehr mit: sie steht in Adressen, die anderswo eingerichtet sind.
+
+## Was die Oberfläche zeigt
+
+**Eintrag und Dashboard zeigen denselben Stand.** Die vier Uhren — verschlossen,
+ungeöffnet, orgasmusfrei, Multiplikator —, das gerade getragene Modell und der
+aktuelle Orgasmus-Preis stehen auf beiden Seiten und kommen aus derselben Datei
+(`ui/status.js`). Der Eintrag-Tab zeigt sie für den gewählten Tag, das Dashboard
+in der Karte **Jetzt** für den Augenblick, unabhängig vom Jahresfilter daneben.
+Zwei eigene Fassungen desselben Blocks wären zwei Wahrheiten, und die Abweichung
+fiele erst auf, wenn eine davon falsch ist.
+
+**Unter jeder Zahl steht, worauf sie sich bezieht.** Ein Durchschnitt ohne
+Nenner ist keine Auskunft: an der Kachel steht deshalb, durch wie viele
+Kalendertage geteilt wurde. Konto und Form laufen bewusst über die ganze
+Historie, auch wenn der Jahresfilter etwas anderes zeigt — dann sagen sie es.
+Kontostand und Form tragen beide darunter, wie sie sich an diesem Tag bewegt
+haben; einem Konto von 1.240 sieht man sonst nicht an, ob es heute gestiegen
+oder gefallen ist.
+
+**Die Farbskala des Kalenders kommt aus den eigenen Sätzen.** Feste Schwellen
+(„++ ab 25 Punkten") messen an einem Maßstab, den die Datei gar nicht kennt: wer
+seinen Stundensatz halbiert, käme nie wieder über „+", wer ihn verdoppelt, hätte
+ab dem ersten Tag nur „+++". Zwei Bezugsgrößen spannen die Skala stattdessen auf:
+
+| Band | Bereich | mit den Standardsätzen |
+|---|---|---|
+| `−−` | unter −*voll* | unter −12 |
+| `−` | −*voll* bis 0 | −12 bis 0 |
+| `0` | 0 bis *voll*/4 | 0 bis 3 |
+| `+` | *voll*/4 bis *voll* | 3 bis 12 |
+| `++` | *voll* bis *spitze* | 12 bis 25 |
+| `+++` | ab *spitze* | ab 25 |
+
+*voll* ist ein Tag durchgehend verschlossen, ohne jeden Zuschlag (24 h × bester
+Satz eines verschlossenen Modells = 12). *best* ist der beste denkbare Tag,
+derselbe Tag mit vollem Ungeöffnet-Zuschlag und Streak-Deckel ((12 + 7) × 2 =
+38), und *spitze* liegt auf halbem Weg dorthin (25). Ein ganzer verschlossener
+Tag ist damit „++" — nicht die Ausnahme, sondern das, was ein guter Tag hier
+heißt —, und „+++" bleibt den langen Strecken und dem Multiplikator vorbehalten.
+Der achte Tag am Stück (12 + 7 = 19) ist „++". Die Legende unter dem Kalender
+rechnet die Schwellen aus den gerade eingestellten Sätzen aus und steht deshalb
+nicht im HTML.
 
 ## Eintragen, ohne die App zu öffnen
 
@@ -468,6 +510,7 @@ www/
       command.js      Kommandos aus einer URL: lesen, auflösen, planen
     sync/             auth.js · onedrive.js · files.js
     ui/               eintrag · dashboard · einstellungen · daten · charts
+      status.js       der laufende Zustand, den beide Seiten zeigen
     state.js          zentraler Zustand, alle Änderungen über mutate()
     platform.js       Android / Desktop / Web an einer Stelle
     shortcuts.js      Kommandos ausführen, Kurzbefehle des Launchers setzen
@@ -482,7 +525,7 @@ Keine Build-Kette, kein Framework: ES-Module, die der Browser direkt lädt.
 Derselbe Ordner geht unverändert in die APK, in den Installer und nach Pages.
 
 ```bash
-npm test          # 104 Tests, nur Node-Builtins
+npm test          # 138 Tests, nur Node-Builtins
 npm start         # Desktop-App lokal starten
 npm run build:win # Windows-Installer (auf Windows)
 npx serve www     # Web-Version lokal
@@ -538,7 +581,7 @@ Welche URI die laufende Installation sendet, steht in der App unter
 ## Build
 
 Jeder Push auf `main` löst drei Workflows aus, die dieselbe Versionsnummer
-berechnen (Commit-Anzahl → `2.1.N`) und sie über `scripts/bake-version.sh`
+berechnen (Commit-Anzahl → `2.2.N`) und sie über `scripts/bake-version.sh`
 eintragen — Handy, PC und Web zeigen nach einem Push also dieselbe Nummer:
 
 | Workflow | Ergebnis |

@@ -307,6 +307,19 @@
 .konto-box .trend { font-size: 11px; margin-top: 3px; font-variant-numeric: tabular-nums; }
 .konto-box .trend.up { color: var(--accent); }
 .konto-box .trend.down { color: var(--bad); }
+/* Ein Tag ohne Bewegung ist eine eigene Aussage — grün oder rot wäre gelogen. */
+.konto-box .trend.flat { color: var(--muted); }
+
+/* Unterzeile einer KPI-Kachel: sagt, worauf sich die Zahl darüber bezieht. */
+.kpi .l.sub { text-transform: none; letter-spacing: 0; font-size: 11px; margin-top: 3px; }
+
+/* Kalender-Legende: je Band ein Feld mit Zeichen und Zahlenbereich. Die Werte
+   kommen aus heatScale() und stehen deshalb nicht hier. */
+.heat-legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 8px; }
+.heat-legend .hl { border-radius: 6px; padding: 5px 3px; text-align: center; }
+.heat-legend .hl .z { font-size: 13px; font-weight: 700; line-height: 1.1; }
+.heat-legend .hl .r { font-size: 9px; opacity: .85; font-variant-numeric: tabular-nums;
+  white-space: nowrap; }
 
 /* Preisschild: was ein Orgasmus gerade kostet */
 .preis { display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -452,13 +465,18 @@
     /* Eintrag: Hero und Einträge-Karte (letzte) volle Breite */
     #page-eintrag > .card.hero,
     #page-eintrag > .card:last-of-type { grid-column: 1 / -1; }
-    /* Dashboard: Zeitraum + Hauptcharts + Details volle Breite */
-    #page-dashboard > .card:nth-child(1),  /* Zeitraum */
-    #page-dashboard > .card:nth-child(3),  /* Punkte-Verlauf */
-    #page-dashboard > .card:nth-child(5),  /* Streak-Verlauf */
-    #page-dashboard > .card:nth-child(6),  /* Kalender */
+    /* Dashboard: Status, Zeitraum, Hauptcharts und Details über die volle Breite.
+       Über die IDs, nicht über :nth-child() — eine eingeschobene Karte hat die
+       Positionen sonst stillschweigend um eins verschoben. */
+    #page-dashboard > #cardJetzt,
+    #page-dashboard > #cardZeitraum,
+    #page-dashboard > #cardVerlauf,
+    #page-dashboard > #cardModelle,
+    #page-dashboard > #cardKalender,
     #page-dashboard > .collapse-toggle,
     #page-dashboard > #detailsSection { grid-column: 1 / -1; }
+    /* Sechs Bänder nebeneinander, sobald der Platz da ist. */
+    .heat-legend { grid-template-columns: repeat(6, 1fr); }
     #detailsSection { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
     /* Daten-Tab kompakt mittig */
     #page-daten { max-width: 600px; margin: 0 auto; }

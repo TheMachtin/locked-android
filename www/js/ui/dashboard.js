@@ -10,9 +10,11 @@
  */
 
 import { STATE, calc } from '../state.js';
-import { fmtInt, fmtNum, fmtSigned, fmtHours, fmtDateShort, fmtMonth } from './format.js';
-import { nettoChart, verlaufChart, modellDonut, heatmap, weekdayChart } from './charts.js';
-import { emptyTotals, computeTotals } from '../core/calc.js';
+import { fmtInt, fmtNum, fmtSigned, fmtHours, fmtDateShort, fmtMonth, escapeHtml } from './format.js';
+import { nettoChart, verlaufChart, modellDonut, heatmap, heatScale, heatLegend, weekdayChart } from './charts.js';
+import { emptyTotals, computeTotals, currentOrgasmPrice } from '../core/calc.js';
+import { todayIso } from '../core/settings.js';
+import { statusContext, currentModelHtml, statusRowHtml } from './status.js';
 
 const $ = id => document.getElementById(id);
 let jahrFilter = 'all';
@@ -41,7 +43,7 @@ function renderJahrFilter(days) {
 }
 
 export function render() {
-  const { days, totals, settings, startedAt } = calc();
+  const { days, byDate, totals, settings, startedAt } = calc();
   renderJahrFilter(days);
 
   const gefiltert = days.filter(passtZumJahr);
@@ -52,17 +54,26 @@ export function render() {
   t.konto = totals.konto;
   t.form = totals.form;
 
+  // Unter jeder Kachel steht, worauf sich ihre Zahl bezieht. „Ø pro Tag" allein
+  // beantwortet die Frage nicht, die man dabei hat — Durchschnitt wovon, geteilt
+  // durch welche Tage —, und bei einem Jahresfilter kommt dazu, dass Konto und
+  // Form absichtlich über die ganze Historie laufen.
   const kachel = (v, l, sub) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div>`
-    + (sub ? `<div class="l" style="text-transform:none;letter-spacing:0;font-size:11px;margin-top:2px">${sub}</div>` : '')
+    + (sub ? `<div class="l sub">${sub}</div>` : '')
     + '</div>';
+  const abklang = fmtNum((1 - settings.points.formDecay) * 100, 0);
+  const nenner = `÷ ${fmtInt(t.kalendertage)} ${t.kalendertage === 1 ? 'Kalendertag' : 'Kalendertage'}`;
+  const ganzeHistorie = jahrFilter !== 'all' ? 'ganze Historie · ' : '';
   $('dashKpis').innerHTML =
       kachel(fmtInt(totals.konto), 'Kontostand',
-        jahrFilter !== 'all' ? 'gesamt' : (startedAt ? 'seit ' + fmtDateShort(startedAt) : 'alles gezählt'))
-    + kachel(fmtInt(totals.form), 'Form', 'Trend zuletzt')
-    + kachel(fmtNum(t.avgNetto, 1), 'Ø pro Tag')
-    + kachel(fmtInt(t.stundenVerschlossen), 'Std verschlossen')
-    + kachel(fmtNum(t.avgStdTag, 1), 'Ø Std/Tag')
-    + kachel(fmtInt(t.orgasmen), 'Orgasmen', t.orgasmKosten ? `−${fmtInt(t.orgasmKosten)} Punkte` : '');
+        ganzeHistorie + (startedAt ? 'seit ' + fmtDateShort(startedAt) : 'alles gezählt'))
+    + kachel(fmtInt(totals.form), 'Form', ganzeHistorie + `klingt ${abklang} %/Tag ab`)
+    + kachel(fmtNum(t.avgNetto, 1), 'Ø pro Tag', `Punkte ${nenner}`)
+    + kachel(fmtInt(t.stundenVerschlossen), 'Std verschlossen', zeitraumText())
+    + kachel(fmtNum(t.avgStdTag, 1), 'Ø Std/Tag', `verschlossen ${nenner}`)
+    + kachel(fmtInt(t.orgasmen), 'Orgasmen', t.orgasmKosten ? `−${fmtInt(t.orgasmKosten)} Punkte` : zeitraumText());
+
+  renderJetzt(days, byDate, settings);
 
   $('verlaufChart').innerHTML = verlaufChart(gefiltert);
   $('punkteChart').innerHTML = nettoChart(gefiltert, skala);
@@ -79,12 +90,44 @@ export function render() {
        (${fmtDateShort(alt.von)}–${fmtDateShort(alt.bis)}).</div>`
     : '');
 
-  $('heatmap').innerHTML = heatmap(gefiltert);
+  $('heatmap').innerHTML = heatmap(gefiltert, settings);
   $('heatmap').querySelectorAll('.hm-cell').forEach(c =>
     c.addEventListener('click', () => onDrilldown(c.dataset.iso)));
+  $('heatLegend').innerHTML = heatLegend(heatScale(settings), settings);
 
   renderArchiv();
   if (detailsOffen) renderDetails(t);
+}
+
+function zeitraumText() {
+  return jahrFilter === 'all' ? 'seit dem Stichtag' : `im Jahr ${jahrFilter}`;
+}
+
+// =========================== JETZT ===========================
+/**
+ * Derselbe Statusblock wie im Eintrag-Tab.
+ *
+ * Er stand bisher nur dort, und damit hing die Antwort auf „wie lange läuft das
+ * gerade" an der Seite zum Eintragen — im Rückblick, wo man die Zahlen
+ * vergleicht, fehlte sie. Der Block kommt aus `status.js`, beide Seiten zeigen
+ * deshalb zwangsläufig dasselbe. Der Jahresfilter gilt hier nicht: „jetzt" ist
+ * jetzt, auch wenn daneben 2025 ausgewählt ist.
+ */
+function renderJetzt(days, byDate, settings) {
+  const iso = todayIso();
+  const ctx = statusContext(iso, { days, byDate, settings, events: STATE.data.events });
+  $('jetztModell').innerHTML = currentModelHtml(ctx);
+  $('jetztStreaks').innerHTML = statusRowHtml(ctx);
+
+  const p = currentOrgasmPrice(STATE.data, settings, ctx.refMs);
+  const box = $('jetztPreis');
+  if (!p) { box.classList.add('hide'); return; }
+  box.classList.remove('hide');
+  const warte = isFinite(p.abstandTage)
+    ? `${fmtNum(p.abstandTage, 1)} Tage seit dem letzten`
+    : 'noch keiner erfasst';
+  box.innerHTML = `<div><div class="l">${escapeHtml(p.model.label)} kostet gerade</div>
+    <div class="l" style="opacity:.8">${warte}</div></div><div class="v">−${fmtInt(p.price)}</div>`;
 }
 
 function datumAusSchluessel(key) {
