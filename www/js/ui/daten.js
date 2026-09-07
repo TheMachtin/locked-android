@@ -103,7 +103,12 @@ async function ordnerUebernehmen() {
   if (r && r.neu) showToast('Kein locked2.json an diesem Ort — beim nächsten Speichern entsteht es dort', true);
 }
 
-// =========================== LIVE-ANSICHT ===========================
+// =========================== ZUSEHEN LASSEN ===========================
+// Die Momentaufnahme steht offen da — sie tut, was sie soll. Der Weg über eine
+// laufende Datei ist gebaut und geprüft, führt über OneDrive aber ins Leere
+// (siehe README); er liegt deshalb zugeklappt darunter statt gelöscht zu sein.
+let liveOffen = false;
+
 const LS_SHARE = 'locked_jetzt_share_v1';
 // Die Kennung der von der App angelegten Freigabe — ohne sie ließe sie sich
 // später nur noch in der OneDrive-Oberfläche zurücknehmen.
@@ -189,21 +194,19 @@ function renderJetztKarte() {
     teile.push('<b>Freigabelink erzeugen</b> schaltet das Mitschreiben ein, legt die Datei an '
       + 'und holt den Anzeigen-Link von OneDrive — in einem Schritt.');
   } else {
-    // Die eine Verwechslung, die hier fast zwangsläufig passiert: der
-    // OneDrive-Link im Feld öffnet OneDrive und zeigt die Rohdatei. Er ist die
-    // Zutat, nicht das Ergebnis — und das muss dort stehen, wo beide Links
-    // nebeneinander liegen, nicht im README.
-    teile.push('<b>Weiterzugeben ist nicht der Link im Feld</b> — der öffnet OneDrive und zeigt '
-      + 'die Rohdatei. <b>Link kopieren</b> liefert die Adresse, die den Block zeigt:');
+    // Der Link ist gebaut und richtig; er scheitert am Abruf, nicht am Aufbau.
+    // Das gehört hierher, sonst liest sich „Link kopieren" wie ein Angebot.
+    teile.push('<b>Link kopieren</b> liefert die Ansicht-Adresse — die zeigt derzeit '
+      + '<code>HTTP 401</code>, weil OneDrive die Datei nicht herausgibt. '
+      + '<b>Diagnose-Link</b> misst das nach.');
     teile.push(`<code>${escapeHtml(ansichtLink())}</code>`);
-    if (!an) teile.push('<b>Der Schalter ist aus</b> — der Link zeigt weiter den Stand von zuletzt.');
+    if (an) teile.push('<b>Der Schalter ist an</b> — die Datei wird bei jedem Speichern '
+      + 'mitgeschrieben, obwohl sie derzeit niemand lesen kann. Ausschalten kostet nichts.');
     if (!permId()) {
       teile.push('Diesen Link kennt die App nur als Adresse. Zurücknehmen lässt er sich in OneDrive '
         + '(<b>Teilen → Zugriff verwalten</b>) — oder hier neu erzeugen lassen.');
     }
   }
-  teile.push('<b>Momentaufnahme</b> braucht keinen Freigabelink: sie steckt im Link selbst. '
-    + 'Die Uhren laufen darin weiter, neue Einträge erscheinen aber nicht.');
   $('jetztHinweis').innerHTML = teile.map(z => `<div style="margin-top:6px">${z}</div>`).join('');
 }
 
@@ -444,6 +447,12 @@ export function initDaten() {
   $('btnJetztLink').addEventListener('click', async () => {
     if (!shareUrl()) { showToast('Erst den Freigabelink der jetzt.json eintragen', true); return; }
     await kopieren(ansichtLink(), 'Link zur Live-Ansicht kopiert');
+  });
+
+  $('jetztLiveToggle').addEventListener('click', () => {
+    liveOffen = !liveOffen;
+    $('jetztLiveSection').classList.toggle('hide', !liveOffen);
+    $('jetztLiveToggle').textContent = liveOffen ? 'Laufende Datei ▴' : 'Laufende Datei ▾';
   });
 
   $('btnJetztDiagnose').addEventListener('click', async () => {

@@ -224,10 +224,21 @@ Anker hat, kann die Uhren selbst weiterlaufen lassen: die Stunden zählen hoch,
 der Preis fällt, die Strecke wächst um Mitternacht. Nichts davon braucht ein
 einziges Ereignis.
 
-Die App legt dafür neben `locked2.json` eine kleine `jetzt.json` ab. Darin steht
-nur, was der Block zeigt: keine Einträge, keine Einstellungen, kein Kontostand.
+Im Daten-Tab steht dafür ein Knopf: **Momentaufnahme kopieren**. Der packt das
+Paket in den Link selbst (`jetzt.html#d=…`, rund 700 Zeichen) — keine Datei,
+keine Freigabe, kein Konto beim Empfänger. Die Uhren laufen darin weiter, neue
+Einträge erscheinen nicht; dafür braucht es einen neuen Link.
 
-Ein Knopf im Daten-Tab macht den Rest: **Freigabelink erzeugen** schaltet das
+### Der Weg über eine laufende Datei — gebaut, aber zugeklappt
+
+Darunter liegt zugeklappt, was eine *mitlaufende* Ansicht bräuchte: die App legt
+neben `locked2.json` eine kleine `jetzt.json` ab, gibt sie frei, und die
+Anzeigeseite holt sie minütlich nach. Alles davon ist gebaut und geprüft — es
+führt über OneDrive nur ins Leere (siehe unten). Gelöscht ist es deshalb nicht:
+sobald `jetzt.json` an einem Ort liegt, der Dateien herausgibt, trägt der Aufbau
+sofort.
+
+Ein Knopf dort macht den Rest: **Freigabelink erzeugen** schaltet das
 Mitschreiben ein, legt die Datei an und holt den Anzeigen-Link über
 `createLink` von OneDrive — in einem Schritt. Der dafür nötige Scope
 (`Files.ReadWrite`) ist derselbe, mit dem die App ohnehin schreibt; eine neue
@@ -260,32 +271,39 @@ schreibt, lässt eine Momentaufnahme wie eine Live-Übertragung aussehen.
 **Ein nicht erreichbarer Abruf verwirft nichts.** Der letzte Stand bleibt stehen
 und läuft weiter, mit dem Hinweis, dass er älter ist. Er ist nicht falsch.
 
-### Wenn die laufende Datei nicht durchkommt
+### Warum die laufende Datei über OneDrive nicht geht
 
-`api.onedrive.com` gibt eine anonyme Freigabe nicht ohne Weiteres an fremdes
-JavaScript heraus — der reguläre Weg antwortet mit `401`. Ob eine andere
-Adressform es tut, lässt sich nur dort feststellen, wo die Verbindung besteht,
-und nicht im Code durch Raten. Dafür gibt es **Diagnose-Link kopieren**:
-`jetzt.html#diag=…` probiert die Formen der Reihe nach durch und schreibt hin,
-welche mit welchem Status antwortet.
+Gemessen am 07.09.2026, mit einer anonym lesbaren Freigabe:
 
-Die Unterscheidung, auf die es dabei ankommt, ist die zwischen einer
-*Statuszeile* und einem *Block*. Eine Antwort mit lesbarem Status hat die
-CORS-Prüfung bestanden und scheitert nur an der Berechtigung; ein Block kommt
-gar nicht erst bis zum Status und steht deshalb als „blockiert" da. Die
-Adressen selbst zeigt die Seite nicht — sie enthalten die Freigabe-Kennung, und
-dieser Zettel ist zum Herzeigen gedacht.
+| Adressform | Antwort |
+|---|---|
+| `shares/…/root/content` | `401` |
+| `shares/…/driveItem/content` | `401` |
+| `graph/shares/…/driveItem/content` | `401` |
+| Freigabelink mit `download=1` | von CORS blockiert |
+| Freigabelink direkt | von CORS blockiert |
 
-Sagt keine Form `200`, gibt OneDrive anonyme Dateien nicht CORS-fähig heraus.
-Dann bleibt für „live" nur ein Host, der das tut, und für alles andere die
-Momentaufnahme.
+Zwei verschiedene Absagen. Die drei API-Wege *antworten* — Microsoft schickt
+dort CORS-Header —, verlangen aber einen Token, obwohl dieselbe Freigabe im
+Browser ohne Anmeldung lesbar ist. Die beiden direkten Wege lassen fremdes
+JavaScript gar nicht erst bis zum Status kommen.
 
-Ohne Freigabelink gibt es den Knopf **Momentaufnahme**: der packt das Paket in
-den Link selbst (`jetzt.html#d=…`, rund 700 Zeichen). Die Uhren laufen darin
-weiter, neue Einträge erscheinen nicht — für einen Blick zwischendurch reicht
-das, für dauerhaftes Zusehen nicht. Beides landet im Adress-Fragment hinter
-`#`, und das schickt kein Browser an einen Server: der Freigabelink taucht in
-keinem Zugriffsprotokoll auf.
+**OneDrive gibt anonyme Dateien nicht an fremdes JavaScript heraus.** Für eine
+Ansicht, die neue Einträge zeigt, braucht es deshalb einen Host, der das tut;
+bis dahin ist die Momentaufnahme der Weg.
+
+Nachmessen lässt sich das jederzeit mit **Diagnose-Link kopieren**:
+`jetzt.html#diag=…` probiert die Formen durch und schreibt hin, welche mit
+welchem Status antwortet. Die Unterscheidung, auf die es ankommt, ist die
+zwischen einer *Statuszeile* und einem *Block* — die erste hat die CORS-Prüfung
+bestanden und scheitert nur an der Berechtigung. Die Adressen selbst zeigt die
+Seite nicht: sie enthalten die Freigabe-Kennung, und dieser Zettel ist zum
+Herzeigen gedacht. Dieselbe Diagnose prüft auch jede andere Quelle — sie ist
+nicht auf OneDrive festgelegt.
+
+Beides landet im Adress-Fragment hinter `#`, und das schickt kein Browser an
+einen Server: weder das Paket noch ein Freigabelink taucht in einem
+Zugriffsprotokoll auf.
 
 Was bleibt: ein Freigabelink ist ein Ausweis. Wer ihn hat, sieht den Block, auch
 wenn er ihn weitergereicht bekommen hat. Zurücknehmen geht — dafür der Knopf —,
