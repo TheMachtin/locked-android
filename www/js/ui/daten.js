@@ -189,7 +189,13 @@ function renderJetztKarte() {
     teile.push('<b>Freigabelink erzeugen</b> schaltet das Mitschreiben ein, legt die Datei an '
       + 'und holt den Anzeigen-Link von OneDrive — in einem Schritt.');
   } else {
-    teile.push(`Ansicht: <code>${escapeHtml(ansichtLink())}</code>`);
+    // Die eine Verwechslung, die hier fast zwangsläufig passiert: der
+    // OneDrive-Link im Feld öffnet OneDrive und zeigt die Rohdatei. Er ist die
+    // Zutat, nicht das Ergebnis — und das muss dort stehen, wo beide Links
+    // nebeneinander liegen, nicht im README.
+    teile.push('<b>Weiterzugeben ist nicht der Link im Feld</b> — der öffnet OneDrive und zeigt '
+      + 'die Rohdatei. <b>Link kopieren</b> liefert die Adresse, die den Block zeigt:');
+    teile.push(`<code>${escapeHtml(ansichtLink())}</code>`);
     if (!an) teile.push('<b>Der Schalter ist aus</b> — der Link zeigt weiter den Stand von zuletzt.');
     if (!permId()) {
       teile.push('Diesen Link kennt die App nur als Adresse. Zurücknehmen lässt er sich in OneDrive '
