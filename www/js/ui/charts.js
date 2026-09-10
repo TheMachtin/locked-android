@@ -1,17 +1,21 @@
 /**
  * Diagramme als handgeschriebenes SVG.
  *
- * Keine Bibliothek: die App muss offline starten, und für fünf Diagramme lohnt
- * kein Megabyte Fremdcode, das obendrein Tokens im Speicher mitliest.
- * Alle Funktionen geben Markup zurück und hängen nichts selbst ein — das
- * Verdrahten von Klicks bleibt bei der aufrufenden Seite.
+ * Keine Bibliothek: die App muss offline starten, und für eine Handvoll
+ * Diagramme lohnt kein Megabyte Fremdcode, das obendrein Tokens im Speicher
+ * mitliest. Alle Funktionen geben Markup zurück und hängen nichts selbst ein —
+ * das Verdrahten von Klicks bleibt bei der aufrufenden Seite.
+ *
+ * Die Balkendiagramme je Zeitraum teilen sich `aggregatePeriods()` und
+ * `saeulen()`: Punkte, Stunden und Orgasmen sind dieselbe Form mit einer
+ * anderen Kennzahl, und drei eigene Fassungen davon würden früher oder später
+ * drei verschiedene Vorstellungen davon entwickeln, was ein Monat ist.
  */
 
 import { isoWeek } from '../core/time.js';
-import { fmtInt, fmtNum, fmtDateShort, escapeHtml } from './format.js';
+import { fmtInt, fmtNum, fmtDateShort, escapeHtml, MONTHS_SHORT_DE as MON_KURZ } from './format.js';
 import { resolveModel, modelMap, KIND_ORGASM } from '../core/settings.js';
 
-const MON_KURZ = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 const leer = (txt) => `<div class="empty">${txt}</div>`;
 
 function niceStep(max) {
@@ -21,8 +25,16 @@ function niceStep(max) {
   return (n <= 1 ? 0.2 : n <= 2 ? 0.5 : n <= 5 ? 1 : 2) * pow;
 }
 
-// =========================== TAGES-NETTO ===========================
-export function aggregateNetto(days, scale) {
+// =========================== JE ZEITRAUM ===========================
+/**
+ * Die Tage zu Zeiträumen zusammenfassen — einmal für alle Balkendiagramme.
+ *
+ * Es gab dafür drei Anläufe in drei Funktionen, und jede hätte ihre eigene
+ * Vorstellung davon entwickelt, was ein Monat ist. Hier steht eine: derselbe
+ * Schlüssel, dieselbe Aufschrift, dieselbe Sortierung für Punkte, Stunden,
+ * Orgasmen und die Tragezeit je Modell.
+ */
+export function aggregatePeriods(days, scale) {
   const m = new Map();
   for (const d of days) {
     if (!d.zaehlt) continue;
@@ -37,55 +49,318 @@ export function aggregateNetto(days, scale) {
       key = d.date;
       label = d.date.slice(8);
     }
-    if (!m.has(key)) m.set(key, { key, label, netto: 0, einnahmen: 0, kosten: 0 });
+    if (!m.has(key)) {
+      m.set(key, {
+        key, label, von: d.date, bis: d.date, tage: 0,
+        netto: 0, einnahmen: 0, kosten: 0,
+        stunden: 0, offen: 0, pause: 0,
+        orgasmen: 0, abstandSumme: 0, abstandAnzahl: 0,
+        hours: {},
+      });
+    }
     const x = m.get(key);
+    x.tage++;
+    if (d.date < x.von) x.von = d.date;
+    if (d.date > x.bis) x.bis = d.date;
     x.netto += d.netto; x.einnahmen += d.einnahmen; x.kosten += d.kosten;
+    x.stunden += d.verschlossenH; x.offen += d.offenH; x.pause += d.pauseH;
+    x.orgasmen += d.orgasmen.length;
+    for (const o of d.orgasmen) {
+      // Der erste erfasste Orgasmus hat keinen Abstand — ihn als 0 zu zählen
+      // würde den Schnitt des ersten Zeitraums nach unten ziehen.
+      if (isFinite(o.abstandTage)) { x.abstandSumme += o.abstandTage; x.abstandAnzahl++; }
+    }
+    for (const [id, h] of Object.entries(d.hours)) x.hours[id] = (x.hours[id] || 0) + h;
   }
-  return [...m.values()].sort((a, b) => a.key.localeCompare(b.key));
+  const out = [...m.values()].sort((a, b) => a.key.localeCompare(b.key));
+  for (const x of out) x.abstand = x.abstandAnzahl ? x.abstandSumme / x.abstandAnzahl : null;
+  return out;
 }
 
-/** Balken je Zeitraum, Null-Linie in der Mitte. Anklickbar (data-key). */
-export function nettoChart(days, scale) {
-  const data = aggregateNetto(days, scale);
-  if (!data.length) return leer('Noch keine Daten');
-
-  const posMax = Math.max(1, ...data.map(d => d.netto));
-  const negMax = Math.abs(Math.min(0, ...data.map(d => d.netto)));
-
-  const W = 480, H = 200, padL = 40, padR = 8, padT = 12, padB = 24;
-  const innerW = W - padL - padR, innerH = H - padT - padB;
-  const step = niceStep(Math.max(posMax, negMax));
-  const yPos = Math.ceil(posMax / step) * step;
+/** Maßstab und Nulllinie eines Balkendiagramms. */
+function achsen(werte, innerH, padT) {
+  const posMax = Math.max(0, ...werte);
+  const negMax = Math.abs(Math.min(0, ...werte));
+  const step = niceStep(Math.max(posMax, negMax, 1));
+  const yPos = Math.max(step, Math.ceil(posMax / step) * step);
   const yNeg = Math.ceil(negMax / step) * step;
   const yScale = innerH / (yPos + yNeg || 1);
-  const zeroY = padT + yPos * yScale;
+  return { step, yPos, yNeg, yScale, zeroY: padT + yPos * yScale };
+}
 
+/**
+ * Balken je Zeitraum — die gemeinsame Grundform.
+ *
+ * @param {Array}  data  aus aggregatePeriods()
+ * @param {object} spec  { wert, farbe, titel, achse, klick }
+ */
+function saeulen(data, spec) {
+  const W = 480, H = 200, padL = 40, padR = 8, padT = 12, padB = 24;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const werte = data.map(spec.wert);
+  const a = achsen(werte, innerH, padT);
   const xstep = innerW / data.length;
   const barW = Math.max(2, Math.min(xstep * 0.75, 40));
   const labelEvery = Math.max(1, Math.ceil(data.length / 12));
+  const achse = spec.achse || fmtInt;
 
   let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">`;
-  for (let v = -yNeg; v <= yPos + 1e-9; v += step) {
+  for (let v = -a.yNeg; v <= a.yPos + 1e-9; v += a.step) {
     if (Math.abs(v) < 1e-9) continue;
-    const y = zeroY - v * yScale;
+    const y = a.zeroY - v * a.yScale;
     svg += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-opacity=".4" stroke-dasharray="2 3"/>`;
-    svg += `<text x="${padL - 4}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)">${fmtInt(v)}</text>`;
+    svg += `<text x="${padL - 4}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)">${achse(v)}</text>`;
   }
-  svg += `<line x1="${padL}" y1="${zeroY.toFixed(1)}" x2="${W - padR}" y2="${zeroY.toFixed(1)}" stroke="var(--line)"/>`;
+  svg += `<line x1="${padL}" y1="${a.zeroY.toFixed(1)}" x2="${W - padR}" y2="${a.zeroY.toFixed(1)}" stroke="var(--line)"/>`;
   data.forEach((d, i) => {
+    const v = spec.wert(d);
     const cx = padL + xstep * (i + 0.5);
     const x = cx - barW / 2;
-    const h = Math.abs(d.netto) * yScale;
-    const y = d.netto >= 0 ? zeroY - h : zeroY;
-    const farbe = d.netto >= 0 ? 'var(--accent)' : 'var(--bad)';
-    svg += `<rect class="bar-clickable" data-key="${d.key}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" `
-      + `width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${farbe}" rx="2" style="cursor:pointer">`
-      + `<title>${d.label}: ${fmtInt(d.netto)} (Einnahmen ${fmtInt(d.einnahmen)}, Kosten ${fmtInt(d.kosten)})</title></rect>`;
+    const h = Math.abs(v) * a.yScale;
+    const y = v >= 0 ? a.zeroY - h : a.zeroY;
+    const klick = spec.klick === false ? '' : ' class="bar-clickable" style="cursor:pointer"';
+    svg += `<rect${klick} data-key="${d.key}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" `
+      + `width="${barW.toFixed(1)}" height="${Math.max(h, v ? 1 : 0).toFixed(1)}" fill="${spec.farbe(v, d)}" rx="2">`
+      + `<title>${spec.titel(d)}</title></rect>`;
     if (i % labelEvery === 0) {
       svg += `<text x="${cx.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="10" fill="var(--muted)">${d.label}</text>`;
     }
   });
-  return svg + '</svg>';
+  return { svg: svg + '</svg>', achsen: a, geometrie: { W, H, padL, padR, padT, padB, innerW, innerH, xstep } };
+}
+
+export const METRIKEN = [
+  { v: 'netto',    l: 'Punkte',    beschreibung: 'Tagesergebnisse zusammengezählt' },
+  { v: 'stunden',  l: 'Stunden',   beschreibung: 'verschlossene Stunden' },
+  { v: 'orgasmen', l: 'Orgasmen',  beschreibung: 'Anzahl je Zeitraum' },
+];
+
+/**
+ * Ein Diagramm, drei Fragen: Punkte, verschlossene Stunden oder Orgasmen je
+ * Zeitraum. Dieselben Balken, dieselbe Achse, derselbe Klick auf einen Tag —
+ * nur die Kennzahl wechselt. Anklickbar (data-key).
+ */
+export function metricChart(days, scale, metric) {
+  const data = aggregatePeriods(days, scale);
+  if (!data.length) return leer('Noch keine Daten');
+
+  if (metric === 'stunden') {
+    return saeulen(data, {
+      wert: d => d.stunden,
+      farbe: () => 'var(--accent)',
+      achse: v => fmtInt(v),
+      titel: d => `${d.label}: ${fmtNum(d.stunden, 1)} h verschlossen`
+        + ` (offen ${fmtNum(d.offen, 1)} h, Unterbrechung ${fmtNum(d.pause, 1)} h)`,
+    }).svg;
+  }
+  if (metric === 'orgasmen') {
+    return saeulen(data, {
+      wert: d => d.orgasmen,
+      farbe: () => 'var(--danger)',
+      achse: v => fmtInt(v),
+      titel: d => `${d.label}: ${fmtInt(d.orgasmen)} ${d.orgasmen === 1 ? 'Orgasmus' : 'Orgasmen'}`
+        + (d.abstand != null ? `, Ø Abstand ${fmtNum(d.abstand, 1)} T` : ''),
+    }).svg;
+  }
+  return saeulen(data, {
+    wert: d => d.netto,
+    farbe: v => (v >= 0 ? 'var(--accent)' : 'var(--bad)'),
+    achse: v => fmtInt(v),
+    titel: d => `${d.label}: ${fmtInt(d.netto)} (Einnahmen ${fmtInt(d.einnahmen)}, Kosten ${fmtInt(d.kosten)})`,
+  }).svg;
+}
+
+// =========================== ORGASMEN IM VERLAUF ===========================
+/**
+ * Anzahl je Zeitraum als Balken, der durchschnittliche Abstand als Linie.
+ *
+ * Der Zähler oben im Dashboard sagt, wie es *gerade* steht. Ob die Strecken
+ * länger oder kürzer werden, sagt er nicht — und das ist die Frage, um die es
+ * bei einem Abstand geht. Die Linie hat ihre eigene Achse rechts: Anzahl und
+ * Tage haben nichts gemeinsam außer der Zeitachse darunter.
+ */
+export function orgasmusChart(days, scale) {
+  const data = aggregatePeriods(days, scale);
+  if (!data.length) return leer('Noch keine Daten');
+  if (!data.some(d => d.orgasmen)) return leer('Kein Orgasmus im Zeitraum');
+
+  const basis = saeulen(data, {
+    wert: d => d.orgasmen,
+    farbe: () => 'var(--danger)',
+    achse: v => fmtInt(v),
+    klick: false,
+    titel: d => `${d.label}: ${fmtInt(d.orgasmen)} ${d.orgasmen === 1 ? 'Orgasmus' : 'Orgasmen'}`
+      + (d.abstand != null ? `, Ø Abstand ${fmtNum(d.abstand, 1)} T` : ''),
+  });
+  const g = basis.geometrie;
+  const abstaende = data.filter(d => d.abstand != null).map(d => d.abstand);
+  if (!abstaende.length) return basis.svg;
+
+  // Auf eine runde Zahl aufgerundet: sonst klebt die Linie am oberen Rand und
+  // sieht nach abgeschnitten aus statt nach „das ist der höchste Wert".
+  const roh = Math.max(...abstaende, 1);
+  const aStep = niceStep(roh);
+  const aMax = Math.max(aStep, Math.ceil(roh / aStep) * aStep);
+  const yOf = v => g.padT + g.innerH - (v / aMax) * g.innerH;
+  const xOf = i => g.padL + g.xstep * (i + 0.5);
+
+  // Die Linie bricht, wo kein Abstand vorliegt — durchzuziehen hieße, einen
+  // Wert zu behaupten, den es in dem Zeitraum nicht gab.
+  let pfad = '';
+  let punkte = '';
+  let offen = false;
+  data.forEach((d, i) => {
+    if (d.abstand == null) { offen = false; return; }
+    const x = xOf(i).toFixed(1), y = yOf(d.abstand).toFixed(1);
+    pfad += `${offen ? 'L' : 'M'} ${x} ${y} `;
+    offen = true;
+    punkte += `<circle cx="${x}" cy="${y}" r="2.6" fill="#c89060"><title>${d.label}: Ø Abstand ${fmtNum(d.abstand, 1)} T</title></circle>`;
+  });
+
+  let extra = `<path d="${pfad.trim()}" fill="none" stroke="#c89060" stroke-width="1.8" stroke-linejoin="round"/>${punkte}`;
+  for (let i = 0; i <= 2; i++) {
+    const v = (aMax * i) / 2;
+    extra += `<text x="${g.W - g.padR + 2}" y="${(yOf(v) + 3).toFixed(1)}" font-size="9" fill="#c89060">${fmtInt(v)}</text>`;
+  }
+  // Die rechte Achse braucht Platz, den die Grundform nicht kennt.
+  return basis.svg
+    .replace(`viewBox="0 0 ${g.W} ${g.H}"`, `viewBox="0 0 ${g.W + 22} ${g.H}"`)
+    .replace('</svg>', extra + '</svg>');
+}
+
+// =========================== TRAGEZEIT JE ZEITRAUM ===========================
+/**
+ * Gestapelte Stunden in den Modellfarben.
+ *
+ * Der Donut daneben zeigt die Aufteilung des ganzen Zeitraums; er kann nicht
+ * zeigen, dass der eine Käfig im Frühjahr den anderen ersetzt hat. Gestapelt
+ * statt nebeneinander, weil die Summe die zweite Aussage ist: wie viel von den
+ * 24 Stunden eines Tages überhaupt erfasst war.
+ */
+export function stundenStackChart(days, settings, scale) {
+  const data = aggregatePeriods(days, scale);
+  if (!data.length) return leer('Noch keine Daten');
+  const map = modelMap(settings);
+
+  // Reihenfolge über alle Zeiträume gleich, sonst springen die Farben im Stapel.
+  const summe = {};
+  for (const d of data) for (const [id, h] of Object.entries(d.hours)) summe[id] = (summe[id] || 0) + h;
+  const ids = Object.keys(summe)
+    .filter(id => summe[id] > 0.004 && resolveModel(settings, map, id).kind !== KIND_ORGASM)
+    .sort((a, b) => summe[b] - summe[a]);
+  if (!ids.length) return leer('Noch keine Tragezeit');
+
+  const W = 480, H = 200, padL = 40, padR = 8, padT = 12, padB = 24;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const maxSumme = Math.max(1, ...data.map(d => ids.reduce((s, id) => s + (d.hours[id] || 0), 0)));
+  const step = niceStep(maxSumme);
+  const yMax = Math.max(step, Math.ceil(maxSumme / step) * step);
+  const yScale = innerH / yMax;
+  const xstep = innerW / data.length;
+  const barW = Math.max(2, Math.min(xstep * 0.8, 40));
+  const labelEvery = Math.max(1, Math.ceil(data.length / 12));
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">`;
+  for (let v = step; v <= yMax + 1e-9; v += step) {
+    const y = padT + innerH - v * yScale;
+    svg += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-opacity=".4" stroke-dasharray="2 3"/>`;
+    svg += `<text x="${padL - 4}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)">${fmtInt(v)}</text>`;
+  }
+  svg += `<line x1="${padL}" y1="${padT + innerH}" x2="${W - padR}" y2="${padT + innerH}" stroke="var(--line)"/>`;
+  data.forEach((d, i) => {
+    const cx = padL + xstep * (i + 0.5);
+    let unten = padT + innerH;
+    for (const id of ids) {
+      const h = d.hours[id] || 0;
+      if (h <= 0.004) continue;
+      const hoehe = h * yScale;
+      const m = resolveModel(settings, map, id);
+      svg += `<rect x="${(cx - barW / 2).toFixed(1)}" y="${(unten - hoehe).toFixed(1)}" width="${barW.toFixed(1)}" `
+        + `height="${hoehe.toFixed(1)}" fill="${m.color}">`
+        + `<title>${d.label} · ${escapeHtml(m.label)}: ${fmtNum(h, 1)} h</title></rect>`;
+      unten -= hoehe;
+    }
+    if (i % labelEvery === 0) {
+      svg += `<text x="${cx.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="10" fill="var(--muted)">${d.label}</text>`;
+    }
+  });
+  svg += '</svg>';
+
+  const legende = ids.map(id => {
+    const m = resolveModel(settings, map, id);
+    return `<span class="chart-legende-eintrag"><span class="dot" style="background:${m.color}"></span>${escapeHtml(m.label)}</span>`;
+  }).join('');
+  return svg + `<div class="chart-legende">${legende}</div>`;
+}
+
+// =========================== MUSTER NACH UHRZEIT ===========================
+/**
+ * Zu welcher Stunde eingetragen wird, über den ganzen Zeitraum.
+ *
+ * Das Wochentags-Diagramm beantwortet „an welchem Tag", diese Achse „zu welcher
+ * Stunde". Getrennt nach Art des Eintrags, weil die interessante Frage nicht
+ * ist, wann irgendetwas passiert, sondern wann geöffnet wird.
+ */
+const UHR_ARTEN = [
+  { v: 'lock',  l: 'verschlossen',  farbe: 'var(--accent)' },
+  { v: 'pause', l: 'Unterbrechung', farbe: '#8aa0b8' },
+  { v: 'open',  l: 'offen',         farbe: 'var(--bad)' },
+  { v: 'org',   l: 'Orgasmus',      farbe: 'var(--danger)' },
+];
+
+export function hourChart(days, settings) {
+  const map = modelMap(settings);
+  const stunden = Array.from({ length: 24 }, () => ({ lock: 0, pause: 0, open: 0, org: 0 }));
+  let gesamt = 0;
+  for (const d of days) {
+    for (const ev of (d.events || [])) {
+      const h = parseInt(String(ev.time).slice(0, 2), 10);
+      if (!isFinite(h) || h < 0 || h > 23) continue;
+      const m = resolveModel(settings, map, ev.type);
+      const art = m.kind === KIND_ORGASM ? 'org' : m.locked ? 'lock' : m.pause ? 'pause' : 'open';
+      stunden[h][art]++;
+      gesamt++;
+    }
+  }
+  if (!gesamt) return leer('Noch keine Einträge');
+
+  const W = 480, H = 180, padL = 26, padR = 8, padT = 10, padB = 22;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const max = Math.max(1, ...stunden.map(s => s.lock + s.pause + s.open + s.org));
+  const step = niceStep(max);
+  const yMax = Math.max(step, Math.ceil(max / step) * step);
+  const yScale = innerH / yMax;
+  const xstep = innerW / 24;
+  const barW = Math.min(xstep * 0.78, 18);
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">`;
+  for (let v = step; v <= yMax + 1e-9; v += step) {
+    const y = padT + innerH - v * yScale;
+    svg += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-opacity=".4" stroke-dasharray="2 3"/>`;
+    svg += `<text x="${padL - 4}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)">${fmtInt(v)}</text>`;
+  }
+  svg += `<line x1="${padL}" y1="${padT + innerH}" x2="${W - padR}" y2="${padT + innerH}" stroke="var(--line)"/>`;
+  stunden.forEach((s, h) => {
+    const cx = padL + xstep * (h + 0.5);
+    let unten = padT + innerH;
+    const teile = UHR_ARTEN.map(a => `${a.l}: ${s[a.v]}`).filter((_, i) => s[UHR_ARTEN[i].v] > 0).join(', ');
+    for (const a of UHR_ARTEN) {
+      const n = s[a.v];
+      if (!n) continue;
+      const hoehe = n * yScale;
+      svg += `<rect x="${(cx - barW / 2).toFixed(1)}" y="${(unten - hoehe).toFixed(1)}" width="${barW.toFixed(1)}" `
+        + `height="${hoehe.toFixed(1)}" fill="${a.farbe}" rx="1">`
+        + `<title>${String(h).padStart(2, '0')}:00 — ${teile}</title></rect>`;
+      unten -= hoehe;
+    }
+    if (h % 3 === 0) {
+      svg += `<text x="${cx.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="9" fill="var(--muted)">${String(h).padStart(2, '0')}</text>`;
+    }
+  });
+  svg += '</svg>';
+  const legende = UHR_ARTEN.map(a =>
+    `<span class="chart-legende-eintrag"><span class="dot" style="background:${a.farbe}"></span>${a.l}</span>`).join('');
+  return svg + `<div class="chart-legende">${legende}</div>`;
 }
 
 // =========================== KONTO UND FORM ===========================
@@ -251,7 +526,7 @@ export function heatLegend(scale, settings) {
   return `<div class="heat-legend">${felder}</div>
     <div class="legend" style="text-align:left">
       Die Farbe zeigt das <b>Tagesergebnis</b> in Punkten — dieselbe Zahl, die im
-      Eintrag-Tab groß über dem Tag steht. Die Schwellen kommen aus deinen eigenen
+      Eintrag-Tab unter den Einträgen des Tages steht. Die Schwellen kommen aus deinen eigenen
       Sätzen: ein Tag durchgehend verschlossen bringt <b>${schwelle(voll)}</b> Punkte,
       und ab da ist ein Tag „++". „+++" beginnt bei <b>${schwelle(scale[4].bis)}</b>,
       also auf halbem Weg zum besten denkbaren Tag

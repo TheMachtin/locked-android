@@ -20,6 +20,7 @@ import {
   refresh, lastSyncAt, isRefreshing, markSynced, setRefreshStateHandler,
 } from './sync/refresh.js';
 import { initPullToRefresh } from './ui/pull.js';
+import { initCollapse } from './ui/collapse.js';
 import * as shortcuts from './shortcuts.js';
 import { pad2 } from './core/time.js';
 import { attentionAnchorMs, lastSeenMs, pendingEscalation } from './core/escalation.js';
@@ -299,6 +300,7 @@ async function start() {
   loadLocal();
   loadSyncBase();
   initTabs();
+  initCollapse();
   eintrag.initEintrag();
   eintrag.setEntryHook(reminderNeu);
   dashboard.initDashboard();
@@ -342,6 +344,10 @@ async function start() {
   setInterval(() => {
     if (document.visibilityState === 'visible') markiereGesehen();
     if (aktiverTab === 'eintrag') eintrag.render();
+    // Eine laufende Sperre zählt herunter: auf der Regeln-Seite läuft die
+    // Restzeit mit und die Felder werden in der Minute frei, in der sie
+    // ausläuft — sonst stünde dort ein Schloss, das keins mehr ist.
+    else if (aktiverTab === 'einstellungen' && getSettings().freeze) einstellungen.render();
   }, 60000);
 
   // Drei Wege in den Vordergrund: Capacitor meldet es nativ am sichersten,

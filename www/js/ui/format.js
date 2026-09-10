@@ -5,6 +5,9 @@ import { isoOf, pad2 } from '../core/time.js';
 export const DAYS_DE = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 export const MONTHS_DE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
   'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+/** Kurzform für Achsen und Knöpfe, wo der volle Name die Spalte sprengt. */
+export const MONTHS_SHORT_DE = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 
 export function fmtNum(n, dp = 2) {
   if (n == null || !isFinite(n)) return '—';

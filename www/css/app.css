@@ -64,32 +64,13 @@
   .day input[type=date] { background: transparent; color: var(--text); border: none; font: inherit; font-size: 20px;
     font-weight: 700; padding: 0; outline: none; }
 
-  /* Hero-Card */
-  .hero { padding: 18px 16px 16px; }
-  .hero-top { display:flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-  .hero-top .wd { color: var(--muted); font-size: 14px; }
-  .hero-top input[type=date] { background: transparent; color: var(--text); border: none; font: inherit; font-size: 20px;
+  /* Die Datumszeile über den Einträgen */
+  .datum-zeile { display:flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .datum-zeile .wd { color: var(--muted); font-size: 14px; }
+  .datum-zeile input[type=date] { background: transparent; color: var(--text); border: none; font: inherit; font-size: 20px;
     font-weight: 700; padding: 0; outline: none; }
-  .hero-today { text-align: center; margin: 18px 0 14px; }
-  .hero-num { font-size: 52px; font-weight: 800; color: var(--accent); line-height: 1;
-    font-variant-numeric: tabular-nums; letter-spacing: -1px; }
-  .hero-num.neg { color: var(--bad); }
-  .hero-num.zero { color: var(--muted); }
-  .hero-label { font-size: 10px; color: var(--muted); text-transform: uppercase;
-    letter-spacing: 1.2px; margin-top: 4px; font-weight: 600; }
-  .hero-breakdown { font-size: 11px; color: var(--muted); margin-top: 8px;
-    font-variant-numeric: tabular-nums; }
-  .hero-breakdown b { color: var(--text); font-weight: 600; }
 
-  .hero-footer { display: flex; justify-content: space-around; gap: 8px;
-    padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--line);
-    font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .hero-footer .item { text-align: center; }
-  .hero-footer .v { font-weight: 700; color: var(--text); font-size: 14px; }
-  .hero-footer .l { font-size: 9px; text-transform: uppercase; letter-spacing: .6px;
-    margin-top: 2px; }
-
-  /* Streak-Row in Hero */
+  /* Die vier Uhren im Block „Jetzt" */
   /* Vier Kacheln, am Telefon 2×2 (Käfig oben, Orgasmus unten). Vier
      nebeneinander wären hier je 80 px — zu wenig für „12 T (289 h)". Die
      Breitbild-Zeile steht unten im Desktop-Block. */
@@ -126,6 +107,9 @@
   .ho-details .ho-input { margin-top: 10px; }
 
   .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  /* Vier Kacheln stehen am Telefon 2×2 — zu viert nebeneinander bliebe für
+     „12 T 5 h" kein Platz. Die Breitbild-Zeile steht im Desktop-Block. */
+  .kpis.vier { grid-template-columns: repeat(2, 1fr); }
   .kpi { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
     padding: 10px 8px; text-align: center; }
   .kpi .v { font-size: 18px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
@@ -295,21 +279,6 @@
 
 /* ==================== 2.0: Konto, Preis, Einstellungen ==================== */
 
-/* Kontostand + Form nebeneinander unter der Tageszahl */
-.konto-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
-.konto-box { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
-  padding: 12px 8px; text-align: center; }
-.konto-box .v { font-size: 24px; font-weight: 700; color: var(--text);
-  font-variant-numeric: tabular-nums; line-height: 1.1; }
-.konto-box .v.neg { color: var(--bad); }
-.konto-box .l { font-size: 10px; color: var(--muted); text-transform: uppercase;
-  letter-spacing: .5px; margin-top: 4px; font-weight: 600; }
-.konto-box .trend { font-size: 11px; margin-top: 3px; font-variant-numeric: tabular-nums; }
-.konto-box .trend.up { color: var(--accent); }
-.konto-box .trend.down { color: var(--bad); }
-/* Ein Tag ohne Bewegung ist eine eigene Aussage — grün oder rot wäre gelogen. */
-.konto-box .trend.flat { color: var(--muted); }
-
 /* Unterzeile einer KPI-Kachel: sagt, worauf sich die Zahl darüber bezieht. */
 .kpi .l.sub { text-transform: none; letter-spacing: 0; font-size: 11px; margin-top: 3px; }
 
@@ -443,14 +412,92 @@
 .sc-perm .sc-state b { color: var(--text); }
 .sc-perm .btn { padding: 7px 12px; font-size: 12px; }
 
+/* ==================== Eintrag, Zeitraum, Sperre ==================== */
+
+/* Der Hinweis über den Schnelltasten, wenn ein anderer Tag als heute gewählt
+   ist. Er sitzt zwischen Überschrift und Tasten, weil er dort im Weg ist —
+   genau das ist seine Aufgabe. */
+.datum-warnung { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 12px; padding: 9px 12px; font-size: 12px; line-height: 1.4;
+  color: #fde9c8; background: rgba(200,144,96,0.14);
+  border: 1px solid var(--warm); border-radius: 10px; }
+.datum-warnung span { flex: 1; min-width: 150px; }
+.datum-warnung b { color: #fff; }
+.datum-warnung .btn { padding: 7px 12px; font-size: 12px; }
+
+/* Das Tagesergebnis als Fußzeile der Einträge: eine Zeile, die sich öffnen
+   lässt. Die Zahl war einmal 52 px groß und füllte den halben Bildschirm. */
+.tagesergebnis { display: flex; align-items: center; gap: 10px; width: 100%;
+  margin-top: 12px; padding: 11px 12px; font: inherit; cursor: pointer;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+  color: var(--muted); text-align: left; }
+.tagesergebnis .l { flex: 1; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .6px; font-weight: 600; }
+.tagesergebnis .v { font-size: 22px; font-weight: 700; color: var(--accent);
+  font-variant-numeric: tabular-nums; line-height: 1; }
+.tagesergebnis .v.neg { color: var(--bad); }
+.tagesergebnis .v.zero { color: var(--muted); }
+.tagesergebnis .chev { font-size: 12px; }
+.tagesergebnis.leer { cursor: default; }
+.tagesergebnis.leer .chev { visibility: hidden; }
+
+/* Einklappbare Karten (ui/collapse.js). Der Pfeil sitzt am Ende der
+   Überschrift, die selbst der Schalter ist. */
+.card.collapse > h2 { cursor: pointer; user-select: none; }
+.card.collapse > h2::after { content: '▾'; font-size: 11px; opacity: .8; margin-left: auto; }
+.card.collapse.zu > h2::after { content: '▸'; }
+.card.collapse.zu > h2 { margin-bottom: 0; }
+.card.collapse.zu > .collapse-body { display: none; }
+/* Eine Zwischenüberschrift innerhalb einer Karte — sie darf nicht wie der
+   Schalter der Karte aussehen. */
+.unterkopf { font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--muted); margin-bottom: 10px; }
+
+/* Zeitraum: Ebene, Blättern, Auflösung */
+.zr-nav { display: grid; grid-template-columns: 44px 1fr 44px; gap: 8px;
+  align-items: center; margin-top: 8px; }
+.zr-arrow { background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+  border-radius: 10px; padding: 8px 0; font: inherit; font-size: 18px; font-weight: 700;
+  line-height: 1; cursor: pointer; }
+.zr-arrow:disabled { opacity: .3; cursor: default; }
+.zr-arrow:not(:disabled):active { background: var(--panel); }
+.zr-label { text-align: center; font-weight: 700; font-size: 16px;
+  font-variant-numeric: tabular-nums; }
+.zr-aufloesung { display: grid; grid-template-columns: auto 1fr; gap: 10px;
+  align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.zr-titel { font-size: 11px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .6px; font-weight: 600; }
+
+/* Legende unter einem Diagramm, dessen Farben nicht selbsterklärend sind. */
+.chart-legende { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px;
+  font-size: 11px; color: var(--muted); }
+.chart-legende-eintrag { display: inline-flex; align-items: center; gap: 5px; }
+.chart-legende-eintrag .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+/* Die Sperre über den Punktesätzen */
+.freeze { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px; margin-bottom: 14px; }
+.freeze.on { border-color: var(--warm); background: rgba(200,144,96,0.10); }
+.freeze .fz-kopf { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap; }
+.freeze .fz-titel { font-size: 14px; font-weight: 700; color: var(--text); }
+.freeze .fz-rest { font-size: 12px; color: var(--warm); font-weight: 600;
+  font-variant-numeric: tabular-nums; }
+.freeze .setting { padding-bottom: 0; }
+.freeze .btn { margin-top: 10px; }
+
+/* Was die Sperre festhält, ist ausgegraut — die eigentliche Sperre steht im
+   Code (siehe gesperrt() in ui/einstellungen.js). */
+input:disabled { opacity: .5; cursor: not-allowed; }
+.seg.gesperrt { opacity: .5; pointer-events: none; }
+
 /* ===========================================================================
    Tablet / Desktop.
 
    Steht am Dateiende, und das ist kein Stil, sondern Bedingung: eine Media
    Query erhöht die Spezifität nicht. Bei gleicher Spezifität entscheidet die
-   Reihenfolge — von oben aus verloren `.hero`, `.hero-num`, `.qb` und
-   `.savebar .inner` gegen ihre eigenen Basis-Regeln weiter unten und waren
-   wirkungslos. Wer hier etwas ergänzt, dessen Selektor auch oben vorkommt,
+   Reihenfolge — von oben aus verloren `.qb`, `.kpis` und `.savebar .inner`
+   gegen ihre eigenen Basis-Regeln weiter unten und waren wirkungslos. Wer hier etwas ergänzt, dessen Selektor auch oben vorkommt,
    muss den Block unten lassen.
    =========================================================================== */
   @media (min-width: 820px) {
@@ -462,16 +509,18 @@
       grid-auto-flow: dense;
       align-items: start;
     }
-    /* Eintrag: Hero und Einträge-Karte (letzte) volle Breite */
-    #page-eintrag > .card.hero,
-    #page-eintrag > .card:last-of-type { grid-column: 1 / -1; }
+    /* Eintrag: die Warnkarte über beide Spalten, Schnelleintrag und Einträge
+       nebeneinander — beide werden gleichzeitig benutzt. */
+    #page-eintrag > .card.escalation { grid-column: 1 / -1; }
     /* Dashboard: Status, Zeitraum, Hauptcharts und Details über die volle Breite.
        Über die IDs, nicht über :nth-child() — eine eingeschobene Karte hat die
        Positionen sonst stillschweigend um eins verschoben. */
     #page-dashboard > #cardJetzt,
+    #page-dashboard > #cardOrgasmus,
     #page-dashboard > #cardZeitraum,
     #page-dashboard > #cardVerlauf,
     #page-dashboard > #cardModelle,
+    #page-dashboard > #cardOrgasmusVerlauf,
     #page-dashboard > #cardKalender,
     #page-dashboard > .collapse-toggle,
     #page-dashboard > #detailsSection { grid-column: 1 / -1; }
@@ -482,13 +531,13 @@
     #page-daten { max-width: 600px; margin: 0 auto; }
     /* Savebar mit App breit halten */
     .savebar .inner { max-width: 1080px; }
-    /* Hero etwas größer */
-    .hero { padding: 22px 24px 18px; }
-    .hero-num { font-size: 64px; }
     /* Schnelleintrag: Buttons größer auf Desktop */
     .qb { padding: 22px 8px; font-size: 17px; }
     /* Die vier Zähler passen hier nebeneinander */
     .streak-row { grid-template-columns: repeat(4, 1fr); }
+    .kpis.vier { grid-template-columns: repeat(4, 1fr); }
+    /* Ebene und Blättern nebeneinander statt untereinander */
+    #cardZeitraum .zr-nav { margin-top: 12px; }
   }
   @media (min-width: 1200px) {
     .app { max-width: 1280px; }

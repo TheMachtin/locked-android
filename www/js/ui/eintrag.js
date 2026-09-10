@@ -1,28 +1,33 @@
 /**
  * Eintrag-Seite: der Bildschirm, der im Alltag benutzt wird.
  *
- * Oben steht, was der Tag bisher gebracht hat und woraus sich das zusammensetzt —
- * die Aufschlüsselung kommt direkt aus `scoreDay()`, damit Anzeige und Rechnung
- * nicht auseinanderlaufen können. Darunter die Schnelltasten, die sich aus der
- * Modell-Registry aufbauen: ein neuer Käfig erscheint hier, sobald er in den
- * Einstellungen angelegt ist.
+ * Er beantwortet genau zwei Fragen: *was trage ich ein* und *was steht heute
+ * schon drin*. Deshalb steht der Schnelleintrag ganz oben und darunter die
+ * Einträge des gewählten Tages, sonst nichts. Der laufende Zustand — Modell,
+ * die vier Uhren, Preis, Konto, Form — stand hier einmal zusätzlich und war
+ * damit ein zweites Dashboard; er steht jetzt nur noch dort, in der Karte
+ * „Jetzt", und kommt in beiden Fällen aus `ui/status.js`.
+ *
+ * Geblieben ist das Tagesergebnis, aber als Fußzeile der Einträge: die Zahl
+ * gehört zu dem, was darüber steht, und ihre Aufschlüsselung kommt direkt aus
+ * `scoreDay()` — Anzeige und Rechnung können so nicht auseinanderlaufen.
  */
 
 import { STATE, calc, mutate, withUndo, settings as getSettings } from '../state.js';
 import { showToast } from './toast.js';
 import {
-  fmtInt, fmtNum, fmtSigned, fmtDateShort, fmtDurationShort, fmtAgo, fmtCountdownHM,
-  fmtCountdownDH, escapeHtml, weekdayOf, refTimeFor, MONTHS_DE,
+  fmtInt, fmtNum, fmtSigned, fmtDateShort, fmtDurationShort,
+  fmtCountdownHM, fmtCountdownDH, escapeHtml, weekdayOf,
 } from './format.js';
 import { dayTimeline } from './charts.js';
-import { isoOf, isoDateAdd, hmOf, eventMs } from '../core/time.js';
-import { currentOrgasmPrice, regenState, expiredRegenEvents } from '../core/calc.js';
+import { isoOf, isoDateAdd, hmOf } from '../core/time.js';
+import { regenState, expiredRegenEvents } from '../core/calc.js';
 import { resolveModel, modelMap, KIND_ORGASM } from '../core/settings.js';
 import { pendingEscalation, escalationEvents } from '../core/escalation.js';
-import { statusContext, currentModelHtml, statusRowHtml } from './status.js';
 
 const $ = id => document.getElementById(id);
 let gewaehltesDatum = isoOf(new Date());
+let aufschluesselungOffen = false;
 let onNachEintrag = () => {};
 
 export function setDate(iso) { gewaehltesDatum = iso; }
@@ -105,14 +110,35 @@ export function addEvent(typ, zeit) {
     data.events.push({ date: gewaehltesDatum, time: zeit, type: typ });
     data.events.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   });
+  // Auf einem anderen Tag als heute muss die Meldung das Datum nennen: die
+  // Tasten stehen über der Datumswahl, und ein stiller Eintrag auf den Vortag
+  // fällt erst Tage später auf.
+  const wo = gewaehltesDatum === heute() ? '' : ` am ${fmtDateShort(gewaehltesDatum)}`;
   if (m.kind === KIND_ORGASM) {
     const heutige = calc().byDate[gewaehltesDatum];
     const letzter = heutige && heutige.orgasmen[heutige.orgasmen.length - 1];
-    showToast(letzter ? `${m.label} — ${fmtInt(letzter.price)} Punkte` : m.label, true);
+    showToast(letzter ? `${m.label}${wo} — ${fmtInt(letzter.price)} Punkte` : m.label + wo, true);
   } else {
-    showToast(`${m.label} ${zeit}`);
+    showToast(`${m.label} ${zeit}${wo}`);
   }
   onNachEintrag();
+}
+
+/**
+ * Der Hinweis über den Tasten, wenn ein anderer Tag als heute gewählt ist.
+ *
+ * Die Reihenfolge auf der Seite macht ihn nötig: die Tasten stehen oben, die
+ * Datumswahl darunter. Ohne die Warnung landet ein Eintrag stillschweigend auf
+ * dem Tag, den man vorhin zum Nachsehen ausgewählt hat.
+ */
+function renderQuickHinweis() {
+  const anders = gewaehltesDatum !== heute();
+  $('quickDatumHinweis').classList.toggle('hide', !anders);
+  $('quickSub').textContent = anders ? 'auf einen anderen Tag' : 'jetzt';
+  if (anders) {
+    $('quickDatumText').innerHTML =
+      `Trägt auf <b>${weekdayOf(gewaehltesDatum)}, ${fmtDateShort(gewaehltesDatum)}</b> ein — mit der Uhrzeit von jetzt.`;
+  }
 }
 
 // =========================== REGENERATION ===========================
@@ -154,64 +180,42 @@ export function processExpiredRegens() {
   return true;
 }
 
-// =========================== HERO ===========================
-function renderHero() {
+// =========================== TAG UND ERGEBNIS ===========================
+function renderTagKopf() {
   const iso = gewaehltesDatum;
-  const { days, byDate, totals } = calc();
-  const s = getSettings();
-  const d = byDate[iso];
-
   $('datum').value = iso;
   $('wochentag').textContent = weekdayOf(iso);
+  $('evDateLabel').textContent = fmtDateShort(iso);
   document.querySelectorAll('#datePills .pill').forEach(p => {
     p.classList.toggle('active', isoDateAdd(heute(), parseInt(p.dataset.offset, 10)) === iso);
   });
-
-  // Aktuelles Modell und die vier Uhren — derselbe Block wie im Dashboard.
-  const ctx = statusContext(iso, { days, byDate, settings: s, events: STATE.data.events });
-  $('currentModel').innerHTML = currentModelHtml(ctx);
-
-  // Tageszahl
-  const netto = d && d.zaehlt ? d.netto : 0;
-  const num = $('heroNum');
-  num.textContent = fmtSigned(netto);
-  num.classList.toggle('neg', netto < 0);
-  num.classList.toggle('zero', netto === 0);
-  $('heroLabel').textContent = d && !d.zaehlt ? 'vor dem Stichtag' : 'Punkte heute';
-
-  $('heroBreakdown').innerHTML = d ? breakdownHtml(d, s) : '';
-
-  // Konto und Form. Beide Kästen zeigen unter der Zahl, wie sie sich an diesem
-  // Tag bewegt hat — beim Konto stand dort bisher nichts, und ohne den Zusatz
-  // ließ sich einem Kontostand von 1.240 nicht ansehen, ob er heute gestiegen
-  // oder gefallen ist.
-  const gestern = byDate[isoDateAdd(iso, -1)];
-  const kontoDelta = d ? (gestern ? d.konto - gestern.konto : d.netto) : 0;
-  const formDelta = d && gestern ? d.form - gestern.form : (d ? d.form : 0);
-  const wann = iso === heute() ? 'heute' : fmtDateShort(iso);
-  $('kontoRow').innerHTML = `
-    <div class="konto-box">
-      <div class="v ${(d ? d.konto : totals.konto) < 0 ? 'neg' : ''}">${fmtInt(d ? d.konto : totals.konto)}</div>
-      <div class="l">Kontostand</div>
-      ${trendHtml(kontoDelta, wann)}
-    </div>
-    <div class="konto-box">
-      <div class="v">${fmtInt(d ? d.form : totals.form)}</div>
-      <div class="l">Form</div>
-      ${trendHtml(formDelta, wann)}
-    </div>`;
-
-  $('streakRow').innerHTML = statusRowHtml(ctx);
-  renderPreis(s);
 }
 
-/** Die Veränderung unter einer Zahl. Null ist eine eigene Aussage, kein Pfeil. */
-function trendHtml(delta, wann) {
-  const gerundet = Math.abs(delta) < 0.5 ? 0 : delta;
-  const klasse = gerundet > 0 ? 'up' : gerundet < 0 ? 'down' : 'flat';
-  const pfeil = gerundet > 0 ? '▲ ' : gerundet < 0 ? '▼ ' : '';
-  const wert = gerundet === 0 ? '±0' : fmtSigned(gerundet);
-  return `<div class="trend ${klasse}" title="Veränderung ${wann}">${pfeil}${wert} ${wann}</div>`;
+/**
+ * Die Fußzeile der Einträge: eine Zahl, die Aufschlüsselung auf Klick.
+ *
+ * Sie war einmal die große Zahl über der halben Seite. Was sie sagt, ändert
+ * sich dadurch nicht — nur, dass sie jetzt bei dem steht, woraus sie entsteht.
+ */
+function renderTagesergebnis() {
+  const { byDate } = calc();
+  const s = getSettings();
+  const d = byDate[gewaehltesDatum];
+  const netto = d && d.zaehlt ? d.netto : 0;
+
+  const num = $('dayResultNum');
+  num.textContent = d ? fmtSigned(netto) : '—';
+  num.classList.toggle('neg', !!d && netto < 0);
+  num.classList.toggle('zero', !d || netto === 0);
+  $('dayResultLabel').textContent = d && !d.zaehlt ? 'vor dem Stichtag' : 'Tagesergebnis';
+
+  const html = d ? breakdownHtml(d, s) : '';
+  const box = $('dayBreakdown');
+  box.innerHTML = html;
+  const zeigbar = !!html;
+  $('dayResult').classList.toggle('leer', !zeigbar);
+  box.classList.toggle('hide', !(zeigbar && aufschluesselungOffen));
+  $('dayResultChev').textContent = zeigbar && aufschluesselungOffen ? '▴' : '▾';
 }
 
 /** Die Aufschlüsselung des Tages, Zeile für Zeile. */
@@ -265,58 +269,6 @@ function zeile(label, betrag, klasse) {
   return `<div class="row ${klasse}"><span>${label}</span><b>${fmtSigned(betrag, Math.abs(betrag) < 10 ? 1 : 0)}</b></div>`;
 }
 
-/** Das Preisschild — die zentrale Zahl des Modells gehört sichtbar in die App. */
-function renderPreis(s) {
-  const box = $('preisBox');
-  const p = currentOrgasmPrice(STATE.data, s, refTimeFor(gewaehltesDatum).getTime());
-  if (!p) { box.classList.add('hide'); return; }
-  box.classList.remove('hide');
-  const warte = isFinite(p.abstandTage)
-    ? `${fmtNum(p.abstandTage, 1)} Tage seit dem letzten`
-    : 'noch keiner erfasst';
-  box.innerHTML = `<div><div class="l">${escapeHtml(p.model.label)} kostet gerade</div>
-    <div class="l" style="opacity:.8">${warte}</div></div><div class="v">−${fmtInt(p.price)}</div>`;
-}
-
-// =========================== ORGASMUS-ZÄHLER ===========================
-function renderOrgasmCounter() {
-  const s = getSettings();
-  const map = modelMap(s);
-  const iso = gewaehltesDatum;
-  const refMs = refTimeFor(iso).getTime();
-  const alle = (STATE.data.events || [])
-    .filter(e => resolveModel(s, map, e.type).kind === KIND_ORGASM)
-    .map(e => ({ e, t: eventMs(e) }))
-    .filter(x => isFinite(x.t) && x.t <= refMs)
-    .sort((a, b) => a.t - b.t);
-
-  const monat = iso.slice(0, 7);
-  const letzter = alle[alle.length - 1] || null;
-  const fenster = tage => alle.filter(x => x.t >= refMs - tage * 86400000).length;
-  const avgGap = alle.length >= 2 ? (letzter.t - alle[0].t) / (alle.length - 1) : null;
-
-  const kachel = (v, l) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
-  $('orgCounter').innerHTML =
-      kachel(fmtInt(alle.filter(x => x.e.date.startsWith(monat)).length), MONTHS_DE[parseInt(monat.slice(5), 10) - 1])
-    + kachel(fmtInt(fenster(30)), 'letzte 30 T')
-    + kachel(fmtInt(fenster(90)), 'letzte 90 T')
-    + kachel(fmtInt(fenster(365)), 'letzte 365 T')
-    + kachel(letzter ? fmtDurationShort(refMs - letzter.t) : '—', 'seit letztem')
-    + kachel(avgGap != null ? fmtNum(avgGap / 86400000, 1) + ' T' : '—', 'Ø Abstand');
-
-  const amTag = alle.filter(x => x.e.date === iso).length;
-  const istHeute = iso === heute();
-  $('orgSub').textContent = amTag > 0
-    ? `${amTag}× ${istHeute ? 'heute' : 'am ' + fmtDateShort(iso)}`
-    : (istHeute ? 'heute keiner' : 'keiner am ' + fmtDateShort(iso));
-
-  const auto = alle.filter(x => x.e.auto_inactivity).length;
-  $('orgLast').innerHTML = letzter
-    ? `Letzter: <b>${fmtDateShort(letzter.e.date)} ${letzter.e.time}</b> (${fmtAgo(refMs - letzter.t)})`
-      + (auto ? ` · ${auto} automatisch (Inaktivität)` : '')
-    : 'Noch kein Orgasmus erfasst.';
-}
-
 // =========================== EINTRÄGE ===========================
 function renderEvents() {
   const s = getSettings();
@@ -325,7 +277,6 @@ function renderEvents() {
   const { byDate } = calc();
   const d = byDate[iso];
   const wrap = $('events');
-  $('evDateLabel').textContent = fmtDateShort(iso);
 
   const evs = (STATE.data.events || []).filter(e => e.date === iso)
     .sort((a, b) => String(a.time).localeCompare(String(b.time)));
@@ -425,6 +376,14 @@ export function initEintrag() {
       render();
     });
   });
+  $('quickHeute').addEventListener('click', () => {
+    gewaehltesDatum = heute();
+    render();
+  });
+  $('dayResult').addEventListener('click', () => {
+    aufschluesselungOffen = !aufschluesselungOffen;
+    renderTagesergebnis();
+  });
   $('escalationApply').addEventListener('click', () => {
     const v = pendingEscalation(STATE.data, { settings: getSettings() });
     if (!v.faellig) return;
@@ -463,8 +422,9 @@ export function render() {
   const kennung = JSON.stringify(s.models.map(m => [m.id, m.label, m.color, m.archived, !!m.regen]));
   if (kennung !== letzteRegistry) { letzteRegistry = kennung; renderQuickButtons(); }
   else renderRegenButton();
+  renderQuickHinweis();
   renderEscalation();
-  renderHero();
-  renderOrgasmCounter();
+  renderTagKopf();
   renderEvents();
+  renderTagesergebnis();
 }

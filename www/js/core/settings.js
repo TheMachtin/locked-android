@@ -281,7 +281,61 @@ export function normalizeSettings(raw) {
   // dann hier, wenn er von Hand gesetzt wurde. Ein leeres Feld heißt „wieder
   // ableiten", nicht „ab dem Jahr null".
   if (ISO_DATUM.test(src.startedAt || '')) out.startedAt = src.startedAt;
+  // Die Sperre steht in den Einstellungen und wandert damit über OneDrive mit —
+  // am Gerät festgemacht wäre sie auf dem zweiten nicht vorhanden. Eine
+  // abgelaufene Sperre wird hier *nicht* entfernt: ob sie noch gilt, hängt von
+  // der Uhr ab (siehe isFrozen), und diese Funktion soll von der Uhrzeit
+  // unabhängig bleiben.
+  const fr = (src.freeze && typeof src.freeze === 'object') ? src.freeze : null;
+  if (fr) {
+    const bis = Date.parse(fr.until || '');
+    if (isFinite(bis)) {
+      out.freeze = { until: new Date(bis).toISOString() };
+      const seit = Date.parse(fr.since || '');
+      if (isFinite(seit)) out.freeze.since = new Date(seit).toISOString();
+    }
+  }
   return out;
+}
+
+// =========================== EINFROREN ===========================
+/**
+ * Punktesätze auf Zeit sperren.
+ *
+ * Ein Ziel ist keins, wenn man unterwegs die Sätze anheben kann: „2.000 Punkte
+ * bis Weihnachten" ist mit dem doppelten Stundensatz eine andere Aussage als
+ * mit dem einfachen, und die Zahl im Konto sagt einem nicht, welche von beiden
+ * gemeint war. Die Sperre nimmt genau das aus der Hand — auf eine selbst
+ * gewählte Frist, die sich verlängern, aber nicht verkürzen lässt.
+ *
+ * Gesperrt ist alles, was in die Punkte eingeht: die Sätze unter
+ * „Punktesätze", `FROZEN_MODEL_FIELDS` an den Modellen, ihr Verschluss-Zustand,
+ * neue Modelle, gelöschte Modelle und das Zurücksetzen auf Standard. Frei
+ * bleiben Namen, Farben, Archivieren, der Stichtag und die Inaktivitäts-Regeln:
+ * keines davon verschiebt, was eine verschlossene Stunde wert ist.
+ *
+ * Sie bindet den, der sie setzt, und hält keinen Dritten fern: die Datei liegt
+ * offen, und wer sie von Hand ändert, hebt sie auf. Innerhalb der App ist sie
+ * dicht — deshalb steht die Prüfung auch im Kern und nicht bloß am Eingabefeld.
+ */
+export const FROZEN_MODEL_FIELDS = ['rate', 'priceMin', 'priceMax', 'halflifeDays',
+  'repeatFactor', 'windowH', 'cooldownD'];
+
+/** Bis wann gesperrt ist — als ms, oder `null`, wenn nie gesperrt wurde. */
+export function freezeUntilMs(settings) {
+  const t = settings && settings.freeze ? Date.parse(settings.freeze.until || '') : NaN;
+  return isFinite(t) ? t : null;
+}
+
+/** Rest der Frist in ms. 0, wenn sie abgelaufen ist oder keine gesetzt war. */
+export function freezeRestMs(settings, now) {
+  const bis = freezeUntilMs(settings);
+  if (bis == null) return 0;
+  return Math.max(0, bis - (now ? now.getTime() : Date.now()));
+}
+
+export function isFrozen(settings, now) {
+  return freezeRestMs(settings, now) > 0;
 }
 
 /**
