@@ -6,8 +6,8 @@ ein Quellcode (`www/`), drei Hüllen.
 | Plattform | Bezug | Installation |
 |---|---|---|
 | Android | APK aus dem [neuesten Release](https://github.com/TheMachtin/locked-android/releases) | antippen → „Von unbekannter Quelle zulassen" |
-| Windows | `Locked-Setup-2.2.N.exe` aus demselben Release | ausführen; portable Variante liegt daneben |
-| Linux | `Locked-2.2.N.AppImage` | ausführbar machen und starten |
+| Windows | `Locked-Setup-2.3.N.exe` aus demselben Release | ausführen; portable Variante liegt daneben |
+| Linux | `Locked-2.3.N.AppImage` | ausführbar machen und starten |
 | Browser | <https://themachtin.github.io/locked-android/> | Edge/Chrome → „App installieren" |
 
 Alle Installationen teilen sich dieselbe OneDrive-Datei und führen parallele
@@ -127,8 +127,8 @@ also von allein jede Stunde, die der Käfig gebracht hätte.
 
 ### Zwei Uhren: „verschlossen" und „ungeöffnet"
 
-Auf der Eintrag-Seite stehen beide nebeneinander, und sie beantworten
-verschiedene Fragen. **Verschlossen** misst den Verschluss und läuft über
+Im Dashboard, im Block **Jetzt**, stehen beide nebeneinander, und sie
+beantworten verschiedene Fragen. **Verschlossen** misst den Verschluss und läuft über
 Modellwechsel und Reinigungen hinweg — wer zweimal täglich den Käfig tauscht,
 war trotzdem durchgehend zu. **Ungeöffnet** ist die strengere Frage: der
 zusammenhängende Lauf desselben Modells. Jeder Wechsel setzt sie zurück, eine
@@ -141,7 +141,7 @@ beiden ist genau das, was die Wechsel gekostet haben.
 
 Bezahlt wird die Strecke **je vollendetem Tag**, und ein Tag sind 24 Stunden ab
 dem Verschluss: `min(1 × Tage am Stück, 7)`, gutgeschrieben an dem Datum, an dem
-der Block abläuft. Beide Kacheln zählen deshalb auch in vollendeten
+der Block abläuft. Beide Kacheln zählen deshalb in vollendeten
 24-h-Abschnitten und nicht in Kalendertagen — dieselbe Einheit, in der bezahlt
 wird, und die einzige, die zu den Stunden daneben passt. („Orgasmusfrei" zählt
 weiter Kalendertage, weil der Multiplikator ein Tagesfaktor ist.)
@@ -173,23 +173,90 @@ sondern auch auf dem Knopf der Uhr, denn eine kurze ID, die zum Namen passt,
 *ist* dort das Kürzel. Eine selbst gesetzte ID wandert beim Umbenennen übrigens
 nicht mehr mit: sie steht in Adressen, die anderswo eingerichtet sind.
 
+### Punktesätze einfrieren
+
+Frei änderbare Sätze haben eine Lücke, die kein Rechenfehler ist: **ein Ziel ist
+keins, wenn man unterwegs die Sätze anheben kann.** „2.000 Punkte bis
+Weihnachten" ist mit dem doppelten Stundensatz eine andere Aussage als mit dem
+einfachen, und dem Kontostand sieht man am Ende nicht an, welche von beiden
+gemeint war.
+
+Unter **Regeln → Punktesätze** lässt sich deshalb eine Frist setzen. Sie läuft
+sichtbar herunter, **verlängern geht jederzeit, aufheben nicht** — eine Sperre,
+die sich zurückdrehen lässt, hält nichts fest. Gesperrt ist alles, was in die
+Punkte eingeht:
+
+| gesperrt | frei |
+|---|---|
+| die fünf Punktesätze (Zuschlag, Deckel, Streak, Form-Abklang) | Einträge — die App bleibt vollständig benutzbar |
+| Stundensätze, Verschluss-Zustände, Orgasmus-Preise, Regenerations-Fenster | Namen, Farben, IDs, Archivieren |
+| neue und gelöschte Modelle | der Stichtag |
+| „Auf Standard zurücksetzen" | die Inaktivitäts-Regeln |
+
+Die Registry gehört dazu, weil sie sonst der offene Weg daran vorbei wäre: ein
+neues Modell mit Satz 5 tut dasselbe wie ein erhöhter Punktesatz. Das
+Zurücksetzen ebenso — ein Klick, und alle Sätze stünden wieder frei da.
+
+Die Frist steht in den Einstellungen und wandert damit über OneDrive auf das
+andere Gerät. Geprüft wird sie im Kern (`isFrozen()`), nicht am Eingabefeld: die
+ausgegrauten Felder sind die Anzeige, die Abfrage vor jedem Schreibweg ist die
+Sperre. Was sie **nicht** ist: eine Kontrolle durch Dritte. Die Datei liegt
+offen, und wer sie von Hand ändert, hebt sie auf. Sie bindet den, der sie setzt.
+
 ## Was die Oberfläche zeigt
 
-**Eintrag und Dashboard zeigen denselben Stand.** Die vier Uhren — verschlossen,
-ungeöffnet, orgasmusfrei, Multiplikator —, das gerade getragene Modell und der
-aktuelle Orgasmus-Preis stehen auf beiden Seiten und kommen aus derselben Datei
-(`ui/status.js`). Der Eintrag-Tab zeigt sie für den gewählten Tag, das Dashboard
-in der Karte **Jetzt** für den Augenblick, unabhängig vom Jahresfilter daneben.
-Zwei eigene Fassungen desselben Blocks wären zwei Wahrheiten, und die Abweichung
-fiele erst auf, wenn eine davon falsch ist.
+**Jeder Tab beantwortet eine Frage.** Der Eintrag-Tab: *was trage ich ein, was
+steht heute schon drin*. Das Dashboard: *wie steht es*. Bis 2.2 stand der
+laufende Zustand — die vier Uhren, das getragene Modell, der Orgasmus-Preis,
+Konto und Form — auf **beiden** Seiten; der Eintrag-Tab war damit ein zweites
+Dashboard, durch das man scrollen musste, um an die Schnelltasten zu kommen.
+Jetzt steht er nur noch im Dashboard, in der Karte **Jetzt**.
+
+**Der Eintrag-Tab beginnt mit den Schnelltasten.** Darunter der gewählte Tag mit
+seinen Einträgen, und als Fußzeile das Tagesergebnis — eine Zeile, die sich zur
+vollen Aufschlüsselung öffnet (Stunden × Satz, Zuschläge, Orgasmuspreise, Summe).
+Weil die Tasten jetzt *über* der Datumswahl stehen, warnt die Karte sichtbar,
+sobald ein anderer Tag als heute eingestellt ist: ohne das landete ein Eintrag
+stillschweigend auf dem Tag, den man vorhin zum Nachsehen ausgewählt hat.
+
+**Der Statusblock hat nur eine Fassung.** Die vier Uhren, das Modell und der
+Preis kommen aus `ui/status.js` — dieselbe Datei, aus der auch die Live-Ansicht
+(`jetzt.html`) baut. Zwei eigene Fassungen desselben Blocks wären zwei
+Wahrheiten, und die Abweichung fiele erst auf, wenn eine davon falsch ist.
+
+**Der Zeitraum hat eine Ebene und einen Anker.** Statt einer Reihe von
+Jahreszahlen, die mit jedem Jahr länger wird, wählt man **Alles · Jahr · Quartal
+· Monat** und blättert mit ‹ › durch. Zwei Klicks reichen damit von „alles" bis
+„März 2025", und die Frage „wie läuft dieser Monat" ist überhaupt erst
+beantwortbar. Die Pfeile sperren am Rand der erfassten Spanne — steht die
+Auswahl außerhalb, bleibt der Weg zurück offen, sonst klemmte sie in einem
+leeren Monat fest. Wird die Ebene feiner, bleibt der Zeitpunkt: von „2026" auf
+„Quartal" ist das laufende Quartal gemeint, nicht Q1. Im selben Block steht die
+**Auflösung** (Monat/Woche/Tag), und sie gilt für alle Diagramme darunter statt
+nur für eines; beim Wechsel der Ebene zieht sie sinnvoll mit.
+
+**Dieselbe Form, andere Kennzahl.** Das Balkendiagramm *Je Zeitraum* zeigt
+wahlweise Punkte, verschlossene Stunden oder Orgasmen — ein Klick auf einen
+Balken springt in den Eintrag-Tab dieses Tages. Dazu kommen die gestapelte
+Tragezeit in den Modellfarben (der Donut zeigt die Aufteilung des Zeitraums, die
+Balken die Verschiebung darin), *Orgasmen im Verlauf* mit der Anzahl als Balken
+und dem durchschnittlichen Abstand als Linie auf eigener Achse, und unter
+„Details" das Muster nach Uhrzeit. Alle teilen sich eine Zusammenfassung
+(`aggregatePeriods()`) — drei eigene Fassungen davon entwickelten früher oder
+später drei Vorstellungen davon, was ein Monat ist.
 
 **Unter jeder Zahl steht, worauf sie sich bezieht.** Ein Durchschnitt ohne
 Nenner ist keine Auskunft: an der Kachel steht deshalb, durch wie viele
-Kalendertage geteilt wurde. Konto und Form laufen bewusst über die ganze
-Historie, auch wenn der Jahresfilter etwas anderes zeigt — dann sagen sie es.
-Kontostand und Form tragen beide darunter, wie sie sich an diesem Tag bewegt
-haben; einem Konto von 1.240 sieht man sonst nicht an, ob es heute gestiegen
-oder gefallen ist.
+Kalendertage geteilt wurde. Drei Blöcke stehen bewusst *außerhalb* des
+Zeitraums, weil sie Fragen an die Gegenwart beantworten: **Jetzt**, der
+**Orgasmus-Zähler** (laufender Monat, letzte 30 und 90 Tage, Zeit seit dem
+letzten) und die Kacheln Konto und Form. Wo eine Kachel so von ihrem Ausschnitt
+abweicht, sagt sie es in ihrer Unterzeile.
+
+**Die Regeln-Seite klappt zu.** Erklärtext, Punktesätze, Stichtag, Inaktivität
+und Zurücksetzen sind einklappbare Karten, und jede trägt im zugeklappten
+Zustand ihre Kernaussage in der Kopfzeile — „ab 14.05.26", „Erinnerung 2 T ·
+Vorschläge 4 T", „🔒 bis 10.10.26". Der Zustand bleibt je Karte gemerkt.
 
 **Die Farbskala des Kalenders kommt aus den eigenen Sätzen.** Feste Schwellen
 („++ ab 25 Punkten") messen an einem Maßstab, den die Datei gar nicht kennt: wer
@@ -624,8 +691,10 @@ www/
     sync/             auth.js · onedrive.js · files.js
       paths.js        wo die Dateien in OneDrive liegen (einstellbar)
     ui/               eintrag · dashboard · einstellungen · daten · charts
-      status.js       der laufende Zustand, den beide Seiten zeigen
+      status.js       der laufende Zustand — Dashboard und Live-Ansicht
       jetzt.js        derselbe Block, aus einem Paket statt aus der Historie
+      zeitraum.js     Ebene, Anker, Blättern — ohne DOM, deshalb testbar
+      collapse.js     einklappbare Karten, Zustand gemerkt
     state.js          zentraler Zustand, alle Änderungen über mutate()
     jetzt-view.js     was die Live-Ansicht tut: holen, ticken, zeichnen
     platform.js       Android / Desktop / Web an einer Stelle
@@ -641,7 +710,7 @@ Keine Build-Kette, kein Framework: ES-Module, die der Browser direkt lädt.
 Derselbe Ordner geht unverändert in die APK, in den Installer und nach Pages.
 
 ```bash
-npm test          # 149 Tests, nur Node-Builtins
+npm test          # 166 Tests, nur Node-Builtins
 npm start         # Desktop-App lokal starten
 npm run build:win # Windows-Installer (auf Windows)
 npx serve www     # Web-Version lokal
@@ -697,7 +766,7 @@ Welche URI die laufende Installation sendet, steht in der App unter
 ## Build
 
 Jeder Push auf `main` löst drei Workflows aus, die dieselbe Versionsnummer
-berechnen (Commit-Anzahl → `2.2.N`) und sie über `scripts/bake-version.sh`
+berechnen (Commit-Anzahl → `2.3.N`) und sie über `scripts/bake-version.sh`
 eintragen — Handy, PC und Web zeigen nach einem Push also dieselbe Nummer:
 
 | Workflow | Ergebnis |

@@ -6,48 +6,129 @@
  * Tag ab und beantwortet „wie läuft es zuletzt" — sie hat einen Grenzwert und
  * bleibt dadurch über Jahre vergleichbar, während das Konto zwangsläufig wächst.
  *
+ * Drei Blöcke stehen bewusst *außerhalb* des Zeitraums: „Jetzt", der
+ * Orgasmus-Zähler und die beiden Kacheln Konto/Form. Sie beantworten Fragen an
+ * die Gegenwart, und die ändert sich nicht dadurch, dass man daneben 2025
+ * ausgewählt hat. Wo eine Kachel deshalb von ihrem Ausschnitt abweicht, sagt
+ * sie es in ihrer Unterzeile.
+ *
  * Ganz unten steht das Archiv der alten Ära, sofern die Datei eines enthält.
  */
 
 import { STATE, calc } from '../state.js';
-import { fmtInt, fmtNum, fmtSigned, fmtHours, fmtDateShort, fmtMonth, escapeHtml } from './format.js';
-import { nettoChart, verlaufChart, modellDonut, heatmap, heatScale, heatLegend, weekdayChart } from './charts.js';
+import {
+  fmtInt, fmtNum, fmtSigned, fmtHours, fmtDateShort, fmtDurationShort, fmtMonth,
+  escapeHtml, MONTHS_DE,
+} from './format.js';
+import {
+  metricChart, orgasmusChart, stundenStackChart, hourChart, verlaufChart,
+  modellDonut, heatmap, heatScale, heatLegend, weekdayChart, METRIKEN,
+} from './charts.js';
 import { emptyTotals, computeTotals, currentOrgasmPrice } from '../core/calc.js';
-import { todayIso } from '../core/settings.js';
+import { todayIso, resolveModel, modelMap, KIND_ORGASM } from '../core/settings.js';
+import { eventMs } from '../core/time.js';
 import { statusContext, currentModelHtml, statusRowHtml } from './status.js';
+import {
+  EBENEN, normalizeZeitraum, zeitraumMatch, zeitraumLabel, zeitraumText,
+  zeitraumShift, zeitraumRange, kannBlaettern, defaultSkala, ankerBeimWechsel,
+} from './zeitraum.js';
 
 const $ = id => document.getElementById(id);
-let jahrFilter = 'all';
+let zeitraum = normalizeZeitraum(null);
 let skala = 'month';
+let metrik = 'netto';
 let detailsOffen = false;
 let onDrilldown = () => {};
 
 export function setDrilldownHandler(fn) { onDrilldown = fn; }
 
-try { jahrFilter = localStorage.getItem('locked_dash_year') || 'all'; } catch {}
+// =========================== GEMERKTER STAND ===========================
+const LS_ZEITRAUM = 'locked_dash_zeitraum';
+const LS_SKALA    = 'locked_dash_skala';
+const LS_METRIK   = 'locked_dash_metrik';
 
-function passtZumJahr(d) { return jahrFilter === 'all' || d.date.startsWith(jahrFilter); }
+function ladeStand() {
+  try {
+    const roh = localStorage.getItem(LS_ZEITRAUM);
+    if (roh) zeitraum = normalizeZeitraum(JSON.parse(roh));
+    else {
+      // Der Vorgänger kannte nur Jahreszahlen. „2025" heißt jetzt Ebene Jahr
+      // mit Anker 2025 — dieselbe Auskunft, nur in der neuen Form.
+      const jahr = localStorage.getItem('locked_dash_year');
+      if (jahr && jahr !== 'all') zeitraum = normalizeZeitraum({ ebene: 'year', anker: `${jahr}-01-01` });
+    }
+    const sk = localStorage.getItem(LS_SKALA);
+    if (['month', 'week', 'day'].includes(sk)) skala = sk;
+    else skala = defaultSkala(zeitraum.ebene);
+    const me = localStorage.getItem(LS_METRIK);
+    if (METRIKEN.some(m => m.v === me)) metrik = me;
+  } catch {}
+}
+ladeStand();
 
-function renderJahrFilter(days) {
-  const jahre = [...new Set(days.filter(d => d.zaehlt).map(d => d.date.slice(0, 4)))].sort().reverse();
-  const opts = ['all', ...jahre];
-  if (!jahre.length || (jahrFilter !== 'all' && !jahre.includes(jahrFilter))) jahrFilter = 'all';
-  const seg = $('yearFilter');
-  seg.innerHTML = opts.map(y =>
-    `<div class="seg-opt ${y === jahrFilter ? 'active' : ''}" data-year="${y}">${y === 'all' ? 'Alle' : y}</div>`).join('');
-  seg.querySelectorAll('.seg-opt').forEach(o => o.addEventListener('click', () => {
-    jahrFilter = o.dataset.year;
-    try { localStorage.setItem('locked_dash_year', jahrFilter); } catch {}
-    render();
-  }));
+function merkeStand() {
+  try {
+    localStorage.setItem(LS_ZEITRAUM, JSON.stringify(zeitraum));
+    localStorage.setItem(LS_SKALA, skala);
+    localStorage.setItem(LS_METRIK, metrik);
+  } catch {}
 }
 
+// =========================== ZEITRAUM ===========================
+/** Die Spanne, über die es überhaupt etwas zu blättern gibt. */
+function grenzenVon(days) {
+  const gezaehlt = days.filter(d => d.zaehlt);
+  if (!gezaehlt.length) return null;
+  const heute = todayIso();
+  const bis = gezaehlt[gezaehlt.length - 1].date;
+  return { von: gezaehlt[0].date, bis: bis > heute ? bis : heute };
+}
+
+function renderZeitraum(days) {
+  const grenzen = grenzenVon(days);
+  $('zeitraumEbene').innerHTML = EBENEN.map(e =>
+    `<div class="seg-opt ${e.v === zeitraum.ebene ? 'active' : ''}" data-ebene="${e.v}">${e.l}</div>`).join('');
+  $('zeitraumEbene').querySelectorAll('.seg-opt').forEach(o => o.addEventListener('click', () => {
+    if (o.dataset.ebene === zeitraum.ebene) return;
+    zeitraum = normalizeZeitraum({
+      ebene: o.dataset.ebene,
+      anker: ankerBeimWechsel(zeitraum, o.dataset.ebene, todayIso()),
+    });
+    // Ein Monat in Monatsbalken wäre ein einzelner Balken. Die Auflösung zieht
+    // deshalb mit — verstellen kann man sie danach immer noch.
+    skala = defaultSkala(zeitraum.ebene);
+    merkeStand();
+    render();
+  }));
+
+  const nav = $('zeitraumNav');
+  nav.classList.toggle('hide', zeitraum.ebene === 'all');
+  $('zrLabel').textContent = zeitraumLabel(zeitraum);
+  for (const [id, dir] of [['zrPrev', -1], ['zrNext', 1]]) {
+    const btn = $(id);
+    btn.disabled = !kannBlaettern(zeitraum, dir, grenzen);
+    btn.onclick = () => {
+      if (!kannBlaettern(zeitraum, dir, grenzen)) return;
+      zeitraum = zeitraumShift(zeitraum, dir);
+      merkeStand();
+      render();
+    };
+  }
+
+  const r = zeitraumRange(zeitraum);
+  $('zeitraumSub').textContent = r ? `${fmtDateShort(r.von)} – ${fmtDateShort(r.bis)}` : 'die ganze Historie';
+
+  document.querySelectorAll('#chartScale .seg-opt').forEach(o =>
+    o.classList.toggle('active', o.dataset.scale === skala));
+}
+
+// =========================== SEITE ===========================
 export function render() {
   const { days, byDate, totals, settings, startedAt } = calc();
-  renderJahrFilter(days);
+  renderZeitraum(days);
 
-  const gefiltert = days.filter(passtZumJahr);
-  // Konto und Form laufen über die ganze Historie — ein Jahresfilter darf sie
+  const gefiltert = days.filter(d => zeitraumMatch(zeitraum, d.date));
+  // Konto und Form laufen über die ganze Historie — ein Ausschnitt darf sie
   // nicht zurücksetzen, sonst stünde im Januar ein leeres Konto da. Alles
   // andere zählt nur den sichtbaren Ausschnitt.
   const t = gefiltert.length ? computeTotals(gefiltert) : emptyTotals();
@@ -56,27 +137,33 @@ export function render() {
 
   // Unter jeder Kachel steht, worauf sich ihre Zahl bezieht. „Ø pro Tag" allein
   // beantwortet die Frage nicht, die man dabei hat — Durchschnitt wovon, geteilt
-  // durch welche Tage —, und bei einem Jahresfilter kommt dazu, dass Konto und
+  // durch welche Tage —, und bei einem Ausschnitt kommt dazu, dass Konto und
   // Form absichtlich über die ganze Historie laufen.
   const kachel = (v, l, sub) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div>`
     + (sub ? `<div class="l sub">${sub}</div>` : '')
     + '</div>';
   const abklang = fmtNum((1 - settings.points.formDecay) * 100, 0);
   const nenner = `÷ ${fmtInt(t.kalendertage)} ${t.kalendertage === 1 ? 'Kalendertag' : 'Kalendertage'}`;
-  const ganzeHistorie = jahrFilter !== 'all' ? 'ganze Historie · ' : '';
+  const ganzeHistorie = zeitraum.ebene !== 'all' ? 'ganze Historie · ' : '';
   $('dashKpis').innerHTML =
       kachel(fmtInt(totals.konto), 'Kontostand',
         ganzeHistorie + (startedAt ? 'seit ' + fmtDateShort(startedAt) : 'alles gezählt'))
     + kachel(fmtInt(totals.form), 'Form', ganzeHistorie + `klingt ${abklang} %/Tag ab`)
     + kachel(fmtNum(t.avgNetto, 1), 'Ø pro Tag', `Punkte ${nenner}`)
-    + kachel(fmtInt(t.stundenVerschlossen), 'Std verschlossen', zeitraumText())
+    + kachel(fmtInt(t.stundenVerschlossen), 'Std verschlossen', zeitraumText(zeitraum))
     + kachel(fmtNum(t.avgStdTag, 1), 'Ø Std/Tag', `verschlossen ${nenner}`)
-    + kachel(fmtInt(t.orgasmen), 'Orgasmen', t.orgasmKosten ? `−${fmtInt(t.orgasmKosten)} Punkte` : zeitraumText());
+    + kachel(fmtInt(t.orgasmen), 'Orgasmen', t.orgasmKosten ? `−${fmtInt(t.orgasmKosten)} Punkte` : zeitraumText(zeitraum));
 
   renderJetzt(days, byDate, settings);
+  renderOrgasmCounter(settings);
 
   $('verlaufChart').innerHTML = verlaufChart(gefiltert);
-  $('punkteChart').innerHTML = nettoChart(gefiltert, skala);
+
+  const m = METRIKEN.find(x => x.v === metrik) || METRIKEN[0];
+  $('metricSub').textContent = m.beschreibung;
+  document.querySelectorAll('#chartMetric .seg-opt').forEach(o =>
+    o.classList.toggle('active', o.dataset.metric === metrik));
+  $('punkteChart').innerHTML = metricChart(gefiltert, skala, metrik);
   $('punkteChart').querySelectorAll('.bar-clickable').forEach(r =>
     r.addEventListener('click', () => onDrilldown(datumAusSchluessel(r.dataset.key))));
 
@@ -89,6 +176,9 @@ export function render() {
     ? `<div class="small">Davor, in der alten Ära: ${fmtHours(alt.stundenVerschlossen)} verschlossen
        (${fmtDateShort(alt.von)}–${fmtDateShort(alt.bis)}).</div>`
     : '');
+  $('stundenStack').innerHTML = stundenStackChart(gefiltert, settings, skala);
+
+  $('orgasmusChart').innerHTML = orgasmusChart(gefiltert, skala);
 
   $('heatmap').innerHTML = heatmap(gefiltert, settings);
   $('heatmap').querySelectorAll('.hm-cell').forEach(c =>
@@ -96,22 +186,18 @@ export function render() {
   $('heatLegend').innerHTML = heatLegend(heatScale(settings), settings);
 
   renderArchiv();
-  if (detailsOffen) renderDetails(t);
-}
-
-function zeitraumText() {
-  return jahrFilter === 'all' ? 'seit dem Stichtag' : `im Jahr ${jahrFilter}`;
+  if (detailsOffen) renderDetails(t, gefiltert, settings);
 }
 
 // =========================== JETZT ===========================
 /**
- * Derselbe Statusblock wie im Eintrag-Tab.
+ * Der laufende Zustand: Modell, Preis, die vier Uhren.
  *
- * Er stand bisher nur dort, und damit hing die Antwort auf „wie lange läuft das
- * gerade" an der Seite zum Eintragen — im Rückblick, wo man die Zahlen
- * vergleicht, fehlte sie. Der Block kommt aus `status.js`, beide Seiten zeigen
- * deshalb zwangsläufig dasselbe. Der Jahresfilter gilt hier nicht: „jetzt" ist
- * jetzt, auch wenn daneben 2025 ausgewählt ist.
+ * Er stand einmal zusätzlich im Eintrag-Tab, und damit stand dieselbe Auskunft
+ * zweimal in der App — die Seite zum Eintragen war ein zweites Dashboard.
+ * Jetzt steht er nur hier. Der Block kommt aus `status.js`, die Live-Ansicht
+ * (`jetzt.html`) benutzt denselben Code. Der Zeitraum gilt hier nicht: „jetzt"
+ * ist jetzt, auch wenn daneben 2025 ausgewählt ist.
  */
 function renderJetzt(days, byDate, settings) {
   const iso = todayIso();
@@ -128,6 +214,51 @@ function renderJetzt(days, byDate, settings) {
     : 'noch keiner erfasst';
   box.innerHTML = `<div><div class="l">${escapeHtml(p.model.label)} kostet gerade</div>
     <div class="l" style="opacity:.8">${warte}</div></div><div class="v">−${fmtInt(p.price)}</div>`;
+}
+
+// =========================== ORGASMUS-ZÄHLER ===========================
+/**
+ * Vier rollende Fenster.
+ *
+ * Der Zähler stand im Eintrag-Tab und beantwortete dort eine Frage, die
+ * niemand beim Eintragen hat. Er gehört zum Rückblick — aber nicht zum
+ * Zeitraum daneben: „letzte 30 Tage" heißt immer die letzten 30 Tage, sonst
+ * stünde bei ausgewähltem 2025 eine 0 darin, die nichts bedeutet.
+ */
+function renderOrgasmCounter(s) {
+  const map = modelMap(s);
+  const jetzt = new Date();
+  const refMs = jetzt.getTime();
+  const alle = (STATE.data.events || [])
+    .filter(e => resolveModel(s, map, e.type).kind === KIND_ORGASM)
+    .map(e => ({ e, t: eventMs(e) }))
+    .filter(x => isFinite(x.t) && x.t <= refMs)
+    .sort((a, b) => a.t - b.t);
+
+  const monat = todayIso().slice(0, 7);
+  const letzter = alle[alle.length - 1] || null;
+  const fenster = tage => alle.filter(x => x.t >= refMs - tage * 86400000).length;
+  const avgGap = alle.length >= 2 ? (letzter.t - alle[0].t) / (alle.length - 1) : null;
+
+  const kachel = (v, l, sub) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div>`
+    + (sub ? `<div class="l sub">${sub}</div>` : '') + '</div>';
+  $('orgCounter').innerHTML =
+      kachel(fmtInt(alle.filter(x => x.e.date.startsWith(monat)).length),
+        MONTHS_DE[parseInt(monat.slice(5), 10) - 1], 'laufender Monat')
+    + kachel(fmtInt(fenster(30)), 'letzte 30 T')
+    + kachel(fmtInt(fenster(90)), 'letzte 90 T')
+    + kachel(letzter ? fmtDurationShort(refMs - letzter.t) : '—', 'seit letztem',
+        letzter ? `${fmtDateShort(letzter.e.date)} ${letzter.e.time}` : 'keiner erfasst');
+
+  // Die beiden längeren Maßstäbe stehen als Zeile statt als Kachel: sie
+  // beantworten dieselbe Frage eine Stufe gröber und sollen die vier Zahlen
+  // darüber nicht verdünnen.
+  const auto = alle.filter(x => x.e.auto_inactivity).length;
+  const teile = [`Letzte 365 Tage: <b>${fmtInt(fenster(365))}</b>`];
+  if (avgGap != null) teile.push(`Ø Abstand: <b>${fmtNum(avgGap / 86400000, 1)} T</b>`);
+  if (alle.length) teile.push(`erfasst: <b>${fmtInt(alle.length)}</b>`);
+  if (auto) teile.push(`${auto} automatisch (Inaktivität)`);
+  $('orgLast').innerHTML = alle.length ? teile.join(' · ') : 'Noch kein Orgasmus erfasst.';
 }
 
 function datumAusSchluessel(key) {
@@ -155,9 +286,9 @@ function renderArchiv() {
   card.classList.remove('hide');
   const zeile = (l1, v) => `<div class="row"><span>${l1}</span><b>${v}</b></div>`;
   // `bestUoStreak` heißt „ungeöffnet", meint aber die 1.x-Definition: *kein
-  // Eintrag an dem Tag*. Mit der Kachel „Ungeöffnet" auf der Eintrag-Seite hat
-  // das nichts zu tun — unter demselben Namen stünden zwei verschiedene Zahlen
-  // in derselben App. Das Feld in der Datei bleibt, die Zeile heißt anders.
+  // Eintrag an dem Tag*. Mit der Kachel „Ungeöffnet" im Block „Jetzt" hat das
+  // nichts zu tun — unter demselben Namen stünden zwei verschiedene Zahlen in
+  // derselben App. Das Feld in der Datei bleibt, die Zeile heißt anders.
   $('archivBody').innerHTML = `
     <div class="stamp">Formel 1.x · abgeschlossen</div>
     <div class="gross">${fmtInt(l.punkte)}</div>
@@ -176,7 +307,7 @@ function renderArchiv() {
 }
 
 // =========================== DETAILS ===========================
-function renderDetails(t) {
+function renderDetails(t, gefiltert, settings) {
   $('monthTable').innerHTML = t.monatlich.length
     ? `<table class="tbl"><thead><tr><th>Monat</th><th>Tage</th><th>Std</th><th>Ein</th><th>Aus</th><th>Netto</th></tr></thead><tbody>`
       + t.monatlich.slice().reverse().map(m => `<tr>
@@ -201,13 +332,18 @@ function renderDetails(t) {
     + r('Kosten gesamt', fmtInt(t.kosten));
 
   $('weekdayChart').innerHTML = weekdayChart(t.byWeekday);
+  $('hourChart').innerHTML = hourChart(gefiltert, settings);
 }
 
 export function initDashboard() {
   document.querySelectorAll('#chartScale .seg-opt').forEach(o => o.addEventListener('click', () => {
-    document.querySelectorAll('#chartScale .seg-opt').forEach(x => x.classList.remove('active'));
-    o.classList.add('active');
     skala = o.dataset.scale;
+    merkeStand();
+    render();
+  }));
+  document.querySelectorAll('#chartMetric .seg-opt').forEach(o => o.addEventListener('click', () => {
+    metrik = o.dataset.metric;
+    merkeStand();
     render();
   }));
   $('detailsToggle').addEventListener('click', () => {

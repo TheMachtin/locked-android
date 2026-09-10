@@ -29,6 +29,10 @@
   </div>
 
   <!-- ============ EINTRAG ============ -->
+  <!-- Nur was zum Eintragen gehört: die Tasten, der Tag, seine Einträge.
+       Der laufende Zustand (Modell, vier Uhren, Preis, Konto, Form) stand hier
+       einmal zusätzlich und war damit ein zweites Dashboard — er steht jetzt
+       nur noch dort, in der Karte „Jetzt". -->
   <div id="page-eintrag">
 
     <div class="card escalation hide" id="escalationCard">
@@ -40,8 +44,22 @@
       </div>
     </div>
 
-    <div class="card hero">
-      <div class="hero-top">
+    <div class="card" id="cardSchnell">
+      <h2>Schnelleintrag <span class="sub" id="quickSub">jetzt</span></h2>
+      <!-- Die Tasten stehen über der Datumswahl. Steht die nicht auf heute,
+           muss das hier stehen und nicht darunter: sonst landet der Eintrag
+           still auf dem Vortag. -->
+      <div class="datum-warnung hide" id="quickDatumHinweis">
+        <span id="quickDatumText"></span>
+        <button class="btn ghost" id="quickHeute" type="button">Auf heute</button>
+      </div>
+      <div class="quick" id="quick"></div>
+      <div class="legend">Taste <b style="color:var(--accent)">gedrückt halten</b> zum Speichern (~1s)</div>
+    </div>
+
+    <div class="card" id="cardEintraege">
+      <h2>Einträge am <span class="sub" id="evDateLabel"></span></h2>
+      <div class="datum-zeile">
         <input type="date" id="datum">
         <span class="wd" id="wochentag"></span>
       </div>
@@ -51,33 +69,17 @@
         <button class="pill" data-offset="-2" type="button">Vorgestern</button>
         <button class="pill" data-offset="-7" type="button">−7T</button>
       </div>
-      <div class="current-model" id="currentModel"></div>
-      <div class="hero-today">
-        <div class="hero-num" id="heroNum">—</div>
-        <div class="hero-label" id="heroLabel">Punkte heute</div>
-      </div>
-      <div id="heroBreakdown"></div>
-      <div class="konto-row" id="kontoRow"></div>
-      <div class="preis hide" id="preisBox"></div>
-      <div class="streak-row" id="streakRow"></div>
-    </div>
-
-    <div class="card">
-      <h2>Schnelleintrag — jetzt</h2>
-      <div class="quick" id="quick"></div>
-      <div class="legend">Taste <b style="color:var(--accent)">gedrückt halten</b> zum Speichern (~1s)</div>
-    </div>
-
-    <div class="card">
-      <h2>Orgasmus-Zähler <span class="sub" id="orgSub"></span></h2>
-      <div class="kpis" id="orgCounter"></div>
-      <div class="small" id="orgLast"></div>
-    </div>
-
-    <div class="card">
-      <h2>Einträge am <span class="sub" id="evDateLabel"></span></h2>
-      <div id="dayTimeline" style="margin-bottom:10px"></div>
+      <div id="dayTimeline" style="margin:14px 0 10px"></div>
       <div class="events" id="events"></div>
+      <!-- Das Tagesergebnis als Fußzeile der Einträge, nicht als eigene Bühne:
+           die Zahl gehört zu den Einträgen darüber, die Aufschlüsselung ist
+           einen Klick entfernt. -->
+      <button class="tagesergebnis" id="dayResult" type="button">
+        <span class="l" id="dayResultLabel">Tagesergebnis</span>
+        <span class="v" id="dayResultNum">—</span>
+        <span class="chev" id="dayResultChev">▾</span>
+      </button>
+      <div id="dayBreakdown" class="hide"></div>
     </div>
   </div>
 
@@ -89,10 +91,35 @@
       <div class="preis hide" id="jetztPreis"></div>
       <div class="streak-row" id="jetztStreaks"></div>
     </div>
-    <div class="card" id="cardZeitraum">
-      <h2>Zeitraum</h2>
-      <div class="seg" id="yearFilter"></div>
+
+    <!-- Rollende Fenster, kein Ausschnitt: „letzte 30 Tage" heißt hier immer
+         die letzten 30 Tage, auch wenn daneben 2025 eingestellt ist. -->
+    <div class="card" id="cardOrgasmus">
+      <h2>Orgasmus-Zähler <span class="sub">unabhängig vom Zeitraum</span></h2>
+      <div class="kpis vier" id="orgCounter"></div>
+      <div class="small" id="orgLast"></div>
     </div>
+
+    <div class="card" id="cardZeitraum">
+      <h2>Zeitraum <span class="sub" id="zeitraumSub"></span></h2>
+      <div class="seg" id="zeitraumEbene"></div>
+      <div class="zr-nav hide" id="zeitraumNav">
+        <button class="zr-arrow" id="zrPrev" type="button" aria-label="zurück">‹</button>
+        <div class="zr-label" id="zrLabel"></div>
+        <button class="zr-arrow" id="zrNext" type="button" aria-label="vor">›</button>
+      </div>
+      <!-- Die Auflösung steuert alle Zeitraum-Diagramme gemeinsam. Sie stand
+           früher an einem einzigen davon und galt trotzdem nur dort. -->
+      <div class="zr-aufloesung">
+        <span class="zr-titel">Auflösung</span>
+        <div class="seg" id="chartScale">
+          <div class="seg-opt" data-scale="month">Monat</div>
+          <div class="seg-opt" data-scale="week">Woche</div>
+          <div class="seg-opt" data-scale="day">Tag</div>
+        </div>
+      </div>
+    </div>
+
     <div class="card" id="cardUebersicht">
       <h2>Übersicht</h2>
       <div class="kpis" id="dashKpis"></div>
@@ -107,18 +134,25 @@
       </div>
     </div>
     <div class="card" id="cardErgebnis">
-      <h2>Ergebnis je Zeitraum</h2>
-      <div class="seg" id="chartScale" style="margin-bottom:12px">
-        <div class="seg-opt active" data-scale="month">Monat</div>
-        <div class="seg-opt" data-scale="week">Woche</div>
-        <div class="seg-opt" data-scale="day">Tag</div>
+      <h2>Je Zeitraum <span class="sub" id="metricSub"></span></h2>
+      <div class="seg" id="chartMetric" style="margin-bottom:12px">
+        <div class="seg-opt active" data-metric="netto">Punkte</div>
+        <div class="seg-opt" data-metric="stunden">Stunden</div>
+        <div class="seg-opt" data-metric="orgasmen">Orgasmen</div>
       </div>
       <div id="punkteChart"></div>
     </div>
     <div class="card" id="cardModelle">
-      <h2>Tragezeit je Modell</h2>
+      <h2>Tragezeit <span class="sub">Anteile und Verschiebung</span></h2>
       <div id="modellDonut" style="display:flex;justify-content:center;margin-bottom:8px"></div>
       <div id="modellList"></div>
+      <!-- Der Donut sagt, wie sich der ganze Zeitraum aufteilt; die gestapelten
+           Balken sagen, wann sich das verschoben hat. -->
+      <div id="stundenStack" style="margin-top:14px"></div>
+    </div>
+    <div class="card" id="cardOrgasmusVerlauf">
+      <h2>Orgasmen im Verlauf <span class="sub">Balken = Anzahl · Linie = Abstand</span></h2>
+      <div id="orgasmusChart"></div>
     </div>
     <div class="card" id="cardKalender">
       <h2>Kalender</h2>
@@ -138,13 +172,22 @@
       <div class="card"><h2>Monate</h2><div id="monthTable"></div></div>
       <div class="card"><h2>Rekorde</h2><div id="records"></div></div>
       <div class="card"><h2>Ergebnis nach Wochentag</h2><div id="weekdayChart"></div></div>
+      <div class="card">
+        <h2>Muster nach Uhrzeit <span class="sub">wann eingetragen wird</span></h2>
+        <div id="hourChart"></div>
+      </div>
     </div>
   </div>
 
   <!-- ============ REGELN ============ -->
+  <!-- Die Karten sind einklappbar (ui/collapse.js). Was zugeklappt startet,
+       steht in data-collapse-default — der lange Erklärtext und die Zahlenfelder
+       liest man einmal und dreht dann selten daran; die Modelle sind der Ort,
+       an dem tatsächlich gearbeitet wird. -->
   <div id="page-einstellungen" class="hide">
-    <div class="card">
+    <div class="card collapse" data-collapse="erklaerung" data-collapse-default="zu">
       <h2>So rechnet die App</h2>
+      <div class="collapse-body">
       <div class="small" style="margin-top:0">
         <b>Verschlossene Zeit verdient</b> — Stunden × Satz des getragenen Modells,
         dazu ein Bonus für einen ganz verschlossenen Tag, das Ganze mal einem
@@ -161,10 +204,12 @@
         Käfig ein Zuschlag, der mit der Strecke steigt und gedeckelt ist. Was einmal
         abgelaufen ist, bleibt: eine spätere Öffnung nimmt ihn nicht zurück.
       </div>
+      </div>
     </div>
 
-    <div class="card">
-      <h2>Modelle und Ereignisse</h2>
+    <div class="card collapse" data-collapse="modelle" data-collapse-default="auf">
+      <h2>Modelle und Ereignisse <span class="sub" id="modelleSub"></span></h2>
+      <div class="collapse-body">
       <div class="small" style="margin-top:0;margin-bottom:10px">
         Was du trägst und was du einträgst. Änderungen wirken sofort auf die
         ganze Historie — die Punkte sind abgeleitet, nicht gespeichert.
@@ -174,31 +219,42 @@
         <button class="btn ghost" id="btnNeuesModell" type="button">+ Modell</button>
         <button class="btn ghost" id="btnNeuesEreignis" type="button">+ Ereignis</button>
       </div>
+      </div>
     </div>
 
-    <div class="card">
-      <h2>Punktesätze</h2>
+    <div class="card collapse" data-collapse="punkte" data-collapse-default="zu">
+      <h2>Punktesätze <span class="sub" id="freezeBadge"></span></h2>
+      <div class="collapse-body">
+      <!-- Die Sperre steht über den Feldern, die sie sperrt. -->
+      <div id="freezeBox"></div>
       <div id="pointSettings"></div>
       <div style="height:12px"></div>
-      <h2>Was das bedeutet</h2>
+      <div class="unterkopf">Was das bedeutet</div>
       <div id="settingsPreview"></div>
+      </div>
     </div>
 
-    <div class="card">
-      <h2>Stichtag</h2>
-      <div id="stichtagBox"></div>
+    <div class="card collapse" data-collapse="stichtag" data-collapse-default="zu">
+      <h2>Stichtag <span class="sub" id="stichtagSub"></span></h2>
+      <div class="collapse-body">
+        <div id="stichtagBox"></div>
+      </div>
     </div>
 
-    <div class="card">
-      <h2>Inaktivität</h2>
-      <div id="ruleSettings"></div>
+    <div class="card collapse" data-collapse="inaktivitaet" data-collapse-default="zu">
+      <h2>Inaktivität <span class="sub" id="inaktivSub"></span></h2>
+      <div class="collapse-body">
+        <div id="ruleSettings"></div>
+      </div>
     </div>
 
-    <div class="card">
+    <div class="card collapse" data-collapse="reset" data-collapse-default="zu">
       <h2>Zurücksetzen</h2>
-      <div class="small" style="margin-top:0">Setzt Modelle und Sätze auf die Standardwerte. Einträge bleiben.</div>
-      <div style="height:10px"></div>
-      <button class="btn danger-outline full" id="btnResetSettings" type="button">Auf Standard zurücksetzen</button>
+      <div class="collapse-body">
+        <div class="small" style="margin-top:0">Setzt Modelle und Sätze auf die Standardwerte. Einträge bleiben.</div>
+        <div style="height:10px"></div>
+        <button class="btn danger-outline full" id="btnResetSettings" type="button">Auf Standard zurücksetzen</button>
+      </div>
     </div>
   </div>
 

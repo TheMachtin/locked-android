@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { heatScale, heatBand } from '../www/js/ui/charts.js';
+import { heatScale, heatBand, aggregatePeriods } from '../www/js/ui/charts.js';
 import { statusContext, statusItems } from '../www/js/ui/status.js';
 import { computeAll } from '../www/js/core/calc.js';
 import { normalizeSettings } from '../www/js/core/settings.js';
@@ -73,4 +73,55 @@ test('Statusblock: offen ist offen, auch mitten in einer Reinigung', () => {
   assert.equal(items[0].days, 0);
   assert.equal(items[0].since, 'gerade offen');
   assert.equal(items[1].since, 'gerade offen');
+});
+
+
+// =========================== JE ZEITRAUM ===========================
+test('Die Zusammenfassung je Zeitraum zählt dieselben Tage zusammen', () => {
+  const s = S();
+  const events = [
+    ev('2026-01-05', '08:00', 'HT'),
+    ev('2026-01-20', '09:00', 'KK'),
+    ev('2026-01-20', '21:00', 'OR'),
+    ev('2026-01-21', '07:00', 'NS'),
+    ev('2026-02-14', '21:00', 'OR'),
+  ];
+  const now = new Date('2026-02-20T12:00:00');
+  const { days } = computeAll({ events, settings: s }, { now });
+
+  const monate = aggregatePeriods(days, 'month');
+  assert.deepEqual(monate.map(m => m.key), ['2026-01', '2026-02']);
+  assert.equal(monate[0].orgasmen, 1);
+  assert.equal(monate[1].orgasmen, 1);
+  // Die Summe über alle Zeiträume ist die Summe über alle Tage — sonst fiele
+  // ein Tag zwischen zwei Balken heraus.
+  const summe = monate.reduce((a, m) => a + m.netto, 0);
+  const direkt = days.filter(d => d.zaehlt).reduce((a, d) => a + d.netto, 0);
+  assert.ok(Math.abs(summe - direkt) < 1e-9);
+  assert.equal(monate.reduce((a, m) => a + m.tage, 0), days.filter(d => d.zaehlt).length);
+});
+
+test('Der erste erfasste Orgasmus hat keinen Abstand und zieht keinen Schnitt herunter', () => {
+  const s = S();
+  const events = [
+    ev('2026-01-05', '08:00', 'HT'),
+    ev('2026-01-10', '21:00', 'OR'),   // der erste: Abstand unendlich
+    ev('2026-02-09', '21:00', 'OR'),   // 30 Tage später
+  ];
+  const { days } = computeAll({ events, settings: s }, { now: new Date('2026-02-20T12:00:00') });
+  const [jan, feb] = aggregatePeriods(days, 'month');
+  assert.equal(jan.abstand, null, 'ohne Vorgänger gibt es keinen Abstand zu mitteln');
+  assert.ok(Math.abs(feb.abstand - 30) < 0.01);
+});
+
+test('Wochen und Tage schneiden denselben Bestand anders auf', () => {
+  const s = S();
+  const events = [ev('2026-01-05', '08:00', 'HT'), ev('2026-01-20', '09:00', 'KK')];
+  const { days } = computeAll({ events, settings: s }, { now: new Date('2026-01-25T12:00:00') });
+  const tage = aggregatePeriods(days, 'day');
+  const wochen = aggregatePeriods(days, 'week');
+  assert.equal(tage.length, days.filter(d => d.zaehlt).length);
+  assert.ok(wochen.length < tage.length);
+  assert.equal(wochen.reduce((a, w) => a + w.tage, 0), tage.length);
+  assert.ok(wochen[0].label.startsWith('KW'));
 });

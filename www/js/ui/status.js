@@ -1,10 +1,11 @@
 /**
  * Der laufende Zustand: das getragene Modell und die vier Uhren daneben.
  *
- * Dieser Block steht an zwei Stellen — im Eintrag-Tab für den gewählten Tag,
- * im Dashboard für jetzt. Er liegt deshalb hier und nicht in einer der beiden
- * Seiten: zwei Fassungen desselben Blocks wären zwei Wahrheiten, und die
- * Abweichung fiele erst auf, wenn eine davon falsch ist.
+ * Dieser Block steht an zwei Stellen — im Dashboard in der Karte „Jetzt" und in
+ * der Live-Ansicht (`jetzt.html`), die ihn aus einem mitgegebenen Paket füllt.
+ * Er liegt deshalb hier und nicht in einer der beiden Seiten: zwei Fassungen
+ * desselben Blocks wären zwei Wahrheiten, und die Abweichung fiele erst auf,
+ * wenn eine davon falsch ist.
  *
  * Alles kommt über `statusContext()` herein, inklusive `now` — dieselbe Regel
  * wie im Rechenkern, damit sich beide Seiten reproduzierbar prüfen lassen.
