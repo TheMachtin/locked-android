@@ -344,10 +344,6 @@ async function start() {
   setInterval(() => {
     if (document.visibilityState === 'visible') markiereGesehen();
     if (aktiverTab === 'eintrag') eintrag.render();
-    // Eine laufende Sperre zählt herunter: auf der Regeln-Seite läuft die
-    // Restzeit mit und die Felder werden in der Minute frei, in der sie
-    // ausläuft — sonst stünde dort ein Schloss, das keins mehr ist.
-    else if (aktiverTab === 'einstellungen' && getSettings().freeze) einstellungen.render();
   }, 60000);
 
   // Drei Wege in den Vordergrund: Capacitor meldet es nativ am sichersten,

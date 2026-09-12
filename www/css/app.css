@@ -474,22 +474,9 @@
 .chart-legende-eintrag { display: inline-flex; align-items: center; gap: 5px; }
 .chart-legende-eintrag .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 
-/* Die Sperre über den Punktesätzen */
-.freeze { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
-  padding: 12px; margin-bottom: 14px; }
-.freeze.on { border-color: var(--warm); background: rgba(200,144,96,0.10); }
-.freeze .fz-kopf { display: flex; align-items: baseline; justify-content: space-between;
-  gap: 10px; flex-wrap: wrap; }
-.freeze .fz-titel { font-size: 14px; font-weight: 700; color: var(--text); }
-.freeze .fz-rest { font-size: 12px; color: var(--warm); font-weight: 600;
-  font-variant-numeric: tabular-nums; }
-.freeze .setting { padding-bottom: 0; }
-.freeze .btn { margin-top: 10px; }
-
-/* Was die Sperre festhält, ist ausgegraut — die eigentliche Sperre steht im
-   Code (siehe gesperrt() in ui/einstellungen.js). */
+/* Ein Eingabefeld, das gerade nichts annimmt — heute gibt es keines mehr, die
+   Regel bleibt als Grundlage stehen. */
 input:disabled { opacity: .5; cursor: not-allowed; }
-.seg.gesperrt { opacity: .5; pointer-events: none; }
 
 /* ===========================================================================
    Tablet / Desktop.
