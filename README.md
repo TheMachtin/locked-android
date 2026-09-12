@@ -177,12 +177,17 @@ nicht mehr mit: sie steht in Adressen, die anderswo eingerichtet sind.
 
 Ereignisse hatten lange genau eine Wirkung auf die orgasmusfreie Strecke: sie
 brachen sie. Das war richtig, solange „Ereignis" und „Orgasmus" dasselbe hießen
-— nur tun sie das nicht. Ein Samenerguss ohne Orgasmus, etwa durch Reizung von
-innen, ist beides nicht ganz: kein Orgasmus, den man verschwiegen hätte, aber
-auch kein Nichts, denn was sich angesammelt hatte, ist weg. Ihn als Orgasmus zu
-buchen hieße, eine Empfindung zu behaupten, die es nicht gab; ihn wegzulassen
-hieße, eine Strecke weiterzuzählen, die so nicht mehr stimmt. Für keine der
-beiden Unwahrheiten gab es vorher eine Alternative.
+— nur tun sie das nicht.
+
+Entscheidend ist, was die Strecke misst, und das ist nicht der Füllstand,
+sondern ein Zustand: verschlossen, ungelöst, durchgehend erregt. Dafür zahlt
+der Multiplikator, und diesen Zustand beendet der Orgasmus. Ein Samenerguss
+ohne Orgasmus beendet ihn nicht — die Ladung ist weg, die Erregung nicht, und
+sie kann danach größer sein als davor. Ihn als Orgasmus zu buchen hieße, eine
+Empfindung zu behaupten, die es nicht gab, und einen Zustand für beendet zu
+erklären, der weiterläuft; ihn wegzulassen hieße, ein Ereignis zu verschweigen,
+das stattgefunden hat. Für keine der beiden Unwahrheiten gab es vorher eine
+Alternative.
 
 Deshalb trägt jedes Ereignis jetzt neben seinem Preis einen zweiten Wert:
 **Rest der Strecke**, ein Faktor zwischen 0 und 1.
@@ -193,17 +198,30 @@ Deshalb trägt jedes Ereignis jetzt neben seinem Preis einen zweiten Wert:
 | **0,5** | die Hälfte bleibt stehen | mit Orgasmus | beginnt neu |
 | **1** | unberührt, wächst weiter | orgasmusfrei | zählt darüber hinweg |
 
-Eine Skala und kein Schalter, aus demselben Grund wie beim
-Ungeöffnet-Zuschlag: zwischen „zählt voll" und „zählt gar nicht" liegt der
-häufigere Fall, dass etwas verbraucht ist, aber nicht alles.
+Der Faktor fragt also nicht „wie viel ist verbraucht", sondern „wie viel von
+dem Zustand steht noch". Eine Skala und kein Schalter, aus demselben Grund wie
+beim Ungeöffnet-Zuschlag: dazwischen liegt der ruinierte Orgasmus, bei dem sich
+sehr wohl etwas löst, nur nicht ganz.
 
-Vier Eigenschaften, die dranhängen:
+Fünf Eigenschaften, die dranhängen:
 
-**Der Preis bleibt davon unberührt.** Die Strecke zu schonen heißt nicht, das
-Ereignis umsonst zu geben — es kostet weiter seinen Preis und steht in den
-Kosten des Tages. Für einen festen Betrag setzt man Minimum und Maximum gleich;
-die Wartezeitkurve, die für den Orgasmus gedacht ist, hat für ein Ereignis ohne
+**Preis und Faktor sind zwei Fragen, nicht eine.** Der Preis zahlt, was
+verloren ging; der Faktor sagt, was vom Zustand bleibt. Meist laufen sie
+zusammen, zwingend ist es nicht. Ein Ereignis, das den Zustand unangetastet
+lässt, darf Minimum und Maximum auf 0 setzen und ist dann ein reiner Vermerk:
+es steht in der Zeitleiste, unter dem Zähler und in der Datei und bewegt keine
+Zahl. Für jeden anderen festen Betrag setzt man beide gleich — die
+Wartezeitkurve, die für den Orgasmus gedacht ist, hat für ein Ereignis ohne
 eigene Wartezeit nichts zu sagen.
+
+**Ein Ereignis ohne Preis ist kein Schlupfloch.** Die naheliegende Sorge — was
+nichts kostet, tut man beliebig oft — greift hier nicht, weil es nichts
+abkürzt: verschlossene Stunden und die Strecke laufen weiter in echter Zeit,
+und bezahlt wird der durchgehaltene Zustand. Wird er dadurch sogar schwerer,
+zahlt der Multiplikator von allein mehr. Einen eigenen Bonus bekommt das
+Ereignis trotzdem nicht — der machte aus dem Eintrag eine Einnahmequelle und
+wiederholte damit den Fehler von 1.x, wo sich die günstigste Buchung von selbst
+aufdrängte.
 
 **Die Zähler heißen weiter nach dem, was sie zählen.** Die Kachel
 „Orgasmusfrei", die Balken „Orgasmen im Verlauf", der Zähler mit seinen vier

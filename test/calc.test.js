@@ -551,3 +551,31 @@ test('Kennzahlen trennen Orgasmen von Ereignissen, die keine sind', () => {
   assert.equal(totals.tageMitOrgasmus, 1, 'der 5. ist kein Tag mit Orgasmus');
   assert.ok(totals.orgasmKosten > 8, 'beide Preise stehen in den Kosten');
 });
+
+test('Ein Ereignis darf nichts kosten und bleibt trotzdem verzeichnet', () => {
+  // Der Vermerk: kein Orgasmus, kein Preis, keine verschobene Zahl — und
+  // trotzdem in der Datei, in den Kennzahlen und in der Zeitleiste des Tages.
+  const s = normalizeSettings({
+    models: [
+      { id: 'HT', kind: 'model', label: 'Käfig', rate: 0.5, locked: true },
+      { id: 'KK', kind: 'model', label: 'Offen', rate: -1, locked: false, isOpen: true },
+      { id: 'OR', kind: 'orgasm', label: 'Orgasmus', priceMin: 15, priceMax: 60 },
+      { id: 'EM', kind: 'orgasm', label: 'Erguss ohne Orgasmus',
+        priceMin: 0, priceMax: 0, streakFactor: 1 },
+    ],
+  });
+  const now = new Date('2026-03-13T00:00:00');
+  const ohne = computeAll({ events: [ev('2026-03-01', '00:00', 'HT')], settings: s }, { now });
+  const mit = computeAll({
+    events: [ev('2026-03-01', '00:00', 'HT'), ev('2026-03-09', '21:00', 'EM')], settings: s,
+  }, { now });
+
+  assert.equal(mit.totals.konto, ohne.totals.konto, 'am Konto ändert der Vermerk nichts');
+  assert.equal(mit.byDate['2026-03-09'].orgasmKosten, 0);
+  assert.equal(mit.byDate['2026-03-09'].orgasmusfrei, true);
+  // Verzeichnet ist er trotzdem — sonst wäre er nicht von „nicht eingetragen"
+  // zu unterscheiden.
+  assert.equal(mit.totals.sonstigeEreignisse, 1);
+  assert.equal(mit.totals.orgasmen, 0);
+  assert.equal(mit.byDate['2026-03-09'].events.length, 1);
+});

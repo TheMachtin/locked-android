@@ -274,12 +274,14 @@ function renderOrgasmCounter(s) {
  *
  * Die Kosten stehen für *alle* bepreisten Ereignisse, die Zahl darüber nur für
  * die Orgasmen — ohne den Zusatz stünde da ein Betrag, den die Zahl daneben
- * nicht erklärt.
+ * nicht erklärt. Die beiden Angaben hängen dabei nicht aneinander: ein Ereignis
+ * darf 0 kosten, und dann ist es das einzige, was hier noch zu sagen ist.
  */
 function orgasmSub(t, zeitraum) {
-  if (!t.orgasmKosten) return zeitraumText(zeitraum);
-  return `−${fmtInt(t.orgasmKosten)} Punkte`
-    + (t.sonstigeEreignisse ? ` · dazu ${fmtInt(t.sonstigeEreignisse)} ohne Bruch der Strecke` : '');
+  const teile = [];
+  if (t.orgasmKosten) teile.push(`−${fmtInt(t.orgasmKosten)} Punkte`);
+  if (t.sonstigeEreignisse) teile.push(`dazu ${fmtInt(t.sonstigeEreignisse)} ohne Bruch der Strecke`);
+  return teile.length ? teile.join(' · ') : zeitraumText(zeitraum);
 }
 
 function datumAusSchluessel(key) {

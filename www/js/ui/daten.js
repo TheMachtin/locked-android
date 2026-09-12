@@ -265,7 +265,9 @@ function renderShortcuts() {
   $('shortcutList').innerHTML = modelle.map(m => `<div class="sc-row">
       <span class="dot" style="background:${m.color}"></span>
       <div class="sc-name">${escapeHtml(m.label)}${m.kind === KIND_ORGASM
-        ? '<span class="sc-tag warn">kostet</span>'
+        // Die Warnung gilt dem Fehlgriff: eine Adresse trägt ohne Rückfrage
+        // ein. Ein Ereignis, das nichts kostet, hat aber auch nichts zu warnen.
+        ? (m.priceMax > 0 ? '<span class="sc-tag warn">kostet</span>' : '')
         : (imLauncher.has(m.id) ? '<span class="sc-tag">im Launcher</span>' : '')}${
         m.kind !== KIND_ORGASM && kurz[m.id] && kurz[m.id] !== m.id
           ? `<span class="sc-tag">Knopf ${escapeHtml(kurz[m.id])}</span>` : ''}</div>

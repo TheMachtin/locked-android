@@ -456,32 +456,42 @@ export function orgasmPrice(model, daysSinceLast, nth) {
  *
  * Bis hierher hatte ein Ereignis genau eine Wirkung auf die Strecke: null. Das
  * war richtig, solange „Ereignis" und „Orgasmus" dasselbe hießen. Sie tun es
- * nicht. Ein Samenerguss ohne Orgasmus — durch Reizung von innen, ohne das
- * Gefühl, auf das die Strecke zählt — ist beides nicht ganz: kein Orgasmus, den
- * man verschwiegen hätte, aber auch kein Nichts, denn was sich angesammelt
- * hatte, ist weg. Ihn als Orgasmus zu buchen, hieße eine Empfindung zu
- * behaupten, die es nicht gab; ihn wegzulassen, hieße eine Strecke
- * weiterzuzählen, die so nicht mehr stimmt. Beides ist eine Unwahrheit, und das
- * Programm hatte für keine der beiden eine dritte Möglichkeit.
+ * nicht.
  *
- * Der Faktor ist diese dritte Möglichkeit, und er ist bewusst eine Skala und
- * kein Schalter — aus demselben Grund, aus dem der Ungeöffnet-Zuschlag eine
- * geworden ist:
+ * Entscheidend ist, was die Strecke überhaupt misst, und das ist nicht der
+ * Füllstand, sondern ein Zustand: verschlossen, ungelöst, durchgehend erregt.
+ * Dafür zahlt der Multiplikator, und diesen Zustand beendet der Orgasmus. Ein
+ * Samenerguss ohne Orgasmus beendet ihn nicht — die Ladung ist weg, die
+ * Erregung nicht, und sie kann danach größer sein als davor. Ihn als Orgasmus
+ * zu buchen hieße, eine Empfindung zu behaupten, die es nicht gab, und einen
+ * Zustand für beendet zu erklären, der weiterläuft; ihn wegzulassen hieße, ein
+ * Ereignis zu verschweigen, das stattgefunden hat. Beides ist eine Unwahrheit,
+ * und das Programm hatte für keine der beiden eine dritte Möglichkeit.
+ *
+ * Der Faktor ist diese dritte Möglichkeit. Er fragt nicht „wie viel ist
+ * verbraucht", sondern „wie viel von dem Zustand steht noch" — und ist bewusst
+ * eine Skala und kein Schalter, aus demselben Grund, aus dem der
+ * Ungeöffnet-Zuschlag eine geworden ist:
  *
  * - `0` bricht die Strecke, wie es der Orgasmus immer getan hat. Das ist die
  *   Vorgabe, und deshalb ändert sich an keiner bestehenden Datei etwas.
  * - `1` lässt sie unberührt: der Tag bleibt orgasmusfrei, der Multiplikator
  *   wächst weiter, und für den Preisabstand des nächsten Orgasmus zählt das
- *   Ereignis nicht als der letzte. Es kostet trotzdem seinen Preis — die Strecke
- *   zu schonen heißt nicht, es umsonst zu geben.
- * - Dazwischen bleibt der Anteil stehen: `0,5` macht aus dreißig Tagen fünfzehn.
- *   Das ist der Fall, für den es die Skala gibt — etwas ist verbraucht, aber
- *   nicht alles.
+ *   Ereignis nicht als der letzte.
+ * - Dazwischen bleibt der Anteil stehen: `0,5` macht aus dreißig Tagen
+ *   fünfzehn. Dafür gibt es die Skala — der ruinierte Orgasmus etwa, bei dem
+ *   sich sehr wohl etwas löst, nur nicht ganz.
  *
- * Der Preis bleibt davon unberührt und wird weiter über `priceMin`/`priceMax`
- * eingestellt. Wer einen festen Betrag will, setzt beide gleich; die
- * Wartezeitkurve, die für den Orgasmus gedacht ist, hat für ein Ereignis ohne
- * eigene Wartezeit keine Aussage.
+ * Preis und Faktor sind zwei Fragen und nicht eine: der Preis zahlt, was
+ * verloren ging, der Faktor sagt, was vom Zustand bleibt. Sie laufen meist
+ * zusammen, müssen es aber nicht. Ein Ereignis, das den Zustand unangetastet
+ * lässt, darf `priceMin` = `priceMax` = 0 tragen und ist dann ein reiner
+ * Vermerk: er steht in der Zeitleiste, unter dem Zähler und in der Datei und
+ * bewegt keine Zahl. Ein Schlupfloch ist das nicht — es kürzt nichts ab, denn
+ * Stunden und Strecke laufen weiter in echter Zeit, und bezahlt wird der
+ * durchgehaltene Zustand. Einen Bonus bekommt es trotzdem nicht: der machte aus
+ * dem Eintrag eine Einnahmequelle und wiederholte den Fehler von 1.x, wo sich
+ * die günstigste Buchung von selbst aufdrängte.
  */
 export function brichtStrecke(model) {
   return !!model && model.kind === KIND_ORGASM && model.streakFactor < 1;
