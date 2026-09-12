@@ -14,7 +14,7 @@
 
 import { isoWeek } from '../core/time.js';
 import { fmtInt, fmtNum, fmtDateShort, escapeHtml, MONTHS_SHORT_DE as MON_KURZ } from './format.js';
-import { resolveModel, modelMap, KIND_ORGASM } from '../core/settings.js';
+import { resolveModel, modelMap, brichtStrecke, KIND_ORGASM } from '../core/settings.js';
 
 const leer = (txt) => `<div class="empty">${txt}</div>`;
 
@@ -64,8 +64,12 @@ export function aggregatePeriods(days, scale) {
     if (d.date > x.bis) x.bis = d.date;
     x.netto += d.netto; x.einnahmen += d.einnahmen; x.kosten += d.kosten;
     x.stunden += d.verschlossenH; x.offen += d.offenH; x.pause += d.pauseH;
-    x.orgasmen += d.orgasmen.length;
+    // Balken und Abstandslinie beantworten beide eine Frage nach Orgasmen.
+    // Ein Ereignis, das die Strecke nicht bricht, ist keiner und hat auch
+    // keinen Abstand zum vorigen, der hier etwas hieße.
     for (const o of d.orgasmen) {
+      if (!brichtStrecke(o.model)) continue;
+      x.orgasmen++;
       // Der erste erfasste Orgasmus hat keinen Abstand — ihn als 0 zu zählen
       // würde den Schnitt des ersten Zeitraums nach unten ziehen.
       if (isFinite(o.abstandTage)) { x.abstandSumme += o.abstandTage; x.abstandAnzahl++; }

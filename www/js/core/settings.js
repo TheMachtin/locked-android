@@ -175,6 +175,7 @@ function normalizeModel(raw, index, taken) {
     m.priceMax      = clamp(num(raw.priceMax, m.priceMin), m.priceMin, 100000);
     m.halflifeDays  = clamp(num(raw.halflifeDays, 7), 0.1, 3650);
     m.repeatFactor  = clamp(num(raw.repeatFactor, 1), 1, 100);
+    m.streakFactor  = clamp(num(raw.streakFactor, 0), 0, 1);
   }
   return m;
 }
@@ -319,7 +320,7 @@ export function normalizeSettings(raw) {
  * dicht — deshalb steht die Prüfung auch im Kern und nicht bloß am Eingabefeld.
  */
 export const FROZEN_MODEL_FIELDS = ['rate', 'priceMin', 'priceMax', 'halflifeDays',
-  'repeatFactor', 'windowH', 'cooldownD'];
+  'repeatFactor', 'streakFactor', 'windowH', 'cooldownD'];
 
 /** Bis wann gesperrt ist — als ms, oder `null`, wenn nie gesperrt wurde. */
 export function freezeUntilMs(settings) {
@@ -446,6 +447,44 @@ export function orgasmPrice(model, daysSinceLast, nth) {
     ? daysSinceLast : Infinity;
   const base = t === Infinity ? min : min + (max - min) * Math.pow(2, -t / hl);
   return base * Math.pow(model.repeatFactor, Math.max(0, (nth || 1) - 1));
+}
+
+/**
+ * Was ein Ereignis von der orgasmusfreien Strecke übrig lässt — `streakFactor`,
+ * und das ist die Antwort auf eine Frage, die das Modell vorher nicht stellen
+ * konnte.
+ *
+ * Bis hierher hatte ein Ereignis genau eine Wirkung auf die Strecke: null. Das
+ * war richtig, solange „Ereignis" und „Orgasmus" dasselbe hießen. Sie tun es
+ * nicht. Ein Samenerguss ohne Orgasmus — durch Reizung von innen, ohne das
+ * Gefühl, auf das die Strecke zählt — ist beides nicht ganz: kein Orgasmus, den
+ * man verschwiegen hätte, aber auch kein Nichts, denn was sich angesammelt
+ * hatte, ist weg. Ihn als Orgasmus zu buchen, hieße eine Empfindung zu
+ * behaupten, die es nicht gab; ihn wegzulassen, hieße eine Strecke
+ * weiterzuzählen, die so nicht mehr stimmt. Beides ist eine Unwahrheit, und das
+ * Programm hatte für keine der beiden eine dritte Möglichkeit.
+ *
+ * Der Faktor ist diese dritte Möglichkeit, und er ist bewusst eine Skala und
+ * kein Schalter — aus demselben Grund, aus dem der Ungeöffnet-Zuschlag eine
+ * geworden ist:
+ *
+ * - `0` bricht die Strecke, wie es der Orgasmus immer getan hat. Das ist die
+ *   Vorgabe, und deshalb ändert sich an keiner bestehenden Datei etwas.
+ * - `1` lässt sie unberührt: der Tag bleibt orgasmusfrei, der Multiplikator
+ *   wächst weiter, und für den Preisabstand des nächsten Orgasmus zählt das
+ *   Ereignis nicht als der letzte. Es kostet trotzdem seinen Preis — die Strecke
+ *   zu schonen heißt nicht, es umsonst zu geben.
+ * - Dazwischen bleibt der Anteil stehen: `0,5` macht aus dreißig Tagen fünfzehn.
+ *   Das ist der Fall, für den es die Skala gibt — etwas ist verbraucht, aber
+ *   nicht alles.
+ *
+ * Der Preis bleibt davon unberührt und wird weiter über `priceMin`/`priceMax`
+ * eingestellt. Wer einen festen Betrag will, setzt beide gleich; die
+ * Wartezeitkurve, die für den Orgasmus gedacht ist, hat für ein Ereignis ohne
+ * eigene Wartezeit keine Aussage.
+ */
+export function brichtStrecke(model) {
+  return !!model && model.kind === KIND_ORGASM && model.streakFactor < 1;
 }
 
 /** Heutiges Datum als ISO — hier, damit UI und Kern dieselbe Quelle benutzen. */

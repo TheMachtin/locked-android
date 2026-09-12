@@ -25,7 +25,7 @@ import {
   modellDonut, heatmap, heatScale, heatLegend, weekdayChart, METRIKEN,
 } from './charts.js';
 import { emptyTotals, computeTotals, currentOrgasmPrice } from '../core/calc.js';
-import { todayIso, resolveModel, modelMap, KIND_ORGASM } from '../core/settings.js';
+import { todayIso, resolveModel, modelMap, brichtStrecke, KIND_ORGASM } from '../core/settings.js';
 import { eventMs } from '../core/time.js';
 import { statusContext, currentModelHtml, statusRowHtml } from './status.js';
 import {
@@ -152,7 +152,7 @@ export function render() {
     + kachel(fmtNum(t.avgNetto, 1), 'Ø pro Tag', `Punkte ${nenner}`)
     + kachel(fmtInt(t.stundenVerschlossen), 'Std verschlossen', zeitraumText(zeitraum))
     + kachel(fmtNum(t.avgStdTag, 1), 'Ø Std/Tag', `verschlossen ${nenner}`)
-    + kachel(fmtInt(t.orgasmen), 'Orgasmen', t.orgasmKosten ? `−${fmtInt(t.orgasmKosten)} Punkte` : zeitraumText(zeitraum));
+    + kachel(fmtInt(t.orgasmen), 'Orgasmen', orgasmSub(t, zeitraum));
 
   renderJetzt(days, byDate, settings);
   renderOrgasmCounter(settings);
@@ -229,11 +229,16 @@ function renderOrgasmCounter(s) {
   const map = modelMap(s);
   const jetzt = new Date();
   const refMs = jetzt.getTime();
-  const alle = (STATE.data.events || [])
-    .filter(e => resolveModel(s, map, e.type).kind === KIND_ORGASM)
-    .map(e => ({ e, t: eventMs(e) }))
-    .filter(x => isFinite(x.t) && x.t <= refMs)
+  // Gezählt wird, was ein Orgasmus ist. Ein Ereignis, das die Strecke nicht
+  // bricht, steht in denselben vier Fenstern falsch — „letzte 30 T: 2" neben
+  // einer Kachel „Orgasmusfrei: 40 T" wäre ein Widerspruch auf einem Bildschirm.
+  // Verschwiegen wird es deshalb nicht: es steht in der Zeile darunter.
+  const ereignisse = (STATE.data.events || [])
+    .map(e => ({ e, t: eventMs(e), m: resolveModel(s, map, e.type) }))
+    .filter(x => x.m.kind === KIND_ORGASM && isFinite(x.t) && x.t <= refMs)
     .sort((a, b) => a.t - b.t);
+  const alle = ereignisse.filter(x => brichtStrecke(x.m));
+  const sonstige = ereignisse.length - alle.length;
 
   const monat = todayIso().slice(0, 7);
   const letzter = alle[alle.length - 1] || null;
@@ -258,7 +263,23 @@ function renderOrgasmCounter(s) {
   if (avgGap != null) teile.push(`Ø Abstand: <b>${fmtNum(avgGap / 86400000, 1)} T</b>`);
   if (alle.length) teile.push(`erfasst: <b>${fmtInt(alle.length)}</b>`);
   if (auto) teile.push(`${auto} automatisch (Inaktivität)`);
-  $('orgLast').innerHTML = alle.length ? teile.join(' · ') : 'Noch kein Orgasmus erfasst.';
+  if (sonstige) teile.push(`dazu <b>${fmtInt(sonstige)}</b> ohne Bruch der Strecke`);
+  $('orgLast').innerHTML = (alle.length || sonstige)
+    ? teile.join(' · ')
+    : 'Noch kein Orgasmus erfasst.';
+}
+
+/**
+ * Die Unterzeile der Orgasmus-Kachel.
+ *
+ * Die Kosten stehen für *alle* bepreisten Ereignisse, die Zahl darüber nur für
+ * die Orgasmen — ohne den Zusatz stünde da ein Betrag, den die Zahl daneben
+ * nicht erklärt.
+ */
+function orgasmSub(t, zeitraum) {
+  if (!t.orgasmKosten) return zeitraumText(zeitraum);
+  return `−${fmtInt(t.orgasmKosten)} Punkte`
+    + (t.sonstigeEreignisse ? ` · dazu ${fmtInt(t.sonstigeEreignisse)} ohne Bruch der Strecke` : '');
 }
 
 function datumAusSchluessel(key) {

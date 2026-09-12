@@ -14,7 +14,7 @@
  */
 
 import { lockPhaseStart, unopenedPhaseStart, lastOrgasmMs, TAG_MS } from './calc.js';
-import { modelMap, resolveModel, labelOf, orgasmPrice, KIND_ORGASM } from './settings.js';
+import { modelMap, resolveModel, labelOf, orgasmPrice, brichtStrecke, KIND_ORGASM } from './settings.js';
 import { currentStateAt } from './command.js';
 import { isoOf, isoDaysBetween } from './time.js';
 
@@ -51,8 +51,12 @@ export function jetztPayload(data, berechnet, now) {
   let streakTage = 0;
   for (let i = idx - 1; i >= 0 && berechnet.days[i].orgasmusfrei; i--) streakTage++;
 
-  const orModel = s.models.find(x => x.kind === KIND_ORGASM && !x.archived)
-    || s.models.find(x => x.kind === KIND_ORGASM);
+  // Die Uhr zeigt den Preis des Orgasmus. Ein Ereignis, das die Strecke gar
+  // nicht anrührt, hat auf einem Zifferblatt, auf dem daneben „Orgasmusfrei"
+  // steht, nichts verloren.
+  const kandidaten = s.models.filter(x => x.kind === KIND_ORGASM);
+  const orModel = kandidaten.find(x => brichtStrecke(x) && !x.archived)
+    || kandidaten.find(x => !x.archived) || kandidaten[0];
 
   return {
     v: JETZT_VERSION,
