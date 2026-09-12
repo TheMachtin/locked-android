@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   normalizeSettings, defaultSettings, idFromLabel, cleanId, idFolgtNamen, openModelId,
   lockedIds, pauseIds, lockKind, applyLockKind, resolveModel, modelMap, orgasmPrice,
+  brichtStrecke,
   SETTINGS_SCHEMA, isFrozen, freezeUntilMs, freezeRestMs, FROZEN_MODEL_FIELDS,
 } from '../www/js/core/settings.js';
 
@@ -225,10 +226,40 @@ test('Eine abgelaufene Sperre bleibt in der Datei stehen', () => {
 test('Gesperrt ist, was in die Punkte eingeht', () => {
   // Der Stundensatz eines Modells zählt dazu — sonst wäre die Sperre mit einem
   // neuen Käfig zu Satz 5 umgangen. Name und Farbe zählen nicht dazu.
-  for (const feld of ['rate', 'priceMin', 'priceMax', 'halflifeDays', 'repeatFactor']) {
+  for (const feld of ['rate', 'priceMin', 'priceMax', 'halflifeDays', 'repeatFactor', 'streakFactor']) {
     assert.ok(FROZEN_MODEL_FIELDS.includes(feld), `${feld} muss die Sperre halten`);
   }
   for (const feld of ['label', 'color', 'id', 'archived']) {
     assert.ok(!FROZEN_MODEL_FIELDS.includes(feld), `${feld} darf frei bleiben`);
   }
+});
+
+test('Ereignisse tragen einen Streckenfaktor, Vorgabe ist der Bruch', () => {
+  // Die Vorgabe muss 0 sein: jede bestehende Datei kennt das Feld nicht, und
+  // sie soll nach dem Laden genau so rechnen wie vorher.
+  const s = normalizeSettings(null);
+  const or = s.models.find(m => m.id === 'OR');
+  assert.equal(or.streakFactor, 0);
+  assert.equal(brichtStrecke(or), true);
+
+  const eigen = normalizeSettings({
+    models: [
+      { id: 'KK', kind: 'model', label: 'Offen', rate: -1, locked: false, isOpen: true },
+      { id: 'EM', kind: 'orgasm', label: 'Erguss', streakFactor: 1 },
+      { id: 'HALB', kind: 'orgasm', label: 'Halb', streakFactor: 0.5 },
+      { id: 'WILD', kind: 'orgasm', label: 'Unsinn', streakFactor: 9 },
+      { id: 'NEG', kind: 'orgasm', label: 'Unsinn', streakFactor: -3 },
+    ],
+  });
+  const von = id => eigen.models.find(m => m.id === id);
+  assert.equal(brichtStrecke(von('EM')), false);
+  assert.equal(brichtStrecke(von('HALB')), true, 'auch ein Rest ist ein Bruch');
+  assert.equal(von('WILD').streakFactor, 1, 'über 1 gibt es nicht');
+  assert.equal(von('NEG').streakFactor, 0, 'unter 0 auch nicht');
+});
+
+test('Ein Modell bricht keine Strecke — die Frage stellt sich nur bei Ereignissen', () => {
+  const s = normalizeSettings(null);
+  assert.equal(brichtStrecke(s.models.find(m => m.id === 'HT')), false);
+  assert.equal(brichtStrecke(null), false);
 });

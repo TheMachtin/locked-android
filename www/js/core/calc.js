@@ -20,6 +20,7 @@
 import { isoOf, isoDateAdd, minutesOf, timeToMin, eventMs, eventSortKey } from './time.js';
 import {
   normalizeSettings, modelMap, resolveModel, openModelId, orgasmPrice, stichtagOf,
+  brichtStrecke,
   KIND_MODEL, KIND_ORGASM,
 } from './settings.js';
 
@@ -181,21 +182,28 @@ export function computeAll(data, opts) {
     // Orgasmen des Tages bepreisen — in zeitlicher Reihenfolge, weil jeder den
     // Abstand für den nächsten bestimmt.
     const orgasmen = [];
-    let nth = 0;
+    // Der Aufschlag je weiterem am Tag zählt je Ereignisart. Über alle Arten
+    // hinweg zu zählen hieße, dass ein Erguss ohne Orgasmus am Nachmittag den
+    // Orgasmus am Abend zum zweiten macht und verteuert — zwei verschiedene
+    // Dinge, die sich gegenseitig bepreisen.
+    const nthJeModell = {};
     for (const ev of evs) {
       const m = resolveModel(ctx.settings, ctx.map, ev.type);
       if (m.kind !== KIND_ORGASM) continue;
       // Was noch nicht passiert ist, kostet noch nichts.
       if (zukunft || timeToMin(ev.time) > limitMin) continue;
       const t = eventMs(ev);
-      nth++;
+      const nth = (nthJeModell[m.id] = (nthJeModell[m.id] || 0) + 1);
       const abstandTage = lastOrgasmMs != null ? (t - lastOrgasmMs) / 86400000 : Infinity;
       orgasmen.push({
         event: ev, model: m,
         abstandTage,
         price: orgasmPrice(m, abstandTage, nth),
       });
-      lastOrgasmMs = t;
+      // Nur was die Strecke bricht, ist „der letzte Orgasmus" — sonst würde ein
+      // geschontes Ereignis den nächsten echten über den Abstand verteuern und
+      // damit durch die Hintertür doch bestrafen.
+      if (brichtStrecke(m)) lastOrgasmMs = t;
     }
 
     // Die ungeöffnete Strecke läuft in echter Zeit, nicht in Kalendertagen: der
@@ -213,7 +221,10 @@ export function computeAll(data, opts) {
       events: evs,
       hours, endModel, prevEndModel,
       orgasmen,
-      orgasmusfrei: orgasmen.length === 0,
+      // Orgasmusfrei heißt: kein Orgasmus. Ein Ereignis mit Faktor 1 ist keiner
+      // — es kostet, aber es beendet die Strecke nicht, und die Kachel daneben
+      // heißt nach dem, was sie zählt.
+      orgasmusfrei: !orgasmen.some(o => brichtStrecke(o.model)),
       ...score,
       netto, zaehlt,
       konto, form,
@@ -222,7 +233,12 @@ export function computeAll(data, opts) {
     days.push(rec);
     byDate[cursor] = rec;
 
-    if (!zukunft) streakTage = orgasmen.length ? 0 : streakTage + 1;
+    if (!zukunft) {
+      // Der strengste Eintrag des Tages bestimmt, was von der Strecke bleibt:
+      // wer morgens geschont und abends gebrochen hat, hat gebrochen.
+      const f = orgasmen.reduce((min, o) => Math.min(min, o.model.streakFactor), 1);
+      streakTage = f >= 1 ? streakTage + 1 : Math.floor(streakTage * f);
+    }
     prevEndModel = endModel;
     cursor = isoDateAdd(cursor, 1);
   }
@@ -246,6 +262,10 @@ export function emptyTotals() {
     hoursByModel: {},
     tageUngeoeffnet: 0, tageMitOrgasmus: 0,
     orgasmen: 0, orgasmenAuto: 0, orgasmKosten: 0,
+    /** Ereignisse, die die orgasmusfreie Strecke nicht brechen — sie kosten
+     *  Punkte (und stecken damit in `orgasmKosten`), sind aber keine Orgasmen
+     *  und dürfen deshalb nicht in derselben Zahl stehen. */
+    sonstigeEreignisse: 0,
     /** Was die ungeöffneten Strecken eingebracht haben — mit Multiplikator,
      *  also das, was tatsächlich im Konto steht, nicht der rohe Zuschlag. */
     uoEinnahmen: 0,
@@ -279,11 +299,12 @@ export function computeTotals(days) {
     t.einnahmen           += d.einnahmen;
     t.kosten              += d.kosten;
     t.orgasmKosten        += d.orgasmKosten;
-    t.orgasmen            += d.orgasmen.length;
+    t.orgasmen            += d.orgasmen.filter(o => brichtStrecke(o.model)).length;
+    t.sonstigeEreignisse  += d.orgasmen.filter(o => !brichtStrecke(o.model)).length;
     t.orgasmenAuto        += d.orgasmen.filter(o => o.event.auto_inactivity).length;
     t.uoEinnahmen         += d.uoBonus * d.mult;
     if (d.uoTage) t.tageUngeoeffnet++;
-    if (d.orgasmen.length) t.tageMitOrgasmus++;
+    if (!d.orgasmusfrei) t.tageMitOrgasmus++;
     if (d.tracked) {
       if (d.netto > t.besterTag) t.besterTag = d.netto;
       if (d.netto < t.schlechtesterTag) t.schlechtesterTag = d.netto;
@@ -454,14 +475,16 @@ export function unopenedMarks(events, settings, now) {
   return marks;
 }
 
-/** Zeitpunkt des letzten Orgasmus vor `refMs`, oder null. */
+/** Zeitpunkt des letzten Orgasmus vor `refMs`, oder null. Ereignisse, die die
+ *  Strecke nicht brechen, sind keiner — sie stehen weder in der Kachel
+ *  „Orgasmusfrei" noch im Abstand, aus dem der nächste Preis fällt. */
 export function lastOrgasmMs(events, settings, refMs) {
   const map = modelMap(settings);
   const ref = (typeof refMs === 'number') ? refMs : Date.now();
   let best = null;
   for (const e of (events || [])) {
     const m = resolveModel(settings, map, e.type);
-    if (m.kind !== KIND_ORGASM) continue;
+    if (!brichtStrecke(m)) continue;
     const t = eventMs(e);
     if (!isFinite(t) || t > ref) continue;
     if (best == null || t > best) best = t;
@@ -476,8 +499,11 @@ export function lastOrgasmMs(events, settings, refMs) {
  */
 export function currentOrgasmPrice(data, settings, refMs) {
   const s = settings || normalizeSettings(data && data.settings);
-  const orModel = s.models.find(m => m.kind === KIND_ORGASM && !m.archived)
-    || s.models.find(m => m.kind === KIND_ORGASM);
+  // Der Preis, der im Jetzt-Block steht, ist der des Orgasmus — nicht der eines
+  // Ereignisses, das daneben steht und die Strecke gar nicht anrührt.
+  const kandidaten = s.models.filter(m => m.kind === KIND_ORGASM);
+  const orModel = kandidaten.find(m => brichtStrecke(m) && !m.archived)
+    || kandidaten.find(m => !m.archived) || kandidaten[0];
   if (!orModel) return null;
   const ref = (typeof refMs === 'number') ? refMs : Date.now();
   const lastMs = lastOrgasmMs((data && data.events) || [], s, ref);

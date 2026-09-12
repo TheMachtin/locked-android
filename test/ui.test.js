@@ -125,3 +125,40 @@ test('Wochen und Tage schneiden denselben Bestand anders auf', () => {
   assert.equal(wochen.reduce((a, w) => a + w.tage, 0), tage.length);
   assert.ok(wochen[0].label.startsWith('KW'));
 });
+
+test('Die Kachel „Orgasmusfrei" läuft über ein Ereignis hinweg, das keiner ist', () => {
+  const settings = normalizeSettings({
+    models: [
+      { id: 'HT', kind: 'model', label: 'Käfig', rate: 0.5, locked: true },
+      { id: 'KK', kind: 'model', label: 'Offen', rate: -1, locked: false, isOpen: true },
+      { id: 'OR', kind: 'orgasm', label: 'Orgasmus', priceMin: 15, priceMax: 60 },
+      { id: 'EM', kind: 'orgasm', label: 'Erguss', priceMin: 8, priceMax: 8, streakFactor: 1 },
+    ],
+  });
+  const now = new Date('2026-03-13T12:00:00');
+  const events = [ev('2026-03-01', '00:00', 'HT'), ev('2026-03-09', '21:00', 'EM')];
+  const { days, byDate } = computeAll({ events, settings }, { now });
+  const [, , orgasmusfrei, mult] =
+    statusItems(statusContext('2026-03-13', { days, byDate, settings, events, now }));
+
+  assert.equal(orgasmusfrei.days, 13, 'die Strecke reißt am 9. nicht ab');
+  assert.equal(orgasmusfrei.since, 'keiner erfasst', 'ein Erguss ist kein letzter Orgasmus');
+  assert.equal(mult.text, '× 1,24', 'zwölf Tage davor, ungebrochen');
+});
+
+test('Der Erguss steht nicht in den Orgasmus-Balken', () => {
+  const settings = normalizeSettings({
+    models: [
+      { id: 'HT', kind: 'model', label: 'Käfig', rate: 0.5, locked: true },
+      { id: 'KK', kind: 'model', label: 'Offen', rate: -1, locked: false, isOpen: true },
+      { id: 'OR', kind: 'orgasm', label: 'Orgasmus', priceMin: 15, priceMax: 60 },
+      { id: 'EM', kind: 'orgasm', label: 'Erguss', priceMin: 8, priceMax: 8, streakFactor: 1 },
+    ],
+  });
+  const events = [ev('2026-01-05', '08:00', 'HT'),
+    ev('2026-01-10', '12:00', 'EM'), ev('2026-01-20', '12:00', 'OR')];
+  const { days } = computeAll({ events, settings }, { now: new Date('2026-01-31T12:00:00') });
+  const [jan] = aggregatePeriods(days, 'month');
+  assert.equal(jan.orgasmen, 1);
+  assert.equal(jan.abstand, null, 'der Erguss ist kein Vorgänger, zu dem sich ein Abstand messen ließe');
+});

@@ -175,6 +175,7 @@ function normalizeModel(raw, index, taken) {
     m.priceMax      = clamp(num(raw.priceMax, m.priceMin), m.priceMin, 100000);
     m.halflifeDays  = clamp(num(raw.halflifeDays, 7), 0.1, 3650);
     m.repeatFactor  = clamp(num(raw.repeatFactor, 1), 1, 100);
+    m.streakFactor  = clamp(num(raw.streakFactor, 0), 0, 1);
   }
   return m;
 }
@@ -319,7 +320,7 @@ export function normalizeSettings(raw) {
  * dicht — deshalb steht die Prüfung auch im Kern und nicht bloß am Eingabefeld.
  */
 export const FROZEN_MODEL_FIELDS = ['rate', 'priceMin', 'priceMax', 'halflifeDays',
-  'repeatFactor', 'windowH', 'cooldownD'];
+  'repeatFactor', 'streakFactor', 'windowH', 'cooldownD'];
 
 /** Bis wann gesperrt ist — als ms, oder `null`, wenn nie gesperrt wurde. */
 export function freezeUntilMs(settings) {
@@ -446,6 +447,54 @@ export function orgasmPrice(model, daysSinceLast, nth) {
     ? daysSinceLast : Infinity;
   const base = t === Infinity ? min : min + (max - min) * Math.pow(2, -t / hl);
   return base * Math.pow(model.repeatFactor, Math.max(0, (nth || 1) - 1));
+}
+
+/**
+ * Was ein Ereignis von der orgasmusfreien Strecke übrig lässt — `streakFactor`,
+ * und das ist die Antwort auf eine Frage, die das Modell vorher nicht stellen
+ * konnte.
+ *
+ * Bis hierher hatte ein Ereignis genau eine Wirkung auf die Strecke: null. Das
+ * war richtig, solange „Ereignis" und „Orgasmus" dasselbe hießen. Sie tun es
+ * nicht.
+ *
+ * Entscheidend ist, was die Strecke überhaupt misst, und das ist nicht der
+ * Füllstand, sondern ein Zustand: verschlossen, ungelöst, durchgehend erregt.
+ * Dafür zahlt der Multiplikator, und diesen Zustand beendet der Orgasmus. Ein
+ * Samenerguss ohne Orgasmus beendet ihn nicht — die Ladung ist weg, die
+ * Erregung nicht, und sie kann danach größer sein als davor. Ihn als Orgasmus
+ * zu buchen hieße, eine Empfindung zu behaupten, die es nicht gab, und einen
+ * Zustand für beendet zu erklären, der weiterläuft; ihn wegzulassen hieße, ein
+ * Ereignis zu verschweigen, das stattgefunden hat. Beides ist eine Unwahrheit,
+ * und das Programm hatte für keine der beiden eine dritte Möglichkeit.
+ *
+ * Der Faktor ist diese dritte Möglichkeit. Er fragt nicht „wie viel ist
+ * verbraucht", sondern „wie viel von dem Zustand steht noch" — und ist bewusst
+ * eine Skala und kein Schalter, aus demselben Grund, aus dem der
+ * Ungeöffnet-Zuschlag eine geworden ist:
+ *
+ * - `0` bricht die Strecke, wie es der Orgasmus immer getan hat. Das ist die
+ *   Vorgabe, und deshalb ändert sich an keiner bestehenden Datei etwas.
+ * - `1` lässt sie unberührt: der Tag bleibt orgasmusfrei, der Multiplikator
+ *   wächst weiter, und für den Preisabstand des nächsten Orgasmus zählt das
+ *   Ereignis nicht als der letzte.
+ * - Dazwischen bleibt der Anteil stehen: `0,5` macht aus dreißig Tagen
+ *   fünfzehn. Dafür gibt es die Skala — der ruinierte Orgasmus etwa, bei dem
+ *   sich sehr wohl etwas löst, nur nicht ganz.
+ *
+ * Preis und Faktor sind zwei Fragen und nicht eine: der Preis zahlt, was
+ * verloren ging, der Faktor sagt, was vom Zustand bleibt. Sie laufen meist
+ * zusammen, müssen es aber nicht. Ein Ereignis, das den Zustand unangetastet
+ * lässt, darf `priceMin` = `priceMax` = 0 tragen und ist dann ein reiner
+ * Vermerk: er steht in der Zeitleiste, unter dem Zähler und in der Datei und
+ * bewegt keine Zahl. Ein Schlupfloch ist das nicht — es kürzt nichts ab, denn
+ * Stunden und Strecke laufen weiter in echter Zeit, und bezahlt wird der
+ * durchgehaltene Zustand. Einen Bonus bekommt es trotzdem nicht: der machte aus
+ * dem Eintrag eine Einnahmequelle und wiederholte den Fehler von 1.x, wo sich
+ * die günstigste Buchung von selbst aufdrängte.
+ */
+export function brichtStrecke(model) {
+  return !!model && model.kind === KIND_ORGASM && model.streakFactor < 1;
 }
 
 /** Heutiges Datum als ISO — hier, damit UI und Kern dieselbe Quelle benutzen. */

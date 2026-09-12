@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { computeAll, computeDayHours, scoreDay, lockPhaseStart, unopenedPhaseStart,
-  unopenedRuns, unopenedMarks, currentOrgasmPrice, regenState, expiredRegenEvents }
+  unopenedRuns, unopenedMarks, currentOrgasmPrice, lastOrgasmMs, regenState, expiredRegenEvents }
   from '../www/js/core/calc.js';
 import { normalizeSettings, modelMap, defaultSettings, orgasmPrice } from '../www/js/core/settings.js';
 
@@ -456,4 +456,126 @@ test('Ab dem zweiten Tag zählt der Tag wieder ab Mitternacht', () => {
   const d = byDate['2026-03-02'];
   assert.equal(d.verschlossenH, 6, 'der Käfig läuft aus dem Vortag durch');
   assert.equal(d.offenH, 18);
+});
+
+// =========================== EREIGNIS OHNE ORGASMUS ===========================
+/** Registry mit einem zweiten Ereignis, das die Strecke nicht bricht. */
+const mitEmission = (streakFactor = 1) => normalizeSettings({
+  models: [
+    { id: 'HT', kind: 'model', label: 'Käfig', rate: 0.5, locked: true },
+    { id: 'KK', kind: 'model', label: 'Offen', rate: -1, locked: false, isOpen: true },
+    { id: 'OR', kind: 'orgasm', label: 'Orgasmus', priceMin: 15, priceMax: 60, halflifeDays: 7 },
+    { id: 'EM', kind: 'orgasm', label: 'Erguss ohne Orgasmus',
+      priceMin: 8, priceMax: 8, halflifeDays: 7, streakFactor },
+  ],
+});
+
+test('Ereignis mit Faktor 1: kostet, bricht die Strecke aber nicht', () => {
+  const s = mitEmission(1);
+  const events = [ev('2026-03-01', '00:00', 'HT'), ev('2026-03-11', '21:00', 'EM')];
+  const { byDate } = computeAll({ events, settings: s }, { now: new Date('2026-03-13T00:00:00') });
+
+  const tag = byDate['2026-03-11'];
+  assert.equal(tag.orgasmusfrei, true, 'kein Orgasmus, also orgasmusfrei');
+  assert.equal(tag.orgasmKosten, 8, 'den Preis kostet es trotzdem');
+  assert.ok(tag.netto > 0, 'ein voll verschlossener Tag trägt sich auch mit dem Preis');
+
+  // Der Multiplikator wächst über den Tag hinweg weiter: 11 orgasmusfreie Tage
+  // vor dem 12. → 1 + 0,02 × 11.
+  assert.equal(byDate['2026-03-12'].mult, 1 + 0.02 * 11);
+});
+
+test('Ereignis mit Faktor 0 verhält sich wie der Orgasmus', () => {
+  const s = mitEmission(0);
+  const events = [ev('2026-03-01', '00:00', 'HT'), ev('2026-03-11', '21:00', 'EM')];
+  const { byDate } = computeAll({ events, settings: s }, { now: new Date('2026-03-13T00:00:00') });
+  assert.equal(byDate['2026-03-11'].orgasmusfrei, false);
+  assert.equal(byDate['2026-03-12'].mult, 1, 'die Strecke beginnt wieder bei null');
+});
+
+test('Ereignis mit Faktor 0,5 lässt die halbe Strecke stehen', () => {
+  const s = mitEmission(0.5);
+  const events = [ev('2026-03-01', '00:00', 'HT'), ev('2026-03-11', '21:00', 'EM')];
+  const { byDate } = computeAll({ events, settings: s }, { now: new Date('2026-03-13T00:00:00') });
+  // 11 Tage standen vor dem 11.; die Hälfte davon, abgerundet, bleibt.
+  assert.equal(byDate['2026-03-12'].mult, 1 + 0.02 * 5);
+});
+
+test('Der strengste Eintrag des Tages bestimmt, was von der Strecke bleibt', () => {
+  const s = mitEmission(1);
+  const events = [ev('2026-03-01', '00:00', 'HT'),
+    ev('2026-03-11', '09:00', 'EM'), ev('2026-03-11', '21:00', 'OR')];
+  const { byDate } = computeAll({ events, settings: s }, { now: new Date('2026-03-13T00:00:00') });
+  assert.equal(byDate['2026-03-11'].orgasmusfrei, false, 'der Orgasmus am Abend wiegt schwerer');
+  assert.equal(byDate['2026-03-12'].mult, 1);
+});
+
+test('Der Preisabstand zählt über ein geschontes Ereignis hinweg', () => {
+  const s = mitEmission(1);
+  const events = [ev('2026-03-01', '12:00', 'OR'), ev('2026-03-07', '12:00', 'EM'),
+    ev('2026-03-08', '12:00', 'OR')];
+  const { byDate } = computeAll({ events, settings: s }, { now: new Date('2026-03-09T00:00:00') });
+  const zweiter = byDate['2026-03-08'].orgasmen.find(o => o.model.id === 'OR');
+  assert.equal(zweiter.abstandTage, 7, 'sieben Tage zurück zum letzten Orgasmus, nicht einer zum Erguss');
+
+  // Und dieselbe Auskunft an der Kachel und im Jetzt-Block.
+  const ref = new Date('2026-03-08T00:00:00').getTime();
+  assert.equal(lastOrgasmMs(events, s, ref), new Date('2026-03-01T12:00:00').getTime());
+  assert.equal(currentOrgasmPrice({ events }, s, ref).model.id, 'OR');
+});
+
+test('Der Aufschlag je weiterem am Tag zählt je Ereignisart', () => {
+  const s = normalizeSettings({
+    models: [
+      { id: 'HT', kind: 'model', label: 'Käfig', rate: 0.5, locked: true },
+      { id: 'KK', kind: 'model', label: 'Offen', rate: -1, locked: false, isOpen: true },
+      { id: 'OR', kind: 'orgasm', label: 'Orgasmus',
+        priceMin: 20, priceMax: 20, halflifeDays: 7, repeatFactor: 2 },
+      { id: 'EM', kind: 'orgasm', label: 'Erguss', priceMin: 8, priceMax: 8, streakFactor: 1 },
+    ],
+  });
+  const events = [ev('2026-03-01', '00:00', 'HT'),
+    ev('2026-03-02', '09:00', 'EM'), ev('2026-03-02', '21:00', 'OR')];
+  const { byDate } = computeAll({ events, settings: s }, { now: new Date('2026-03-03T00:00:00') });
+  const or = byDate['2026-03-02'].orgasmen.find(o => o.model.id === 'OR');
+  assert.equal(or.price, 20, 'der Erguss macht den Orgasmus nicht zum zweiten');
+});
+
+test('Kennzahlen trennen Orgasmen von Ereignissen, die keine sind', () => {
+  const s = mitEmission(1);
+  const events = [ev('2026-03-01', '00:00', 'HT'),
+    ev('2026-03-05', '21:00', 'EM'), ev('2026-03-09', '21:00', 'OR')];
+  const { totals } = computeAll({ events, settings: s }, { now: new Date('2026-03-10T00:00:00') });
+  assert.equal(totals.orgasmen, 1);
+  assert.equal(totals.sonstigeEreignisse, 1);
+  assert.equal(totals.tageMitOrgasmus, 1, 'der 5. ist kein Tag mit Orgasmus');
+  assert.ok(totals.orgasmKosten > 8, 'beide Preise stehen in den Kosten');
+});
+
+test('Ein Ereignis darf nichts kosten und bleibt trotzdem verzeichnet', () => {
+  // Der Vermerk: kein Orgasmus, kein Preis, keine verschobene Zahl — und
+  // trotzdem in der Datei, in den Kennzahlen und in der Zeitleiste des Tages.
+  const s = normalizeSettings({
+    models: [
+      { id: 'HT', kind: 'model', label: 'Käfig', rate: 0.5, locked: true },
+      { id: 'KK', kind: 'model', label: 'Offen', rate: -1, locked: false, isOpen: true },
+      { id: 'OR', kind: 'orgasm', label: 'Orgasmus', priceMin: 15, priceMax: 60 },
+      { id: 'EM', kind: 'orgasm', label: 'Erguss ohne Orgasmus',
+        priceMin: 0, priceMax: 0, streakFactor: 1 },
+    ],
+  });
+  const now = new Date('2026-03-13T00:00:00');
+  const ohne = computeAll({ events: [ev('2026-03-01', '00:00', 'HT')], settings: s }, { now });
+  const mit = computeAll({
+    events: [ev('2026-03-01', '00:00', 'HT'), ev('2026-03-09', '21:00', 'EM')], settings: s,
+  }, { now });
+
+  assert.equal(mit.totals.konto, ohne.totals.konto, 'am Konto ändert der Vermerk nichts');
+  assert.equal(mit.byDate['2026-03-09'].orgasmKosten, 0);
+  assert.equal(mit.byDate['2026-03-09'].orgasmusfrei, true);
+  // Verzeichnet ist er trotzdem — sonst wäre er nicht von „nicht eingetragen"
+  // zu unterscheiden.
+  assert.equal(mit.totals.sonstigeEreignisse, 1);
+  assert.equal(mit.totals.orgasmen, 0);
+  assert.equal(mit.byDate['2026-03-09'].events.length, 1);
 });

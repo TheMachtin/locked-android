@@ -23,7 +23,7 @@
  */
 
 import { isoOf, pad2, eventSortKey } from './time.js';
-import { normalizeSettings, openModelId, orgasmModels } from './settings.js';
+import { normalizeSettings, openModelId, orgasmModels, brichtStrecke } from './settings.js';
 
 /** Zeitpunkt der letzten *echten* Interaktion (automatisch erzeugte zählen nicht). */
 export function lastRealInteractionMs(events) {
@@ -69,7 +69,12 @@ export function pendingEscalation(data, opts) {
   const settings = (opts && opts.settings) || normalizeSettings(data && data.settings);
   const autoDays = settings.rules.inactivityAutoDays;
   const openId = openModelId(settings);
-  const orModel = orgasmModels(settings).find(m => !m.archived) || orgasmModels(settings)[0];
+  // Nachgetragen wird der Orgasmus, nicht irgendein Ereignis: die Regel
+  // unterstellt nach langer Funkstille das Naheliegende, und das Naheliegende
+  // ist die teure Annahme, nicht die geschonte.
+  const ereignisse = orgasmModels(settings);
+  const orModel = ereignisse.find(m => brichtStrecke(m) && !m.archived)
+    || ereignisse.find(m => !m.archived) || ereignisse[0];
   const events = (data && data.events) || [];
   const leer = { faellig: false, seitMs: 0, anchorMs: null, offen: null, orgasmen: [], anzahl: 0 };
 

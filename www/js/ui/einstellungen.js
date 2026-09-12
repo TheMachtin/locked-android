@@ -162,7 +162,9 @@ function modelEditor(m, anzahl) {
     felder += feld('Preis Maximum', 'priceMax', 'number', m.priceMax, 'step="1" min="0"');
     felder += feld('Halbwertszeit (Tage)', 'halflifeDays', 'number', m.halflifeDays, 'step="0.5" min="0.5"');
     felder += feld('Aufschlag je weiterem am Tag', 'repeatFactor', 'number', m.repeatFactor, 'step="0.1" min="1"');
+    felder += feld('Rest der Strecke', 'streakFactor', 'number', m.streakFactor, 'step="0.1" min="0" max="1"');
     felder += `<div class="full sub">${preisVorschau(m)}</div>`;
+    felder += `<div class="full sub">${streckeVorschau(m)}</div>`;
   }
 
   const loeschbar = !m.isOpen && anzahl === 0 && !istGesperrt();
@@ -225,6 +227,26 @@ function lockWahl(m) {
 function preisVorschau(m) {
   return 'Preis nach Wartezeit: ' + [0, 3, 7, 14, 30]
     .map(t => `${t} T → <b>${fmtNum(orgasmPrice(m, t, 1), 0)}</b>`).join(' · ');
+}
+
+/**
+ * Was der Faktor bedeutet, in dem Satz, den man beim Eintragen braucht.
+ *
+ * „0,5" sagt niemandem etwas; „aus 30 Tagen werden 15" schon. Der Wert steht
+ * hier ausgeschrieben und nicht in einem Tooltip, weil die Frage, für die es
+ * ihn gibt, sich abends stellt und nicht beim Einrichten.
+ */
+function streckeVorschau(m) {
+  if (m.streakFactor >= 1) {
+    return 'Bricht die orgasmusfreie Strecke <b>nicht</b>: der Tag bleibt orgasmusfrei, '
+      + 'der Multiplikator wächst weiter, und für den Preisabstand des nächsten '
+      + 'Orgasmus zählt dieses Ereignis nicht. Seinen Preis kostet es trotzdem.';
+  }
+  if (m.streakFactor <= 0) {
+    return 'Setzt die orgasmusfreie Strecke auf <b>null</b> — so verhält sich der Orgasmus.';
+  }
+  return `Behält <b>${fmtNum(m.streakFactor * 100, 0)} %</b> der Strecke: `
+    + `aus 30 orgasmusfreien Tagen werden ${Math.floor(30 * m.streakFactor)}.`;
 }
 
 function feldGeaendert(el) {
