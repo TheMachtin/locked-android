@@ -242,35 +242,45 @@ dem Laden genau wie vorher; wer die Unterscheidung nicht braucht, merkt nichts
 davon. Wer sie braucht, legt unter **Regeln → Modelle und Ereignisse** ein
 zweites Ereignis an, gibt ihm einen festen Preis und den Faktor 1.
 
-### Punktesätze einfrieren
+### Warum es keine Punktesperre mehr gibt
 
-Frei änderbare Sätze haben eine Lücke, die kein Rechenfehler ist: **ein Ziel ist
-keins, wenn man unterwegs die Sätze anheben kann.** „2.000 Punkte bis
-Weihnachten" ist mit dem doppelten Stundensatz eine andere Aussage als mit dem
-einfachen, und dem Kontostand sieht man am Ende nicht an, welche von beiden
-gemeint war.
+An dieser Stelle stand eine Frist, auf die sich die Punktesätze einfrieren
+ließen: verlängern jederzeit, aufheben nie. Der Gedanke dahinter stimmt weiter
+— **ein Ziel ist keins, wenn man unterwegs die Sätze anheben kann.** „2.000
+Punkte bis Weihnachten" ist mit dem doppelten Stundensatz eine andere Aussage
+als mit dem einfachen, und dem Kontostand sieht man am Ende nicht an, welche
+von beiden gemeint war.
 
-Unter **Regeln → Punktesätze** lässt sich deshalb eine Frist setzen. Sie läuft
-sichtbar herunter, **verlängern geht jederzeit, aufheben nicht** — eine Sperre,
-die sich zurückdrehen lässt, hält nichts fest. Gesperrt ist alles, was in die
-Punkte eingeht:
+Nur hat die Sperre das nie leisten können, und der Text darunter hat es selbst
+zugegeben: die Datei liegt offen, und wer sie von Hand ändert, hebt sie auf.
+Sie war keine Zusicherung, sondern eine Bremse innerhalb der App — und Bremsen
+bremsen, was gerade vorbeikommt, nicht das, wogegen sie gedacht sind.
 
-| gesperrt | frei |
-|---|---|
-| die fünf Punktesätze (Zuschlag, Deckel, Streak, Form-Abklang) | Einträge — die App bleibt vollständig benutzbar |
-| Stundensätze, Verschluss-Zustände, Orgasmus-Preise, der Rest der Strecke, Regenerations-Fenster | Namen, Farben, IDs, Archivieren |
-| neue und gelöschte Modelle | der Stichtag |
-| „Auf Standard zurücksetzen" | die Inaktivitäts-Regeln |
+Was tatsächlich vorbeikam, war nicht ein erhöhter Stundensatz. Es war eine
+**neue Kategorie**: ein Ereignis, das das Modell noch gar nicht kannte (siehe
+oben). Um es anzulegen, musste die Registry auf, und die Registry war
+mitgesperrt — aus einem guten Grund, denn ein neues Modell mit Satz 5 tut
+dasselbe wie ein erhöhter Punktesatz. Beides ist derselbe Knopf, und die Sperre
+konnte nicht unterscheiden, ob jemand das Modell verbiegt oder ihm beibringt,
+etwas zu sagen, was es vorher nicht sagen konnte.
 
-Die Registry gehört dazu, weil sie sonst der offene Weg daran vorbei wäre: ein
-neues Modell mit Satz 5 tut dasselbe wie ein erhöhter Punktesatz. Das
-Zurücksetzen ebenso — ein Klick, und alle Sätze stünden wieder frei da.
+Damit stand sie genau dort im Weg, wo Ehrlichkeit eine Änderung verlangte, und
+war genau dort machtlos, wo Bequemlichkeit eine verlangt hätte. Das ist die
+falsche Richtung herum, und dafür lohnt kein Mechanismus.
 
-Die Frist steht in den Einstellungen und wandert damit über OneDrive auf das
-andere Gerät. Geprüft wird sie im Kern (`isFrozen()`), nicht am Eingabefeld: die
-ausgegrauten Felder sind die Anzeige, die Abfrage vor jedem Schreibweg ist die
-Sperre. Was sie **nicht** ist: eine Kontrolle durch Dritte. Die Datei liegt
-offen, und wer sie von Hand ändert, hebt sie auf. Sie bindet den, der sie setzt.
+Geblieben ist die Erkenntnis ohne den Apparat: **was ein Satz wert ist, hängt
+daran, dass er stehen bleibt — und dass er stehen bleibt, entscheidet niemand
+außer dem, der ihn tippt.** Wer ein Ziel setzt, schreibt die Sätze am besten
+dazu, unter denen es galt; das Konto selbst verrät es später nicht mehr.
+
+Die beiden Sicherungen, die bleiben, sichern die *Form* der Datei und nicht
+ihre Zahlen: der offene Zustand lässt sich nicht löschen oder archivieren, und
+ein Modell mit Einträgen lässt sich nur archivieren, nicht entfernen. Ohne
+beide zeigten alte Tage ins Leere — das ist kein Vorsatz, den man brechen kann,
+sondern eine kaputte Datei.
+
+Ein `freeze`-Feld aus einer älteren Fassung wird beim Laden verworfen und ist
+nach dem nächsten Schreiben aus der Datei verschwunden.
 
 ## Was die Oberfläche zeigt
 
@@ -325,7 +335,7 @@ abweicht, sagt sie es in ihrer Unterzeile.
 **Die Regeln-Seite klappt zu.** Erklärtext, Punktesätze, Stichtag, Inaktivität
 und Zurücksetzen sind einklappbare Karten, und jede trägt im zugeklappten
 Zustand ihre Kernaussage in der Kopfzeile — „ab 14.05.26", „Erinnerung 2 T ·
-Vorschläge 4 T", „🔒 bis 10.10.26". Der Zustand bleibt je Karte gemerkt.
+Vorschläge 4 T", „7 aktiv · 2 archiviert". Der Zustand bleibt je Karte gemerkt.
 
 **Die Farbskala des Kalenders kommt aus den eigenen Sätzen.** Feste Schwellen
 („++ ab 25 Punkten") messen an einem Maßstab, den die Datei gar nicht kennt: wer

@@ -11,22 +11,21 @@
  * Historie), und ein Modell mit Einträgen lässt sich nur archivieren, nicht
  * entfernen — sonst zeigten alte Tage auf einen Typ, den es nicht mehr gibt.
  *
- * Die dritte ist auf Zeit gesetzt: eine laufende Sperre (siehe `isFrozen()` im
- * Kern) hält alles fest, was in die Punkte eingeht. Jeder Schreibweg hier fragt
- * sie ab — die Felder werden zusätzlich ausgegraut, aber ein ausgegrautes Feld
- * ist eine Bitte, keine Sicherung.
+ * Eine dritte gab es auf Zeit: die Punktesperre, die alles festhielt, was in
+ * die Punkte eingeht. Sie ist wieder weg — warum, steht im README. Beide
+ * verbliebenen sichern die *Form* der Datei, nicht ihre Zahlen; über die Zahlen
+ * entscheidet, wer sie tippt.
  */
 
 import { STATE, calc, mutate, mutateSettings, settings as getSettings } from '../state.js';
 import { showToast, confirmAction } from './toast.js';
-import { fmtNum, escapeHtml, fmtDateShort as fmtDate, fmtDurationShort } from './format.js';
+import { fmtNum, escapeHtml, fmtDateShort as fmtDate } from './format.js';
 import {
   KIND_MODEL, KIND_ORGASM, idFromLabel, cleanId, idFolgtNamen, defaultSettings,
   PALETTE, orgasmPrice, stichtagOf, lockKind, applyLockKind,
-  isFrozen, freezeUntilMs, freezeRestMs, FROZEN_MODEL_FIELDS,
 } from '../core/settings.js';
 import { refreezeLegacy } from '../core/legacy.js';
-import { isoDateAdd, isoOf, hmOf } from '../core/time.js';
+import { isoDateAdd } from '../core/time.js';
 
 const $ = id => document.getElementById(id);
 let offen = null;      // ID des gerade aufgeklappten Modells
@@ -34,26 +33,6 @@ let offen = null;      // ID des gerade aufgeklappten Modells
 function zaehleEvents(id) {
   return (STATE.data.events || []).filter(e => e.type === id).length;
 }
-
-// =========================== WÄCHTER ===========================
-/**
- * Steht eine Sperre? Dann sagt der Wächter, was gerade nicht geht, und der
- * aufrufende Weg bricht ab.
- *
- * Er steht vor *jedem* Schreibweg, der Punkte verschiebt — auch dort, wo das
- * Eingabefeld schon ausgegraut ist. Ein `disabled` ist eine Anzeige, die sich
- * mit zwei Handgriffen in den Entwicklerwerkzeugen entfernen lässt; diese
- * Abfrage ist die eigentliche Sperre.
- */
-function gesperrt(was) {
-  const s = getSettings();
-  if (!isFrozen(s)) return false;
-  showToast(`${was} ist eingefroren — noch ${fmtDurationShort(freezeRestMs(s))}`, true);
-  return true;
-}
-const istGesperrt = () => isFrozen(getSettings());
-/** `disabled` für ein Feld, das die Sperre festhält. */
-const sperrAttr = () => (istGesperrt() ? ' disabled' : '');
 
 // =========================== MODELLE ===========================
 function renderModelle() {
@@ -69,7 +48,6 @@ function renderModelle() {
     el.addEventListener('change', () => feldGeaendert(el));
   });
   wrap.querySelectorAll('[data-lockkind] .seg-opt').forEach(el => el.addEventListener('click', () => {
-    if (gesperrt('Der Verschluss-Zustand')) return;
     const id = el.parentElement.dataset.lockkind;
     mutateSettings(s2 => {
       const m = s2.models.find(x => x.id === id);
@@ -88,7 +66,6 @@ function renderModelle() {
   }));
   wrap.querySelectorAll('[data-loeschen]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.loeschen;
-    if (gesperrt('Die Registry')) return;
     if (zaehleEvents(id) > 0) { showToast('Hat Einträge — nur archivieren möglich', true); return; }
     if (!confirmAction(`Modell „${id}" wirklich löschen?`)) return;
     mutateSettings(s2 => { s2.models = s2.models.filter(x => x.id !== id); });
@@ -135,13 +112,9 @@ const LOCK_WAHL = [
 ];
 
 function modelEditor(m, anzahl) {
-  // Was in die Punkte eingeht, ist während einer Sperre ausgegraut; Name, Farbe
-  // und ID bleiben frei — sie verschieben keine Zahl.
-  const feld = (label, id, typ, wert, extra = '') => {
-    const zu = FROZEN_MODEL_FIELDS.includes(id) && istGesperrt();
-    return `<div><label>${label}${zu ? ' 🔒' : ''}</label>`
-      + `<input type="${typ}" data-feld="${id}" data-id="${m.id}" value="${wert}" ${extra}${zu ? ' disabled' : ''}></div>`;
-  };
+  const feld = (label, id, typ, wert, extra = '') =>
+    `<div><label>${label}</label>`
+    + `<input type="${typ}" data-feld="${id}" data-id="${m.id}" value="${wert}" ${extra}></div>`;
 
   let felder = feld('Bezeichnung', 'label', 'text', escapeHtml(m.label))
     + feld('Farbe', 'color', 'color', m.color)
@@ -167,7 +140,7 @@ function modelEditor(m, anzahl) {
     felder += `<div class="full sub">${streckeVorschau(m)}</div>`;
   }
 
-  const loeschbar = !m.isOpen && anzahl === 0 && !istGesperrt();
+  const loeschbar = !m.isOpen && anzahl === 0;
   felder += `<div class="full row2" style="margin-top:4px">
       ${m.isOpen ? '' : `<button class="btn ghost" type="button" data-archivieren="${m.id}">${m.archived ? 'Wieder aktivieren' : 'Archivieren'}</button>`}
       ${loeschbar ? `<button class="btn danger-outline" type="button" data-loeschen="${m.id}">Löschen</button>`
@@ -216,9 +189,8 @@ function lockWahl(m) {
   const opts = LOCK_WAHL.map(o =>
     `<div class="seg-opt ${o.v === wert ? 'active' : ''}" data-wert="${o.v}">${o.l}</div>`).join('');
   const erklaerung = (LOCK_WAHL.find(o => o.v === wert) || LOCK_WAHL[2]).t;
-  const zu = istGesperrt();
-  return `<div class="full"><label>Verschluss-Zustand${zu ? ' 🔒' : ''}</label>
-      <div class="seg${zu ? ' gesperrt' : ''}" data-lockkind="${escapeHtml(m.id)}">${opts}</div>
+  return `<div class="full"><label>Verschluss-Zustand</label>
+      <div class="seg" data-lockkind="${escapeHtml(m.id)}">${opts}</div>
       <div class="sub" style="margin-top:6px">${erklaerung}</div>
     </div>`;
 }
@@ -252,7 +224,6 @@ function streckeVorschau(m) {
 function feldGeaendert(el) {
   const id = el.dataset.id;
   const feld = el.dataset.feld;
-  if (FROZEN_MODEL_FIELDS.includes(feld) && gesperrt('Dieser Satz')) { renderModelle(); return; }
   if (feld === 'id') { setzeId(id, el.value); return; }
   const wert = el.type === 'number' ? parseFloat(String(el.value).replace(',', '.')) : el.value;
   if (el.type === 'number' && !isFinite(wert)) { showToast('Keine gültige Zahl', true); renderModelle(); return; }
@@ -310,9 +281,6 @@ function setzeId(alt, roh) {
 }
 
 function neuesModell(kind) {
-  // Ein neues Modell mit Satz 5 tut dasselbe wie ein erhöhter Punktesatz — ohne
-  // diese Zeile wäre die Sperre mit einem Klick umgangen.
-  if (gesperrt('Die Registry')) return;
   const s = getSettings();
   const taken = s.models.map(m => m.id);
   const label = kind === KIND_ORGASM ? 'Neues Ereignis' : 'Neues Modell';
@@ -353,20 +321,14 @@ const REGEL_FELDER = [
 
 function renderZahlen() {
   const s = getSettings();
-  // Nur die Punktesätze hält die Sperre fest. Die Inaktivitäts-Regeln bleiben
-  // frei: sie steuern, wann die App nachfragt, nicht, was eine Stunde wert ist.
-  const bau = (felder, quelle, gruppe) => {
-    const zu = gruppe === 'points' && istGesperrt();
-    return felder.map(f => `<div class="setting">
-      <div><div class="name">${f.name}${zu ? ' 🔒' : ''}</div><div class="desc">${f.desc}</div></div>
-      <input type="number" step="${f.step}" value="${quelle[f.key]}" data-punkt="${f.key}" data-gruppe="${gruppe}"${zu ? ' disabled' : ''}>
+  const bau = (felder, quelle, gruppe) => felder.map(f => `<div class="setting">
+      <div><div class="name">${f.name}</div><div class="desc">${f.desc}</div></div>
+      <input type="number" step="${f.step}" value="${quelle[f.key]}" data-punkt="${f.key}" data-gruppe="${gruppe}">
     </div>`).join('');
-  };
   $('pointSettings').innerHTML = bau(PUNKT_FELDER, s.points, 'points');
   $('ruleSettings').innerHTML = bau(REGEL_FELDER, s.rules, 'rules');
 
   document.querySelectorAll('[data-punkt]').forEach(el => el.addEventListener('change', () => {
-    if (el.dataset.gruppe === 'points' && gesperrt('Dieser Satz')) { renderZahlen(); return; }
     const wert = parseFloat(String(el.value).replace(',', '.'));
     if (!isFinite(wert)) { showToast('Keine gültige Zahl', true); renderZahlen(); return; }
     mutateSettings(s2 => { s2[el.dataset.gruppe][el.dataset.punkt] = wert; });
@@ -374,117 +336,6 @@ function renderZahlen() {
     renderVorschau();
     showToast('Gespeichert');
   }));
-}
-
-// =========================== EINFRIEREN ===========================
-/** Vorschläge für die Frist. Frei wählbar bleibt sie über das Datumsfeld. */
-const FREEZE_PILLS = [7, 30, 90, 365];
-
-const freezeZielIso = (tage) => isoDateAdd(isoOf(new Date()), tage);
-
-/**
- * Was die Sperre umfasst — einmal formuliert, an zwei Stellen gezeigt.
- * Wer sie setzt, soll vorher lesen können, was ihm danach fehlt.
- */
-const FREEZE_UMFANG = 'Gesperrt sind: die Punktesätze, die Stundensätze und '
-  + 'Verschluss-Zustände der Modelle, die Orgasmus-Preise, neue oder gelöschte '
-  + 'Modelle und das Zurücksetzen auf Standard. Frei bleiben: Einträge, Namen, '
-  + 'Farben, IDs, Archivieren, der Stichtag und die Inaktivitäts-Regeln.';
-
-function renderFreeze() {
-  const s = getSettings();
-  const box = $('freezeBox');
-  const badge = $('freezeBadge');
-  const rest = freezeRestMs(s);
-  const bis = freezeUntilMs(s);
-  const bisDatum = bis != null ? isoOf(new Date(bis)) : null;
-
-  if (rest > 0) {
-    badge.textContent = `🔒 bis ${fmtDate(bisDatum)}`;
-    box.className = 'freeze on';
-    box.innerHTML = `
-      <div class="fz-kopf">
-        <div class="fz-titel">🔒 Eingefroren bis ${fmtDate(bisDatum)}, ${hmOf(new Date(bis))}</div>
-        <div class="fz-rest">noch ${fmtDurationShort(rest)}</div>
-      </div>
-      <div class="small" style="margin-top:8px">${FREEZE_UMFANG}</div>
-      <div class="small">Verlängern geht jederzeit, aufheben nicht — sonst wäre die
-        Sperre keine. Sie läuft von allein aus.</div>
-      <div class="date-pills" style="margin-top:10px">
-        ${FREEZE_PILLS.map(t => `<button class="pill" type="button" data-frost-plus="${t}">+${t} T</button>`).join('')}
-      </div>
-      <div class="setting" style="border-bottom:none">
-        <div><div class="name">Verlängern bis</div></div>
-        <input type="date" id="freezeBis" value="${bisDatum}" min="${freezeZielIso(1)}">
-      </div>`;
-  } else {
-    badge.textContent = bis != null ? `Sperre lief am ${fmtDate(bisDatum)} aus` : '';
-    box.className = 'freeze';
-    box.innerHTML = `
-      <div class="fz-titel">Punktesätze einfrieren</div>
-      <div class="small" style="margin-top:6px">Ein Ziel ist keins, wenn man unterwegs
-        die Sätze anheben kann. Die Sperre nimmt das für eine selbst gewählte Frist
-        aus der Hand: verlängern geht, vorzeitig aufheben nicht.</div>
-      <div class="small">${FREEZE_UMFANG}</div>
-      <div class="date-pills" style="margin-top:10px">
-        ${FREEZE_PILLS.map(t => `<button class="pill" type="button" data-frost="${t}">${t} Tage</button>`).join('')}
-      </div>
-      <div class="setting" style="border-bottom:none">
-        <div><div class="name">Oder bis zum</div></div>
-        <input type="date" id="freezeBis" min="${freezeZielIso(1)}">
-      </div>
-      <button class="btn danger-outline full" id="freezeStart" type="button">Einfrieren</button>`;
-  }
-
-  box.querySelectorAll('[data-frost]').forEach(el => el.addEventListener('click', () => {
-    $('freezeBis').value = freezeZielIso(parseInt(el.dataset.frost, 10));
-    box.querySelectorAll('[data-frost]').forEach(x => x.classList.toggle('active', x === el));
-  }));
-  box.querySelectorAll('[data-frost-plus]').forEach(el => el.addEventListener('click', () => {
-    setzeFreeze(isoDateAdd(bisDatum, parseInt(el.dataset.frostPlus, 10)));
-  }));
-  const feld = $('freezeBis');
-  if (feld && rest > 0) feld.addEventListener('change', e => setzeFreeze(e.target.value));
-  const start = $('freezeStart');
-  if (start) start.addEventListener('click', () => setzeFreeze($('freezeBis').value));
-}
-
-/**
- * Die Frist setzen oder verlängern.
- *
- * Sie endet um 23:59 des gewählten Tages — ein Datum ohne Uhrzeit hieße
- * Mitternacht und damit einen Tag weniger, als dasteht. Kürzer geht nie: eine
- * Sperre, die sich zurückdrehen lässt, hält nichts fest.
- */
-function setzeFreeze(wert) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(wert || '')) { showToast('Kein gültiges Datum', true); renderFreeze(); return; }
-  const ziel = new Date(wert + 'T23:59:59');
-  const jetzt = Date.now();
-  if (ziel.getTime() <= jetzt) { showToast('Das liegt nicht in der Zukunft', true); renderFreeze(); return; }
-
-  const s = getSettings();
-  const bisher = freezeUntilMs(s);
-  const laeuft = isFrozen(s);
-  if (laeuft && ziel.getTime() <= bisher) {
-    showToast('Eine laufende Sperre lässt sich nur verlängern', true);
-    renderFreeze();
-    return;
-  }
-  const dauer = fmtDurationShort(ziel.getTime() - jetzt);
-  const frage = laeuft
-    ? `Sperre bis ${fmtDate(wert)} verlängern?\n\nDanach sind es noch ${dauer}.`
-    : `Punktesätze bis ${fmtDate(wert)} einfrieren?\n\nDas sind ${dauer}. `
-      + `Vorzeitig aufheben geht nicht.\n\n${FREEZE_UMFANG}`;
-  if (!confirmAction(frage)) { renderFreeze(); return; }
-
-  mutateSettings(s2 => {
-    s2.freeze = {
-      until: ziel.toISOString(),
-      since: (laeuft && s.freeze && s.freeze.since) ? s.freeze.since : new Date(jetzt).toISOString(),
-    };
-  });
-  render();
-  showToast(laeuft ? `Verlängert bis ${fmtDate(wert)}` : `Eingefroren bis ${fmtDate(wert)}`);
 }
 
 /**
@@ -595,9 +446,6 @@ export function initEinstellungen() {
   $('btnNeuesModell').addEventListener('click', () => neuesModell(KIND_MODEL));
   $('btnNeuesEreignis').addEventListener('click', () => neuesModell(KIND_ORGASM));
   $('btnResetSettings').addEventListener('click', () => {
-    // Der Weg mit den wenigsten Klicks an der Sperre vorbei: einmal
-    // zurücksetzen, und alle Sätze stehen wieder frei da.
-    if (gesperrt('Das Zurücksetzen')) return;
     if (!confirmAction('Alle Modelle und Punktesätze auf die Standardwerte zurücksetzen?\n\nDeine Einträge bleiben erhalten.')) return;
     mutateSettings(s => {
       const std = defaultSettings();
@@ -623,10 +471,7 @@ function renderKopfzeilen() {
   const aktiv = s.models.filter(m => !m.archived).length;
   const archiviert = s.models.length - aktiv;
   $('modelleSub').textContent = `${aktiv} aktiv`
-    + (archiviert ? ` · ${archiviert} archiviert` : '')
-    // Die Sperre sitzt in der Karte darunter, wirkt aber auch hier — das gehört
-    // dorthin, wo man auf ein ausgegrautes Feld stößt.
-    + (istGesperrt() ? ' · 🔒 Sätze eingefroren' : '');
+    + (archiviert ? ` · ${archiviert} archiviert` : '');
 
   const wirksam = stichtagOf(STATE.data, s);
   $('stichtagSub').textContent = wirksam ? `ab ${fmtDate(wirksam)}` : 'alles zählt';
@@ -638,7 +483,6 @@ function renderKopfzeilen() {
 
 export function render() {
   renderModelle();
-  renderFreeze();
   renderZahlen();
   renderVorschau();
   renderStichtag();

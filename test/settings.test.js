@@ -5,7 +5,7 @@ import {
   normalizeSettings, defaultSettings, idFromLabel, cleanId, idFolgtNamen, openModelId,
   lockedIds, pauseIds, lockKind, applyLockKind, resolveModel, modelMap, orgasmPrice,
   brichtStrecke,
-  SETTINGS_SCHEMA, isFrozen, freezeUntilMs, freezeRestMs, FROZEN_MODEL_FIELDS,
+  SETTINGS_SCHEMA,
 } from '../www/js/core/settings.js';
 
 test('Standardregistry ist gültig und deckt die alten Typen ab', () => {
@@ -194,44 +194,15 @@ test('Ein flacher Preis ist einstellbar (Min = Max)', () => {
 });
 
 
-// =========================== EINFRIEREN ===========================
-test('Die Sperre gilt bis zu ihrem Ablauf und keine Minute länger', () => {
-  const s = normalizeSettings({ freeze: { until: '2026-10-10T21:59:59.000Z' } });
-  assert.ok(isFrozen(s, new Date('2026-10-10T21:59:58.000Z')));
-  assert.ok(!isFrozen(s, new Date('2026-10-10T22:00:00.000Z')));
-  assert.equal(freezeRestMs(s, new Date('2026-10-10T21:59:49.000Z')), 10000);
-  assert.equal(freezeRestMs(s, new Date('2027-01-01T00:00:00.000Z')), 0);
-});
-
-test('Ohne Sperre ist nichts gesperrt', () => {
-  const s = normalizeSettings(null);
-  assert.equal(freezeUntilMs(s), null);
-  assert.ok(!isFrozen(s, new Date('2026-09-10')));
-  // Auch nicht durch Unsinn im Feld: ein unlesbares Datum ist keine Sperre,
-  // aber es darf auch keine unendliche daraus werden.
-  const kaputt = normalizeSettings({ freeze: { until: 'demnächst' } });
-  assert.equal(kaputt.freeze, undefined);
-  assert.ok(!isFrozen(kaputt, new Date('2026-09-10')));
-});
-
-test('Eine abgelaufene Sperre bleibt in der Datei stehen', () => {
-  // normalizeSettings darf nicht von der Uhr abhängen: sonst käme dieselbe
-  // Datei je nach Zeitpunkt des Ladens anders zurück.
-  const s = normalizeSettings({ freeze: { until: '2020-01-01T00:00:00.000Z', since: '2019-12-01T00:00:00.000Z' } });
-  assert.equal(s.freeze.until, '2020-01-01T00:00:00.000Z');
-  assert.equal(s.freeze.since, '2019-12-01T00:00:00.000Z');
-  assert.ok(!isFrozen(s, new Date('2026-09-10')));
-});
-
-test('Gesperrt ist, was in die Punkte eingeht', () => {
-  // Der Stundensatz eines Modells zählt dazu — sonst wäre die Sperre mit einem
-  // neuen Käfig zu Satz 5 umgangen. Name und Farbe zählen nicht dazu.
-  for (const feld of ['rate', 'priceMin', 'priceMax', 'halflifeDays', 'repeatFactor', 'streakFactor']) {
-    assert.ok(FROZEN_MODEL_FIELDS.includes(feld), `${feld} muss die Sperre halten`);
-  }
-  for (const feld of ['label', 'color', 'id', 'archived']) {
-    assert.ok(!FROZEN_MODEL_FIELDS.includes(feld), `${feld} darf frei bleiben`);
-  }
+// =========================== KEINE SPERRE MEHR ===========================
+test('Ein alter Sperr-Eintrag wandert nicht mit', () => {
+  // Die Punktesperre gibt es nicht mehr. Dateien aus älteren Fassungen tragen
+  // `freeze` noch — es darf nicht als toter Rest weitergereicht werden, und es
+  // darf erst recht nichts mehr festhalten.
+  const s = normalizeSettings({
+    freeze: { until: '2099-01-01T00:00:00.000Z', since: '2020-01-01T00:00:00.000Z' },
+  });
+  assert.equal(s.freeze, undefined);
 });
 
 test('Ereignisse tragen einen Streckenfaktor, Vorgabe ist der Bruch', () => {
