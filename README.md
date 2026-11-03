@@ -54,7 +54,7 @@ Die Form klingt mit 3 % pro Tag ab, läuft gegen einen Grenzwert und bleibt
 dadurch über Jahre vergleichbar: ein Ausrutscher dellt sie, zerstört sie nicht,
 und zwei ruhige Wochen bauen sie spürbar ab.
 
-Jede Zahl darin steht im Tab **Regeln** und liegt in der Datei, nicht im Programm.
+Jede Zahl darin steht unter **Einstellungen → Regeln** und liegt in der Datei, nicht im Programm.
 
 ### Was der Ungeöffnet-Zuschlag ersetzt hat
 
@@ -103,7 +103,7 @@ wieder, die Bedeutung nicht: er zählt jetzt die Zeit am Stück im selben Käfig
 
 ## Modelle sind Daten
 
-Käfige, Ereignisse und Sätze stehen unter **Regeln**, nicht im Quellcode. Je
+Käfige, Ereignisse und Sätze stehen unter **Einstellungen**, nicht im Quellcode. Je
 Modell einstellbar: Bezeichnung, Farbe, Punkte je Stunde und der
 Verschluss-Zustand. Ein neuer Käfig — oder derselbe Käfig in zwei Trageweisen —
 ist ein Eintrag, kein Release.
@@ -239,7 +239,7 @@ zwei verschiedene Dinge, die sich gegenseitig bepreisen.
 
 Die Vorgabe ist 0. Jede bestehende Datei kennt das Feld nicht und rechnet nach
 dem Laden genau wie vorher; wer die Unterscheidung nicht braucht, merkt nichts
-davon. Wer sie braucht, legt unter **Regeln → Modelle und Ereignisse** ein
+davon. Wer sie braucht, legt unter **Einstellungen → Modelle und Ereignisse** ein
 zweites Ereignis an, gibt ihm einen festen Preis und den Faktor 1.
 
 ### Warum es keine Punktesperre mehr gibt
@@ -284,19 +284,68 @@ nach dem nächsten Schreiben aus der Datei verschwunden.
 
 ## Was die Oberfläche zeigt
 
-**Jeder Tab beantwortet eine Frage.** Der Eintrag-Tab: *was trage ich ein, was
-steht heute schon drin*. Das Dashboard: *wie steht es*. Bis 2.2 stand der
-laufende Zustand — die vier Uhren, das getragene Modell, der Orgasmus-Preis,
-Konto und Form — auf **beiden** Seiten; der Eintrag-Tab war damit ein zweites
-Dashboard, durch das man scrollen musste, um an die Schnelltasten zu kommen.
-Jetzt steht er nur noch im Dashboard, in der Karte **Jetzt**.
+**Drei Tabs, jeder beantwortet eine Frage.** *Eintrag*: was trage ich ein, was
+steht heute schon drin. *Dashboard*: wie steht es. *Einstellungen*: wonach wird
+gerechnet, und wohin wird gespeichert. Bis 2.4 waren die Einstellungen zwei Tabs,
+„Regeln" und „Daten" — beide besucht man selten, und das meiste darin richtet man
+einmal ein. Sie stehen jetzt als zwei Abschnitte auf einer Seite.
 
-**Der Eintrag-Tab beginnt mit den Schnelltasten.** Darunter der gewählte Tag mit
-seinen Einträgen, und als Fußzeile das Tagesergebnis — eine Zeile, die sich zur
-vollen Aufschlüsselung öffnet (Stunden × Satz, Zuschläge, Orgasmuspreise, Summe).
-Weil die Tasten jetzt *über* der Datumswahl stehen, warnt die Karte sichtbar,
-sobald ein anderer Tag als heute eingestellt ist: ohne das landete ein Eintrag
-stillschweigend auf dem Tag, den man vorhin zum Nachsehen ausgewählt hat.
+### Eintragen: tippen, nicht halten
+
+**Eine Schnelltaste trägt beim Antippen ein.** Die Meldung oben nennt, was
+eingetragen wurde, und bietet sechs Sekunden lang **Rückgängig** an. Bis 2.4
+musste man die Taste knapp eine Sekunde halten. Das sollte einen Fehlgriff in
+der Hosentasche abfangen — und erzeugte einen schlimmeren: wer zu kurz drückte,
+bekam eine grüne Meldung „Halten zum Speichern", die genau aussah wie die
+Bestätigung, und merkte erst am nächsten Tag, dass nichts eingetragen war. Dazu
+blieb die Taste auf dem Telefon nach dem Antippen hell, weil `:hover` dort hängen
+bleibt — sie sah ausgewählt aus. Ein Fehlgriff ist sichtbar und lässt sich
+zurücknehmen; ein Eintrag, der nie stattfand, ist unsichtbar. Das Zweite ist das
+schlimmere Problem.
+
+**Die Taste des laufenden Modells ist markiert**, in seiner Farbe und mit „seit
+14:32" darunter. Das ist die eigentliche Rückmeldung: nach einem Wechsel wandert
+die Markierung sofort auf die getippte Taste, und am nächsten Morgen steht dort
+immer noch, was gerade läuft. „Seit" meint den ganzen Lauf — zweimal
+hintereinander derselbe Käfig verschiebt es nicht (`currentRunAt()` in
+`core/command.js`).
+
+**Die Meldungen unterscheiden sich in der Farbe.** Grün heißt eingetragen, rot
+heißt eingetragen und kostet (oder ging schief), grau heißt *nichts* eingetragen
+— etwa „Penicap läuft schon — nichts eingetragen", wenn man die markierte Taste
+noch einmal tippt. Dieselbe Prüfung wie bei Kurzbefehl und Uhr verhindert auch
+den doppelten Eintrag in derselben Minute; ein Doppeltipp schreibt also nicht
+zweimal.
+
+**Rückgängig nimmt genau den einen Eintrag zurück**, nicht den ganzen Stand von
+vor sechs Sekunden: dazwischen kann ein Abgleich mit dem anderen Gerät gelegen
+haben.
+
+**Darunter der gewählte Tag** mit einer Zeile ‹ Heute · Di 03.11.26 ›. Die Pfeile
+gehen einen Tag weiter, die Mitte öffnet den Kalender; in die Zukunft geht es
+nicht. Vorher standen hier ein Datumsfeld und vier Knöpfe für dieselbe Frage.
+Als Fußzeile das Tagesergebnis — eine Zeile, die sich zur vollen Aufschlüsselung
+öffnet (Stunden × Satz, Zuschläge, Orgasmuspreise, Summe). Weil die Tasten *über*
+der Datumswahl stehen, warnt die Karte sichtbar, sobald ein anderer Tag als heute
+eingestellt ist: ohne das landete ein Eintrag stillschweigend auf dem Tag, den
+man vorhin zum Nachsehen ausgewählt hat.
+
+**Die Speichern-Leiste erscheint nur, wo sie etwas tut**: ohne OneDrive-Anmeldung
+(dann ist sie der einzige Weg in eine Datei) und wenn das automatische Speichern
+fehlgeschlagen ist. Mit OneDrive geht jede Änderung von selbst hoch; die Leiste
+stand trotzdem immer da und verdeckte die Einträge. „Tag leeren" ist ein kleiner
+Verweis in der Kopfzeile der Einträge geworden — man braucht ihn selten, und
+jeder Eintrag hat sein eigenes ×.
+
+### Dashboard: jetzt und Rückblick
+
+**Die Karte „Rückblick" teilt die Seite.** Darüber steht **Jetzt**: das
+getragene Modell, der Orgasmus-Preis, die vier Uhren und der Orgasmus-Zähler als
+eine Zeile (laufender Monat, 30, 90 und 365 Tage). Das sind Fragen an die
+Gegenwart, und die ändern sich nicht dadurch, dass man darunter 2025 auswählt.
+Bis 2.2 stand dieser Block zusätzlich im Eintrag-Tab, der damit ein zweites
+Dashboard war; bis 2.4 war der Zähler eine eigene Karte mit vier Kacheln, deren
+vierte („seit dem letzten") in derselben Karte schon zweimal stand.
 
 **Der Statusblock hat nur eine Fassung.** Die vier Uhren, das Modell und der
 Preis kommen aus `ui/status.js` — dieselbe Datei, aus der auch die Live-Ansicht
@@ -306,36 +355,51 @@ Wahrheiten, und die Abweichung fiele erst auf, wenn eine davon falsch ist.
 **Der Zeitraum hat eine Ebene und einen Anker.** Statt einer Reihe von
 Jahreszahlen, die mit jedem Jahr länger wird, wählt man **Alles · Jahr · Quartal
 · Monat** und blättert mit ‹ › durch. Zwei Klicks reichen damit von „alles" bis
-„März 2025", und die Frage „wie läuft dieser Monat" ist überhaupt erst
-beantwortbar. Die Pfeile sperren am Rand der erfassten Spanne — steht die
-Auswahl außerhalb, bleibt der Weg zurück offen, sonst klemmte sie in einem
-leeren Monat fest. Wird die Ebene feiner, bleibt der Zeitpunkt: von „2026" auf
-„Quartal" ist das laufende Quartal gemeint, nicht Q1. Im selben Block steht die
-**Auflösung** (Monat/Woche/Tag), und sie gilt für alle Diagramme darunter statt
-nur für eines; beim Wechsel der Ebene zieht sie sinnvoll mit.
-
-**Dieselbe Form, andere Kennzahl.** Das Balkendiagramm *Je Zeitraum* zeigt
-wahlweise Punkte, verschlossene Stunden oder Orgasmen — ein Klick auf einen
-Balken springt in den Eintrag-Tab dieses Tages. Dazu kommen die gestapelte
-Tragezeit in den Modellfarben (der Donut zeigt die Aufteilung des Zeitraums, die
-Balken die Verschiebung darin), *Orgasmen im Verlauf* mit der Anzahl als Balken
-und dem durchschnittlichen Abstand als Linie auf eigener Achse, und unter
-„Details" das Muster nach Uhrzeit. Alle teilen sich eine Zusammenfassung
-(`aggregatePeriods()`) — drei eigene Fassungen davon entwickelten früher oder
-später drei Vorstellungen davon, was ein Monat ist.
+„März 2025". Die Pfeile sperren am Rand der erfassten Spanne — steht die Auswahl
+außerhalb, bleibt der Weg zurück offen, sonst klemmte sie in einem leeren Monat
+fest. Wird die Ebene feiner, bleibt der Zeitpunkt: von „2026" auf „Quartal" ist
+das laufende Quartal gemeint, nicht Q1. In derselben Karte stehen die vier
+Kennzahlen des Zeitraums.
 
 **Unter jeder Zahl steht, worauf sie sich bezieht.** Ein Durchschnitt ohne
 Nenner ist keine Auskunft: an der Kachel steht deshalb, durch wie viele
-Kalendertage geteilt wurde. Drei Blöcke stehen bewusst *außerhalb* des
-Zeitraums, weil sie Fragen an die Gegenwart beantworten: **Jetzt**, der
-**Orgasmus-Zähler** (laufender Monat, letzte 30 und 90 Tage, Zeit seit dem
-letzten) und die Kacheln Konto und Form. Wo eine Kachel so von ihrem Ausschnitt
-abweicht, sagt sie es in ihrer Unterzeile.
+Kalendertage geteilt wurde. Die einzigen Zahlen unterhalb der Grenze, die nicht
+am Zeitraum hängen, sagen es im Namen: **Konto heute** und **Form heute** über
+ihrem Verlauf. Sie sind zugleich dessen Legende.
 
-**Die Regeln-Seite klappt zu.** Erklärtext, Punktesätze, Stichtag, Inaktivität
-und Zurücksetzen sind einklappbare Karten, und jede trägt im zugeklappten
-Zustand ihre Kernaussage in der Kopfzeile — „ab 14.05.26", „Erinnerung 2 T ·
-Vorschläge 4 T", „7 aktiv · 2 archiviert". Der Zustand bleibt je Karte gemerkt.
+**Ein Diagramm, drei Kennzahlen.** *Je Zeitraum* zeigt Punkte, Stunden oder
+Orgasmen, und jede in der Form, die zu ihr passt: Punkte als Balken mit
+Vorzeichen, Stunden gestapelt in den Modellfarben (wann der eine Käfig den
+anderen ersetzt hat), Orgasmen als Balken mit dem durchschnittlichen Abstand als
+Linie auf eigener Achse. Bis 2.4 waren die beiden letzten eigene Karten, und
+dieses Diagramm zeigte dieselben Zahlen daneben noch einmal als einfache Balken.
+Die **Auflösung** (Monat/Woche/Tag) steht deshalb wieder hier und nicht mehr
+beim Zeitraum — sie betrifft nur noch dieses Diagramm. Ein Klick auf einen
+Balken springt in den Eintrag-Tab dieses Tages. Alles teilt sich eine
+Zusammenfassung (`aggregatePeriods()`) — drei eigene Fassungen davon
+entwickelten früher oder später drei Vorstellungen davon, was ein Monat ist.
+
+Daneben der Donut der Tragezeit, der Kalender, und unter „Details" Monate,
+Rekorde, Wochentag, das Muster nach Uhrzeit und das Archiv der alten Ära — das
+ändert sich nie wieder und stand trotzdem zwischen den Diagrammen, die sich
+täglich bewegen.
+
+### Einstellungen: zugeklappt, mit Stand in der Kopfzeile
+
+**Jede Karte startet zugeklappt** und trägt ihre Kernaussage in der Kopfzeile —
+„7 aktiv · 2 archiviert", „ab 14.05.26", „Erinnerung 2 T · Vorschläge 4 T",
+„angemeldet" oder rot „nicht angemeldet". Damit beantwortet die Seite die Frage
+„steht da noch, was ich denke" ohne einen Klick. Der Zustand bleibt je Karte
+gemerkt.
+
+**Eine Modellzeile ist selbst der Schalter.** Vorher stand an jeder ein eigener
+„Ändern"-Knopf — sieben gleiche Knöpfe untereinander. Die interne ID steht erst
+im Editor, zusammen mit der Adresse, in der sie gebraucht wird.
+
+**Was nur einmal gebraucht wird, steht nur dann da.** Die Redirect-URI der
+Anmeldung erscheint, solange man nicht angemeldet ist — dann, wenn sie bei der
+Einrichtung fehlt. „In Datei speichern" steht nur ohne OneDrive da. „Neu laden"
+ist weg: dafür gibt es den Knopf oben rechts und das Herunterziehen.
 
 **Die Farbskala des Kalenders kommt aus den eigenen Sätzen.** Feste Schwellen
 („++ ab 25 Punkten") messen an einem Maßstab, den die Datei gar nicht kennt: wer
@@ -370,36 +434,26 @@ Anker hat, kann die Uhren selbst weiterlaufen lassen: die Stunden zählen hoch,
 der Preis fällt, die Strecke wächst um Mitternacht. Nichts davon braucht ein
 einziges Ereignis.
 
-Im Daten-Tab steht dafür ein Knopf: **Momentaufnahme kopieren**. Der packt das
+Unter **Einstellungen → Jemanden zusehen lassen** steht dafür ein Knopf:
+**Momentaufnahme kopieren**. Der packt das
 Paket in den Link selbst (`jetzt.html#d=…`, rund 700 Zeichen) — keine Datei,
 keine Freigabe, kein Konto beim Empfänger. Die Uhren laufen darin weiter, neue
 Einträge erscheinen nicht; dafür braucht es einen neuen Link.
 
-### Der Weg über eine laufende Datei — gebaut, aber zugeklappt
+### Der Weg über eine laufende Datei — gebaut, gemessen, entfernt
 
-Darunter liegt zugeklappt, was eine *mitlaufende* Ansicht bräuchte: die App legt
-neben `locked2.json` eine kleine `jetzt.json` ab, gibt sie frei, und die
-Anzeigeseite holt sie minütlich nach. Alles davon ist gebaut und geprüft — es
-führt über OneDrive nur ins Leere (siehe unten). Gelöscht ist es deshalb nicht:
-sobald `jetzt.json` an einem Ort liegt, der Dateien herausgibt, trägt der Aufbau
-sofort.
+Bis 2.4 lag darunter zugeklappt, was eine *mitlaufende* Ansicht bräuchte: die App
+legte neben `locked2.json` eine kleine `jetzt.json` ab, gab sie über `createLink`
+frei, und die Anzeigeseite holte sie minütlich nach. Alles davon war gebaut und
+geprüft — und führte über OneDrive ins Leere (siehe unten). Seit 2.5 steht es
+nicht mehr in der App: ein Schalter, der nichts bewirken kann, ist kein Angebot,
+sondern Fläche. Der Code liegt in der Git-Geschichte.
 
-Ein Knopf dort macht den Rest: **Freigabelink erzeugen** schaltet das
-Mitschreiben ein, legt die Datei an und holt den Anzeigen-Link über
-`createLink` von OneDrive — in einem Schritt. Der dafür nötige Scope
-(`Files.ReadWrite`) ist derselbe, mit dem die App ohnehin schreibt; eine neue
-Zustimmung braucht es nicht. Zweimal drücken legt keine zweite Freigabe an:
-Graph liefert für dieselbe Art und Reichweite denselben Link zurück.
-
-**Freigabe zurücknehmen** zieht sie wieder ein. Das gehört dazu — eine App, die
-Links vergibt, aber zum Widerrufen auf die OneDrive-Oberfläche verweist,
-überlässt genau den Schritt von Hand, auf den es ankommt.
-
-Scheitern kann die Reichweite: bei einem Geschäftskonto darf die Verwaltung
-anonyme Links abschalten. Dann steht die Begründung von Microsoft unverändert in
-der Meldung, und der Weg über die OneDrive-Oberfläche bleibt — ein von Hand
-eingesetzter Link funktioniert genauso, die App weiß dann nur nichts von ihm und
-kann ihn nicht zurücknehmen.
+Zwei Dinge sind geblieben. **Die Anzeigeseite versteht `#q=` weiterhin** — für
+eine `jetzt.json`, die an einem Ort liegt, der sie herausgibt. Und **eine damals
+angelegte Freigabe lässt sich zurücknehmen**: solange die App sich an eine
+erinnert, steht in derselben Karte ein Knopf dafür. Eine App, die Links vergeben
+hat, darf zum Widerrufen nicht auf die OneDrive-Oberfläche verweisen.
 
 Die Seite dahinter ist `jetzt.html` — dieselbe Web-App, aber eine eigene Seite
 ohne Anmeldung, ohne Token und ohne Schreibweg. Dass sie nichts ändern kann, ist
@@ -438,8 +492,8 @@ JavaScript gar nicht erst bis zum Status kommen.
 Ansicht, die neue Einträge zeigt, braucht es deshalb einen Host, der das tut;
 bis dahin ist die Momentaufnahme der Weg.
 
-Nachmessen lässt sich das jederzeit mit **Diagnose-Link kopieren**:
-`jetzt.html#diag=…` probiert die Formen durch und schreibt hin, welche mit
+Nachmessen lässt sich das von Hand: `jetzt.html#diag=<Freigabelink>` probiert
+die Formen durch und schreibt hin, welche mit
 welchem Status antwortet. Die Unterscheidung, auf die es ankommt, ist die
 zwischen einer *Statuszeile* und einem *Block* — die erste hat die CORS-Prüfung
 bestanden und scheitert nur an der Berechtigung. Die Adressen selbst zeigt die
@@ -452,14 +506,14 @@ einen Server: weder das Paket noch ein Freigabelink taucht in einem
 Zugriffsprotokoll auf.
 
 Was bleibt: ein Freigabelink ist ein Ausweis. Wer ihn hat, sieht den Block, auch
-wenn er ihn weitergereicht bekommen hat. Zurücknehmen geht — dafür der Knopf —,
-beim Link im Adress-Fragment nicht: der veraltet nur.
+wenn er ihn weitergereicht bekommen hat. Zurücknehmen geht, beim Link im
+Adress-Fragment nicht: der veraltet nur.
 
 ## Wo die Dateien liegen
 
-Der OneDrive-Ordner steht im Daten-Tab und gilt für alle drei Dateien —
-`locked2.json`, `jetzt.json` und die alte `locked.json`. Verschoben wird dabei
-nichts: erst in OneDrive umlegen, dann hier eintragen.
+Der OneDrive-Ordner steht unter **Einstellungen → OneDrive** und gilt für
+`locked2.json` und die alte `locked.json`. Verschoben wird dabei nichts: erst in
+OneDrive umlegen, dann hier eintragen.
 
 Der Ordner gehört zur *Installation*, nicht zur Datei — nach einem Umzug ist er
 an jedem Gerät einmal zu setzen. Das ist Absicht: die Einstellungen stehen in
@@ -475,7 +529,7 @@ Historie, die dort vielleicht gar nicht liegt.
 ## Eintragen, ohne die App zu öffnen
 
 Ein Eintrag ist ein Zeitpunkt und ein Modell. Dafür das Telefon zu entsperren,
-die App zu suchen, den richtigen Tab abzuwarten und eine Taste zu halten, ist
+die App zu suchen, den richtigen Tab abzuwarten und eine Taste zu tippen, ist
 viel Weg für wenig Inhalt — besonders in dem Moment, in dem der Käfig gerade
 zugeht. Jedes Modell hat deshalb eine Adresse:
 
@@ -495,7 +549,7 @@ war.
 | `d` | Datum `YYYY-MM-DD`, `-1`, `gestern` | heute |
 | `app` | die App offen lassen statt sie zu schließen | aus |
 
-Die ID steht in der App unter **Daten → Kurzbefehle**, je Modell eine fertige
+Die ID steht in der App unter **Einstellungen → Kurzbefehle**, je Modell eine fertige
 Adresse zum Kopieren. Der Name tut es auch — die ID ist nur die stabilere
 Angabe, weil sie sich beim Umbenennen nicht ändert.
 
@@ -511,8 +565,8 @@ nicht von Erfolg zu unterscheiden.
 
 Langer Druck auf das App-Symbol zeigt die Zustände als Kurzbefehle; jeder lässt
 sich einzeln auf den Startbildschirm ziehen. Sie stehen nicht im Build, sondern
-kommen aus der Registry — ein neuer Käfig erscheint dort, sobald er in **Regeln**
-angelegt ist, mit seiner Farbe und seinem Kürzel.
+kommen aus der Registry — ein neuer Käfig erscheint dort, sobald er unter
+**Einstellungen** angelegt ist, mit seiner Farbe und seinem Kürzel.
 
 Android zeigt vier bis fünf davon. Ist die Liste länger, bleibt der offene
 Zustand trotzdem dabei: eine Auswahl aus lauter Käfigen ohne den Weg heraus wäre
@@ -548,7 +602,7 @@ oder nichts mehr mit dem Namen zu tun hat (`KK` für „Nicht verschlossen"),
 rechnet die App zwei Buchstaben aus dem Namen: „RE" und „NV". Zweimal dasselbe
 Kürzel gibt es nicht — „Regeneration" und „Reinigung" ergäben beide „RE", also
 weicht das zweite auf seine ID aus und wird „CL". Weicht ein Kürzel so von der ID
-ab, steht es unter **Daten → Kurzbefehle** neben dem Modell.
+ab, steht es unter **Einstellungen → Kurzbefehle** neben dem Modell.
 
 **Die Uhr rechnet dabei nichts.** Sie kennt die Modell-Registry, die das
 Telefon herüberschickt, und sie schickt eine Modell-ID mit dem Zeitpunkt des
@@ -628,11 +682,12 @@ steht dieselbe Auswahl mit vollen Namen.
 **5. Am Telefon, einmalig**
 
 - Locked öffnen — dabei geht die Registry an die Uhr.
-- *Daten → Kurzbefehle*: dort steht, ob die Uhr direkt eintragen darf, mit
-  einem Knopf **Erlauben** direkt zum passenden Schalter. Handarbeit geht auch:
-  *Einstellungen → Apps → Locked → Über anderen Apps anzeigen* einschalten —
-  auf manchen Geräten liegt der Schalter stattdessen unter *Einstellungen →
-  Apps →* **⋮** *→ Spezieller Zugriff → Über anderen Apps anzeigen*.
+- In Locked unter *Einstellungen → Kurzbefehle*: dort steht, ob die Uhr direkt
+  eintragen darf, mit einem Knopf **Erlauben** direkt zum passenden Schalter.
+  Handarbeit geht auch, in den Android-Einstellungen: *Apps → Locked → Über
+  anderen Apps anzeigen* einschalten — auf manchen Geräten liegt der Schalter
+  stattdessen unter *Apps →* **⋮** *→ Spezieller Zugriff → Über anderen Apps
+  anzeigen*.
 
 Der Grund: seit Android 10 darf eine App aus dem Hintergrund keine Oberfläche
 starten, und ohne eigene Deklaration im Manifest bietet Android den Schalter für
@@ -743,7 +798,7 @@ installiert, hat kein `legacy` und sieht die Karte gar nicht erst.
 2.0 schreibt nach `locked2.json` statt nach `locked.json`. Die alte App kennt
 weder `settings` noch `legacy` und würde beides beim Speichern stillschweigend
 entfernen; getrennte Dateien halten 1.x als Rückfallebene lauffähig. Die
-Übernahme läuft über **Daten → Daten aus Version 1.x übernehmen** (aus OneDrive
+Übernahme läuft über **Einstellungen → Daten aus Version 1.x übernehmen** (aus OneDrive
 oder aus einer Datei) und erkennt Dubletten, ist also gefahrlos wiederholbar.
 
 Die Einträge selbst bleiben unangetastet: Tragezeit, Orgasmus-Zähler und der
@@ -769,7 +824,8 @@ www/
       jetzt.js        der Statusblock als Paket: bauen und weiterrechnen
     sync/             auth.js · onedrive.js · files.js
       paths.js        wo die Dateien in OneDrive liegen (einstellbar)
-    ui/               eintrag · dashboard · einstellungen · daten · charts
+    ui/               eintrag · dashboard · charts · einstellungen und daten
+                      (zwei Module, ein Tab)
       status.js       der laufende Zustand — Dashboard und Live-Ansicht
       jetzt.js        derselbe Block, aus einem Paket statt aus der Historie
       zeitraum.js     Ebene, Anker, Blättern — ohne DOM, deshalb testbar
@@ -789,7 +845,7 @@ Keine Build-Kette, kein Framework: ES-Module, die der Browser direkt lädt.
 Derselbe Ordner geht unverändert in die APK, in den Installer und nach Pages.
 
 ```bash
-npm test          # 166 Tests, nur Node-Builtins
+npm test          # 179 Tests, nur Node-Builtins
 npm start         # Desktop-App lokal starten
 npm run build:win # Windows-Installer (auf Windows)
 npx serve www     # Web-Version lokal
@@ -840,7 +896,7 @@ Zwei weitere Details, die leicht übersehen werden:
   anmelden.
 
 Welche URI die laufende Installation sendet, steht in der App unter
-**Daten → OneDrive-Sync**.
+**Einstellungen → OneDrive**, solange sie nicht angemeldet ist.
 
 ## Build
 
@@ -930,7 +986,7 @@ Ein festes Datum beim ersten Start wäre falsch: wer die App heute installiert u
 die letzten beiden Tage nachträgt, will diese Tage gewertet haben — ohne alte Ära
 gibt es ja nichts, wovon zu trennen wäre. Umgekehrt darf der Stichtag nie *vor*
 das Archiv rutschen, sonst stünden dieselben Tage zweimal in der Wertung, einmal
-nach alter und einmal nach neuer Formel. Das Feld im Tab **Regeln** setzt ihn von
+nach alter und einmal nach neuer Formel. Das Feld unter **Einstellungen → Stichtag** setzt ihn von
 Hand und lässt sich wieder leeren.
 
 Gespeichert werden nur **Ereignisse und Regeln**, nie Punkte. Jede Regeländerung

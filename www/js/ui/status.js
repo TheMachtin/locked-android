@@ -14,6 +14,7 @@
 import { lockPhaseStart, unopenedPhaseStart, lastOrgasmMs } from '../core/calc.js';
 import { labelOf, modelMap, resolveModel, KIND_ORGASM } from '../core/settings.js';
 import { isoOf, hmOf } from '../core/time.js';
+import { currentRunAt } from '../core/command.js';
 import {
   fmtInt, fmtNum, fmtDateShort, fmtDurationLong, msToHours, msToDays, escapeHtml, refTimeFor,
 } from './format.js';
@@ -49,6 +50,16 @@ export function currentModelHtml(ctx) {
     for (const ev of d.events) {
       if (resolveModel(s, map, ev.type).kind === KIND_ORGASM) continue;
       cur = ev.type; curZeit = ev.time;
+    }
+  }
+  // Heute zählt der ganze Lauf, nicht der Tag: ein Käfig vom Vortag lief nicht
+  // „seit 00:00", und dieselbe Angabe steht auf seiner Schnelltaste.
+  if (ctx.heute) {
+    const lauf = currentRunAt(ctx.events, s, ctx.refMs);
+    cur = lauf.id;
+    if (lauf.ms != null) {
+      const t = new Date(lauf.ms);
+      curZeit = isoOf(t) === iso ? hmOf(t) : `${fmtDateShort(isoOf(t))} ${hmOf(t)}`;
     }
   }
   const curM = cur ? resolveModel(s, map, cur) : null;

@@ -8,6 +8,10 @@
  * damit ein zweites Dashboard; er steht jetzt nur noch dort, in der Karte
  * „Jetzt", und kommt in beiden Fällen aus `ui/status.js`.
  *
+ * Eine Auskunft davon ist trotzdem wieder hier, nur an anderer Stelle: welches
+ * Modell gerade läuft, steht auf seiner Taste. Ohne das fiel ein Wechsel, der
+ * nicht angekommen war, erst am nächsten Tag auf.
+ *
  * Geblieben ist das Tagesergebnis, aber als Fußzeile der Einträge: die Zahl
  * gehört zu dem, was darüber steht, und ihre Aufschlüsselung kommt direkt aus
  * `scoreDay()` — Anzeige und Rechnung können so nicht auseinanderlaufen.
@@ -24,6 +28,7 @@ import { isoOf, isoDateAdd, hmOf } from '../core/time.js';
 import { regenState, expiredRegenEvents } from '../core/calc.js';
 import { resolveModel, modelMap, KIND_ORGASM } from '../core/settings.js';
 import { pendingEscalation, escalationEvents } from '../core/escalation.js';
+import { planCommand, currentRunAt } from '../core/command.js';
 
 const $ = id => document.getElementById(id);
 let gewaehltesDatum = isoOf(new Date());
@@ -50,78 +55,167 @@ function renderQuickButtons() {
   // bekommt dann die volle Breite.
   const voll = modelle.length % 2 === 1;
   let html = modelle.map((m, i) => taste(m, voll && i === modelle.length - 1)).join('');
-  if (regen) html += taste(regen, true, `<div class="qb-sub" data-sub="${regen.id}">verfügbar</div>`);
+  if (regen) html += taste(regen, true);
   html += orgasmen.map(m => taste(m, true)).join('');
   wrap.innerHTML = html;
 
-  wrap.querySelectorAll('.qb').forEach(bindHold);
-  renderRegenButton();
+  wrap.querySelectorAll('.qb').forEach(bindTap);
 }
 
-function taste(m, voll, extra) {
+/** Eine Farbe aus der Registry mit Deckkraft — `#rrggbb` → `#rrggbbaa`. */
+function getoent(farbe, alpha) {
+  return /^#[0-9a-f]{6}$/i.test(farbe || '')
+    ? farbe + Math.round(alpha * 255).toString(16).padStart(2, '0')
+    : `rgba(255,255,255,${alpha})`;
+}
+
+function taste(m, voll) {
   const klassen = ['qb'];
   if (m.kind === KIND_ORGASM) klassen.push('danger');
   else if (m.regen) klassen.push('regen');
-  else klassen.push('go');
+  else klassen.push('modell');
   if (voll) klassen.push('span-all');
-  const rand = m.kind === KIND_ORGASM || m.regen ? '' : `style="--qb-farbe:${m.color}"`;
-  return `<button class="${klassen.join(' ')}" data-model="${escapeHtml(m.id)}" type="button" ${rand}>
-    <span class="hold-fill"></span>
-    <div class="qb-main">${escapeHtml(m.label)}</div>${extra || ''}
+  const farbe = m.kind === KIND_ORGASM || m.regen ? ''
+    : `style="--qb-farbe:${escapeHtml(m.color)};--qb-ton:${getoent(m.color, 0.22)}"`;
+  // Jede Taste außer dem Ereignis hat eine Unterzeile: beim laufenden Modell
+  // steht darin, seit wann, bei der Regeneration ihr Zustand.
+  const sub = m.kind === KIND_ORGASM ? '' : '<div class="qb-sub"></div>';
+  return `<button class="${klassen.join(' ')}" data-model="${escapeHtml(m.id)}" type="button" ${farbe}>
+    <div class="qb-main">${escapeHtml(m.label)}</div>${sub}
   </button>`;
 }
 
-/** Gedrückt halten statt tippen: ein Fehlgriff in der Hosentasche wäre sonst ein Eintrag. */
-const HOLD_MS = 800;
-function bindHold(btn) {
-  let timer = null;
-  let ausgeloest = false;
-  const start = (e) => {
+/**
+ * Tippen trägt ein. Die Absicherung gegen einen Fehlgriff ist das Rückgängig in
+ * der Meldung, nicht eine Wartezeit vor dem Speichern.
+ *
+ * Bis 2.4 musste man die Taste knapp eine Sekunde halten. Das sollte einen
+ * Fehlgriff in der Hosentasche abfangen — und erzeugte einen schlimmeren: wer
+ * zu kurz drückte, bekam eine grüne Meldung „Halten zum Speichern", die genau
+ * wie die Bestätigung aussah, und merkte erst am nächsten Tag, dass nichts
+ * eingetragen war. Ein Fehlgriff ist sichtbar und lässt sich zurücknehmen; ein
+ * Eintrag, der nie stattfand, ist unsichtbar.
+ *
+ * Doppeltippen trägt nicht zweimal ein: dieselbe Taste ist für einen Moment
+ * taub, und ein zweites Mal dasselbe Modell gilt ohnehin als „läuft schon".
+ */
+const TAUB_MS = 1200;
+let letzterTipp = { id: null, ms: 0 };
+
+function bindTap(btn) {
+  btn.addEventListener('click', () => {
     if (btn.disabled) return;
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    ausgeloest = false;
-    btn.classList.add('holding');
-    timer = setTimeout(() => {
-      ausgeloest = true;
-      btn.classList.remove('holding');
-      timer = null;
-      addEvent(btn.dataset.model, hmOf(new Date()));
-      if (navigator.vibrate) navigator.vibrate(30);
-    }, HOLD_MS);
-  };
-  const abbruch = () => {
-    if (timer) { clearTimeout(timer); timer = null; }
-    btn.classList.remove('holding');
-  };
-  btn.addEventListener('pointerdown', start);
-  btn.addEventListener('pointerup', abbruch);
-  btn.addEventListener('pointercancel', abbruch);
-  btn.addEventListener('pointerleave', abbruch);
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    if (!ausgeloest && !timer) showToast('Halten zum Speichern');
+    const id = btn.dataset.model;
+    const jetzt = Date.now();
+    if (letzterTipp.id === id && jetzt - letzterTipp.ms < TAUB_MS) return;
+    letzterTipp = { id, ms: jetzt };
+    if (addEvent(id, hmOf(new Date()))) {
+      if (navigator.vibrate) navigator.vibrate(25);
+      bestaetigen(id);
+    }
   });
 }
 
+/** Die getippte Taste kurz aufleuchten lassen — die Antwort dort, wo der Finger ist. */
+function bestaetigen(id) {
+  const btn = document.querySelector(`#quick .qb[data-model="${CSS.escape(id)}"]`);
+  if (!btn) return;
+  btn.classList.remove('gesetzt');
+  // Neu auslösen, auch wenn die Animation von eben noch läuft.
+  void btn.offsetWidth;
+  btn.classList.add('gesetzt');
+  setTimeout(() => btn.classList.remove('gesetzt'), 700);
+}
+
+/**
+ * Einen Eintrag auf den gewählten Tag schreiben.
+ *
+ * Der Plan kommt aus `planCommand()` — derselben Prüfung, durch die auch
+ * Kurzbefehl und Uhr gehen. Anders als dort wird ein unveränderter Zustand hier
+ * aber nicht geschrieben: die Taste des laufenden Modells ist markiert, und wer
+ * sie trotzdem tippt, will meist nur wissen, ob der Wechsel von vorhin drin ist.
+ *
+ * @returns {boolean} ob etwas eingetragen wurde
+ */
 export function addEvent(typ, zeit) {
   const s = getSettings();
-  const m = resolveModel(s, modelMap(s), typ);
-  mutate(data => {
-    data.events.push({ date: gewaehltesDatum, time: zeit, type: typ });
-    data.events.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-  });
+  const plan = planCommand(STATE.data, s, { modell: typ, zeit, datum: gewaehltesDatum });
+  if (!plan.ok) { showToast(plan.fehler, true); return false; }
+  const m = plan.model;
   // Auf einem anderen Tag als heute muss die Meldung das Datum nennen: die
   // Tasten stehen über der Datumswahl, und ein stiller Eintrag auf den Vortag
   // fällt erst Tage später auf.
   const wo = gewaehltesDatum === heute() ? '' : ` am ${fmtDateShort(gewaehltesDatum)}`;
+
+  if (plan.doppelt) {
+    showToast(`${m.label} ${zeit}${wo} steht schon drin`, 'info');
+    return false;
+  }
+  if (plan.unveraendert && m.kind !== KIND_ORGASM) {
+    const lauf = currentRunAt(STATE.data.events, s, Date.parse(`${gewaehltesDatum}T${zeit}:00`));
+    showToast(`${m.label} läuft schon${lauf.ms != null ? ' ' + seitText(lauf.ms) : ''} — nichts eingetragen`, 'info');
+    return false;
+  }
+
+  const ev = plan.event;
+  mutate(data => {
+    data.events.push({ ...ev });
+    data.events.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  });
+
+  const zurueck = { label: 'Rückgängig', run: () => zuruecknehmen(ev, m.label) };
   if (m.kind === KIND_ORGASM) {
-    const heutige = calc().byDate[gewaehltesDatum];
-    const letzter = heutige && heutige.orgasmen[heutige.orgasmen.length - 1];
-    showToast(letzter ? `${m.label}${wo} — ${fmtInt(letzter.price)} Punkte` : m.label + wo, true);
+    const tag = calc().byDate[ev.date];
+    const o = tag && tag.orgasmen.find(x => x.event.time === ev.time && x.event.type === ev.type);
+    const preis = o && o.price ? ` — ${fmtInt(o.price)} Punkte` : '';
+    showToast(`${m.label} ${zeit}${wo}${preis}`, true, zurueck);
   } else {
-    showToast(`${m.label} ${zeit}${wo}`);
+    showToast(`${m.label} ab ${zeit}${wo}`, false, zurueck);
   }
   onNachEintrag();
+  return true;
+}
+
+/** Genau den einen Eintrag wieder entfernen — nicht den ganzen Stand zurückdrehen.
+ *  Dazwischen kann ein Abgleich mit dem anderen Gerät gelegen haben. */
+function zuruecknehmen(ev, label) {
+  let weg = false;
+  mutate(data => {
+    const i = data.events.findIndex(x => x.date === ev.date && x.time === ev.time && x.type === ev.type);
+    if (i >= 0) { data.events.splice(i, 1); weg = true; }
+  });
+  showToast(weg ? `${label} ${ev.time} zurückgenommen` : 'Schon nicht mehr da', 'info');
+  onNachEintrag();
+}
+
+/** „seit 14:32", „seit gestern 22:10", „seit Mo 27.10." */
+function seitText(ms) {
+  const d = new Date(ms);
+  const iso = isoOf(d);
+  if (iso === heute()) return `seit ${hmOf(d)}`;
+  if (iso === isoDateAdd(heute(), -1)) return `seit gestern ${hmOf(d)}`;
+  return `seit ${weekdayOf(iso)} ${fmtDateShort(iso).slice(0, 6)}`;
+}
+
+/**
+ * Das laufende Modell auf seiner Taste markieren.
+ *
+ * Gemessen an *jetzt*, nicht am gewählten Tag: die Tasten tragen mit der
+ * Uhrzeit von jetzt ein, und die Frage, die die Markierung beantwortet, ist
+ * „was trage ich gerade".
+ */
+function renderAktiv() {
+  const s = getSettings();
+  const lauf = currentRunAt(STATE.data.events, s, Date.now());
+  document.querySelectorAll('#quick .qb').forEach(btn => {
+    if (btn.classList.contains('danger')) return;
+    const aktiv = btn.dataset.model === lauf.id;
+    btn.classList.toggle('aktiv', aktiv);
+    btn.setAttribute('aria-pressed', aktiv ? 'true' : 'false');
+    if (btn.classList.contains('regen')) return;   // eigene Unterzeile, siehe unten
+    const sub = btn.querySelector('.qb-sub');
+    if (sub) sub.textContent = aktiv ? (lauf.ms != null ? seitText(lauf.ms) : 'läuft') : '';
+  });
 }
 
 /**
@@ -134,7 +228,6 @@ export function addEvent(typ, zeit) {
 function renderQuickHinweis() {
   const anders = gewaehltesDatum !== heute();
   $('quickDatumHinweis').classList.toggle('hide', !anders);
-  $('quickSub').textContent = anders ? 'auf einen anderen Tag' : 'jetzt';
   if (anders) {
     $('quickDatumText').innerHTML =
       `Trägt auf <b>${weekdayOf(gewaehltesDatum)}, ${fmtDateShort(gewaehltesDatum)}</b> ein — mit der Uhrzeit von jetzt.`;
@@ -181,14 +274,34 @@ export function processExpiredRegens() {
 }
 
 // =========================== TAG UND ERGEBNIS ===========================
+/**
+ * Die Datumszeile: ‹ Heute · Di 03.11.26 ›.
+ *
+ * Vorher standen hier ein Datumsfeld und vier Knöpfe (Heute, Gestern,
+ * Vorgestern, −7T) — fünf Bedienelemente für eine Frage. Die Pfeile gehen einen
+ * Tag weiter, die Mitte öffnet den Kalender für alles, was weiter weg liegt.
+ * In die Zukunft geht es nicht: dort gibt es nichts einzutragen.
+ */
 function renderTagKopf() {
   const iso = gewaehltesDatum;
+  const h = heute();
   $('datum').value = iso;
-  $('wochentag').textContent = weekdayOf(iso);
-  $('evDateLabel').textContent = fmtDateShort(iso);
-  document.querySelectorAll('#datePills .pill').forEach(p => {
-    p.classList.toggle('active', isoDateAdd(heute(), parseInt(p.dataset.offset, 10)) === iso);
-  });
+  $('datum').max = h;
+  const relativ = iso === h ? 'Heute'
+    : iso === isoDateAdd(h, -1) ? 'Gestern'
+    : iso === isoDateAdd(h, -2) ? 'Vorgestern' : '';
+  $('tagText').innerHTML = (relativ ? `<b>${relativ}</b> · ` : '')
+    + `${weekdayOf(iso)} ${fmtDateShort(iso)}`;
+  $('tagNext').disabled = iso >= h;
+  const anzahl = (STATE.data.events || []).filter(e => e.date === iso).length;
+  $('resetDay').classList.toggle('hide', !anzahl);
+}
+
+function tagWechseln(iso) {
+  if (!iso) return;
+  const h = heute();
+  gewaehltesDatum = iso > h ? h : iso;
+  render();
 }
 
 /**
@@ -367,15 +480,15 @@ function renderEscalation() {
 
 // =========================== AUFBAU ===========================
 export function initEintrag() {
-  $('datum').addEventListener('change', e => {
-    if (e.target.value) { gewaehltesDatum = e.target.value; render(); }
+  $('datum').addEventListener('change', e => tagWechseln(e.target.value));
+  // Das Datumsfeld liegt unsichtbar über der Beschriftung. Am Telefon öffnet
+  // ein Tipp darauf den Kalender von selbst; am Desktop nur das kleine Symbol
+  // im Feld — dort hilft showPicker() nach.
+  $('datum').addEventListener('click', e => {
+    try { if (e.target.showPicker) e.target.showPicker(); } catch {}
   });
-  document.querySelectorAll('#datePills .pill').forEach(p => {
-    p.addEventListener('click', () => {
-      gewaehltesDatum = isoDateAdd(heute(), parseInt(p.dataset.offset, 10));
-      render();
-    });
-  });
+  $('tagPrev').addEventListener('click', () => tagWechseln(isoDateAdd(gewaehltesDatum, -1)));
+  $('tagNext').addEventListener('click', () => tagWechseln(isoDateAdd(gewaehltesDatum, 1)));
   $('quickHeute').addEventListener('click', () => {
     gewaehltesDatum = heute();
     render();
@@ -417,11 +530,12 @@ let letzteRegistry = '';
 export function render() {
   processExpiredRegens();
   // Die Tasten nur neu bauen, wenn sich die Registry geändert hat — sonst
-  // ginge ein gerade gehaltener Knopf bei jedem Minutentakt verloren.
+  // ginge das Aufleuchten nach einem Tipp im selben Moment wieder verloren.
   const s = getSettings();
   const kennung = JSON.stringify(s.models.map(m => [m.id, m.label, m.color, m.archived, !!m.regen]));
   if (kennung !== letzteRegistry) { letzteRegistry = kennung; renderQuickButtons(); }
-  else renderRegenButton();
+  renderRegenButton();
+  renderAktiv();
   renderQuickHinweis();
   renderEscalation();
   renderTagKopf();

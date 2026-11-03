@@ -82,10 +82,13 @@ export function aggregatePeriods(days, scale) {
 }
 
 /** Maßstab und Nulllinie eines Balkendiagramms. */
-function achsen(werte, innerH, padT) {
+function achsen(werte, innerH, padT, ganzzahlig) {
   const posMax = Math.max(0, ...werte);
   const negMax = Math.abs(Math.min(0, ...werte));
-  const step = niceStep(Math.max(posMax, negMax, 1));
+  // Eine Anzahl hat keine Fünftel: ohne das stünde an der Orgasmus-Achse
+  // „0 0 1 1 1" — 0,2er-Schritte, auf ganze Zahlen gerundet.
+  const roh = niceStep(Math.max(posMax, negMax, 1));
+  const step = ganzzahlig ? Math.max(1, Math.round(roh)) : roh;
   const yPos = Math.max(step, Math.ceil(posMax / step) * step);
   const yNeg = Math.ceil(negMax / step) * step;
   const yScale = innerH / (yPos + yNeg || 1);
@@ -96,13 +99,13 @@ function achsen(werte, innerH, padT) {
  * Balken je Zeitraum — die gemeinsame Grundform.
  *
  * @param {Array}  data  aus aggregatePeriods()
- * @param {object} spec  { wert, farbe, titel, achse, klick }
+ * @param {object} spec  { wert, farbe, titel, achse, klick, ganzzahlig }
  */
 function saeulen(data, spec) {
   const W = 480, H = 200, padL = 40, padR = 8, padT = 12, padB = 24;
   const innerW = W - padL - padR, innerH = H - padT - padB;
   const werte = data.map(spec.wert);
-  const a = achsen(werte, innerH, padT);
+  const a = achsen(werte, innerH, padT, spec.ganzzahlig);
   const xstep = innerW / data.length;
   const barW = Math.max(2, Math.min(xstep * 0.75, 40));
   const labelEvery = Math.max(1, Math.ceil(data.length / 12));
@@ -135,37 +138,25 @@ function saeulen(data, spec) {
 
 export const METRIKEN = [
   { v: 'netto',    l: 'Punkte',    beschreibung: 'Tagesergebnisse zusammengezählt' },
-  { v: 'stunden',  l: 'Stunden',   beschreibung: 'verschlossene Stunden' },
-  { v: 'orgasmen', l: 'Orgasmen',  beschreibung: 'Anzahl je Zeitraum' },
+  { v: 'stunden',  l: 'Stunden',   beschreibung: 'Tragezeit nach Modell' },
+  { v: 'orgasmen', l: 'Orgasmen',  beschreibung: 'Balken = Anzahl · Linie = Ø Abstand' },
 ];
 
 /**
- * Ein Diagramm, drei Fragen: Punkte, verschlossene Stunden oder Orgasmen je
- * Zeitraum. Dieselben Balken, dieselbe Achse, derselbe Klick auf einen Tag —
- * nur die Kennzahl wechselt. Anklickbar (data-key).
+ * Ein Diagramm, drei Fragen: Punkte, Stunden oder Orgasmen je Zeitraum.
+ * Dieselbe Zeitachse, derselbe Klick auf einen Balken — nur die Kennzahl
+ * wechselt, und mit ihr die Form, die zu ihr passt.
+ *
+ * Bis 2.4 standen die gestapelte Tragezeit und die Orgasmen mit Abstandslinie
+ * als eigene Karten darunter, und dieses Diagramm zeigte dieselben Zahlen ein
+ * zweites Mal als einfache Balken. Jetzt sind sie die Ansicht dieser Kennzahl.
  */
-export function metricChart(days, scale, metric) {
+export function metricChart(days, scale, metric, settings) {
+  if (metric === 'stunden') return stundenStackChart(days, settings, scale);
+  if (metric === 'orgasmen') return orgasmusChart(days, scale);
+
   const data = aggregatePeriods(days, scale);
   if (!data.length) return leer('Noch keine Daten');
-
-  if (metric === 'stunden') {
-    return saeulen(data, {
-      wert: d => d.stunden,
-      farbe: () => 'var(--accent)',
-      achse: v => fmtInt(v),
-      titel: d => `${d.label}: ${fmtNum(d.stunden, 1)} h verschlossen`
-        + ` (offen ${fmtNum(d.offen, 1)} h, Unterbrechung ${fmtNum(d.pause, 1)} h)`,
-    }).svg;
-  }
-  if (metric === 'orgasmen') {
-    return saeulen(data, {
-      wert: d => d.orgasmen,
-      farbe: () => 'var(--danger)',
-      achse: v => fmtInt(v),
-      titel: d => `${d.label}: ${fmtInt(d.orgasmen)} ${d.orgasmen === 1 ? 'Orgasmus' : 'Orgasmen'}`
-        + (d.abstand != null ? `, Ø Abstand ${fmtNum(d.abstand, 1)} T` : ''),
-    }).svg;
-  }
   return saeulen(data, {
     wert: d => d.netto,
     farbe: v => (v >= 0 ? 'var(--accent)' : 'var(--bad)'),
@@ -177,13 +168,14 @@ export function metricChart(days, scale, metric) {
 // =========================== ORGASMEN IM VERLAUF ===========================
 /**
  * Anzahl je Zeitraum als Balken, der durchschnittliche Abstand als Linie.
+ * Die Ansicht „Orgasmen" von `metricChart()`.
  *
  * Der Zähler oben im Dashboard sagt, wie es *gerade* steht. Ob die Strecken
  * länger oder kürzer werden, sagt er nicht — und das ist die Frage, um die es
  * bei einem Abstand geht. Die Linie hat ihre eigene Achse rechts: Anzahl und
  * Tage haben nichts gemeinsam außer der Zeitachse darunter.
  */
-export function orgasmusChart(days, scale) {
+function orgasmusChart(days, scale) {
   const data = aggregatePeriods(days, scale);
   if (!data.length) return leer('Noch keine Daten');
   if (!data.some(d => d.orgasmen)) return leer('Kein Orgasmus im Zeitraum');
@@ -192,7 +184,7 @@ export function orgasmusChart(days, scale) {
     wert: d => d.orgasmen,
     farbe: () => 'var(--danger)',
     achse: v => fmtInt(v),
-    klick: false,
+    ganzzahlig: true,
     titel: d => `${d.label}: ${fmtInt(d.orgasmen)} ${d.orgasmen === 1 ? 'Orgasmus' : 'Orgasmen'}`
       + (d.abstand != null ? `, Ø Abstand ${fmtNum(d.abstand, 1)} T` : ''),
   });
@@ -234,14 +226,15 @@ export function orgasmusChart(days, scale) {
 
 // =========================== TRAGEZEIT JE ZEITRAUM ===========================
 /**
- * Gestapelte Stunden in den Modellfarben.
+ * Gestapelte Stunden in den Modellfarben — die Ansicht „Stunden" von
+ * `metricChart()`. Anklickbar wie die anderen Balken (data-key).
  *
  * Der Donut daneben zeigt die Aufteilung des ganzen Zeitraums; er kann nicht
  * zeigen, dass der eine Käfig im Frühjahr den anderen ersetzt hat. Gestapelt
  * statt nebeneinander, weil die Summe die zweite Aussage ist: wie viel von den
  * 24 Stunden eines Tages überhaupt erfasst war.
  */
-export function stundenStackChart(days, settings, scale) {
+function stundenStackChart(days, settings, scale) {
   const data = aggregatePeriods(days, scale);
   if (!data.length) return leer('Noch keine Daten');
   const map = modelMap(settings);
@@ -279,7 +272,8 @@ export function stundenStackChart(days, settings, scale) {
       if (h <= 0.004) continue;
       const hoehe = h * yScale;
       const m = resolveModel(settings, map, id);
-      svg += `<rect x="${(cx - barW / 2).toFixed(1)}" y="${(unten - hoehe).toFixed(1)}" width="${barW.toFixed(1)}" `
+      svg += `<rect class="bar-clickable" style="cursor:pointer" data-key="${d.key}" `
+        + `x="${(cx - barW / 2).toFixed(1)}" y="${(unten - hoehe).toFixed(1)}" width="${barW.toFixed(1)}" `
         + `height="${hoehe.toFixed(1)}" fill="${m.color}">`
         + `<title>${d.label} · ${escapeHtml(m.label)}: ${fmtNum(h, 1)} h</title></rect>`;
       unten -= hoehe;
@@ -523,21 +517,15 @@ export function heatBand(netto, scale) {
  * berechnet sich die Farbe" soll unter dem Kalender beantwortet sein und nicht
  * im Quelltext.
  */
-export function heatLegend(scale, settings) {
+export function heatLegend(scale) {
   const voll = scale[3].bis;
   const felder = scale.map(b => `<div class="hl" style="background:${b.farbe};color:${b.vorn}">
     <div class="z">${b.zeichen}</div><div class="r">${b.text}</div></div>`).join('');
+  // Der lange Absatz, der hier stand, steht jetzt unter „So rechnet die App".
+  // Eine Zeile reicht, um die Skala zu lesen: woran „++" gemessen ist.
   return `<div class="heat-legend">${felder}</div>
-    <div class="legend" style="text-align:left">
-      Die Farbe zeigt das <b>Tagesergebnis</b> in Punkten — dieselbe Zahl, die im
-      Eintrag-Tab unter den Einträgen des Tages steht. Die Schwellen kommen aus deinen eigenen
-      Sätzen: ein Tag durchgehend verschlossen bringt <b>${schwelle(voll)}</b> Punkte,
-      und ab da ist ein Tag „++". „+++" beginnt bei <b>${schwelle(scale[4].bis)}</b>,
-      also auf halbem Weg zum besten denkbaren Tag
-      (${schwelle((voll + settings.points.bonusUngeoeffnetCap) * settings.points.streakCap)}
-      Punkte, mit vollem Ungeöffnet-Zuschlag und Streak-Deckel).
-      Ein leeres Kästchen heißt „nichts erfasst".
-    </div>`;
+    <div class="legend" style="text-align:left">„++" ab einem durchgehend verschlossenen Tag
+      (${schwelle(voll)} Punkte). Die Schwellen folgen deinen Sätzen.</div>`;
 }
 
 export function heatmap(days, settings) {

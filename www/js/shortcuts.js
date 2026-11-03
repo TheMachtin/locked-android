@@ -93,7 +93,7 @@ export async function runCommand(url) {
     return true;
   }
   if (plan.doppelt) {
-    showToast(plan.meldung);
+    showToast(plan.meldung, 'info');
     await abschluss(plan.meldung, cmd);
     return true;
   }

@@ -21,11 +21,13 @@
     </div>
   </header>
 
+  <!-- Drei Tabs. „Regeln" und „Daten" waren zwei, aber beide besucht man
+       selten, und vieles darin richtet man einmal ein. Sie stehen jetzt als
+       zwei Abschnitte in „Einstellungen". -->
   <div class="tabs">
     <div class="tab active" data-tab="eintrag">Eintrag</div>
     <div class="tab" data-tab="dashboard">Dashboard</div>
-    <div class="tab" data-tab="einstellungen">Regeln</div>
-    <div class="tab" data-tab="daten">Daten</div>
+    <div class="tab" data-tab="einstellungen">Einstellungen</div>
   </div>
 
   <!-- ============ EINTRAG ============ -->
@@ -45,7 +47,9 @@
     </div>
 
     <div class="card" id="cardSchnell">
-      <h2>Schnelleintrag <span class="sub" id="quickSub">jetzt</span></h2>
+      <!-- Tippen trägt ein, das Rückgängig steht in der Meldung. Das laufende
+           Modell ist auf seiner Taste markiert (ui/eintrag.js). -->
+      <h2>Schnelleintrag</h2>
       <!-- Die Tasten stehen über der Datumswahl. Steht die nicht auf heute,
            muss das hier stehen und nicht darunter: sonst landet der Eintrag
            still auf dem Vortag. -->
@@ -54,20 +58,17 @@
         <button class="btn ghost" id="quickHeute" type="button">Auf heute</button>
       </div>
       <div class="quick" id="quick"></div>
-      <div class="legend">Taste <b style="color:var(--accent)">gedrückt halten</b> zum Speichern (~1s)</div>
     </div>
 
     <div class="card" id="cardEintraege">
-      <h2>Einträge am <span class="sub" id="evDateLabel"></span></h2>
-      <div class="datum-zeile">
-        <input type="date" id="datum">
-        <span class="wd" id="wochentag"></span>
-      </div>
-      <div class="date-pills" id="datePills">
-        <button class="pill" data-offset="0" type="button">Heute</button>
-        <button class="pill" data-offset="-1" type="button">Gestern</button>
-        <button class="pill" data-offset="-2" type="button">Vorgestern</button>
-        <button class="pill" data-offset="-7" type="button">−7T</button>
+      <h2>Einträge <button class="link-btn hide" id="resetDay" type="button">Tag leeren</button></h2>
+      <div class="tag-nav">
+        <button class="zr-arrow" id="tagPrev" type="button" aria-label="Vortag">‹</button>
+        <label class="tag-label">
+          <span id="tagText"></span>
+          <input type="date" id="datum" aria-label="Tag wählen">
+        </label>
+        <button class="zr-arrow" id="tagNext" type="button" aria-label="Folgetag">›</button>
       </div>
       <div id="dayTimeline" style="margin:14px 0 10px"></div>
       <div class="events" id="events"></div>
@@ -84,87 +85,72 @@
   </div>
 
   <!-- ============ DASHBOARD ============ -->
+  <!-- Zwei Teile, getrennt durch die Karte „Rückblick": darüber steht, was
+       jetzt gilt, darunter alles, was am gewählten Zeitraum hängt. Die Karten
+       mussten deshalb nicht mehr einzeln „unabhängig vom Zeitraum" dazusagen. -->
   <div id="page-dashboard" class="hide">
     <div class="card" id="cardJetzt">
-      <h2>Jetzt <span class="sub">unabhängig vom Zeitraum</span></h2>
+      <h2>Jetzt</h2>
       <div class="current-model" id="jetztModell"></div>
       <div class="preis hide" id="jetztPreis"></div>
       <div class="streak-row" id="jetztStreaks"></div>
-    </div>
-
-    <!-- Rollende Fenster, kein Ausschnitt: „letzte 30 Tage" heißt hier immer
-         die letzten 30 Tage, auch wenn daneben 2025 eingestellt ist. -->
-    <div class="card" id="cardOrgasmus">
-      <h2>Orgasmus-Zähler <span class="sub">unabhängig vom Zeitraum</span></h2>
-      <div class="kpis vier" id="orgCounter"></div>
+      <!-- Der Orgasmus-Zähler war eine eigene Karte mit vier Kacheln. Was er
+           sagt, gehört zu „jetzt" — rollende Fenster, keine Ausschnitte —, und
+           „seit letztem" stand daneben schon zweimal (Kachel und Preis). -->
+      <div class="mini-kopf">Orgasmen</div>
+      <div class="mini-row" id="orgCounter"></div>
       <div class="small" id="orgLast"></div>
     </div>
 
     <div class="card" id="cardZeitraum">
-      <h2>Zeitraum <span class="sub" id="zeitraumSub"></span></h2>
+      <h2>Rückblick <span class="sub" id="zeitraumSub"></span></h2>
       <div class="seg" id="zeitraumEbene"></div>
       <div class="zr-nav hide" id="zeitraumNav">
         <button class="zr-arrow" id="zrPrev" type="button" aria-label="zurück">‹</button>
         <div class="zr-label" id="zrLabel"></div>
         <button class="zr-arrow" id="zrNext" type="button" aria-label="vor">›</button>
       </div>
-      <!-- Die Auflösung steuert alle Zeitraum-Diagramme gemeinsam. Sie stand
-           früher an einem einzigen davon und galt trotzdem nur dort. -->
-      <div class="zr-aufloesung">
-        <span class="zr-titel">Auflösung</span>
-        <div class="seg" id="chartScale">
-          <div class="seg-opt" data-scale="month">Monat</div>
-          <div class="seg-opt" data-scale="week">Woche</div>
-          <div class="seg-opt" data-scale="day">Tag</div>
-        </div>
-      </div>
+      <div class="kpis vier" id="dashKpis"></div>
     </div>
 
-    <div class="card" id="cardUebersicht">
-      <h2>Übersicht</h2>
-      <div class="kpis" id="dashKpis"></div>
-    </div>
     <div class="card" id="cardVerlauf">
-      <h2>Konto und Form <span class="sub">grün = Konto · braun = Form</span></h2>
+      <h2>Konto und Form</h2>
+      <!-- Die beiden Zahlen sind zugleich die Legende der Linien darunter. -->
+      <div class="kf-zahlen" id="kontoForm"></div>
       <div id="verlaufChart"></div>
-      <div class="legend" style="text-align:left">
-        Das <b>Konto</b> summiert alles seit dem Stichtag. Die <b>Form</b> klingt täglich
-        ab und zeigt, wie es zuletzt lief — sie hat eine Obergrenze und bleibt
-        dadurch über Jahre vergleichbar.
-      </div>
     </div>
+
+    <!-- Ein Diagramm statt drei: Punkte, Stunden und Orgasmen waren je eine
+         eigene Karte und zeigten zweimal dasselbe. „Stunden" stapelt jetzt nach
+         Modell, „Orgasmen" trägt die Abstandslinie. Die Auflösung steht wieder
+         hier, weil sie nur noch dieses Diagramm betrifft. -->
     <div class="card" id="cardErgebnis">
       <h2>Je Zeitraum <span class="sub" id="metricSub"></span></h2>
-      <div class="seg" id="chartMetric" style="margin-bottom:12px">
+      <div class="seg" id="chartMetric">
         <div class="seg-opt active" data-metric="netto">Punkte</div>
         <div class="seg-opt" data-metric="stunden">Stunden</div>
         <div class="seg-opt" data-metric="orgasmen">Orgasmen</div>
       </div>
+      <div class="seg klein" id="chartScale">
+        <div class="seg-opt" data-scale="month">Monat</div>
+        <div class="seg-opt" data-scale="week">Woche</div>
+        <div class="seg-opt" data-scale="day">Tag</div>
+      </div>
       <div id="punkteChart"></div>
     </div>
+
     <div class="card" id="cardModelle">
-      <h2>Tragezeit <span class="sub">Anteile und Verschiebung</span></h2>
+      <h2>Tragezeit <span class="sub">Anteile im Zeitraum</span></h2>
       <div id="modellDonut" style="display:flex;justify-content:center;margin-bottom:8px"></div>
       <div id="modellList"></div>
-      <!-- Der Donut sagt, wie sich der ganze Zeitraum aufteilt; die gestapelten
-           Balken sagen, wann sich das verschoben hat. -->
-      <div id="stundenStack" style="margin-top:14px"></div>
     </div>
-    <div class="card" id="cardOrgasmusVerlauf">
-      <h2>Orgasmen im Verlauf <span class="sub">Balken = Anzahl · Linie = Abstand</span></h2>
-      <div id="orgasmusChart"></div>
-    </div>
+
     <div class="card" id="cardKalender">
-      <h2>Kalender</h2>
+      <h2>Kalender <span class="sub">Farbe = Tagesergebnis</span></h2>
       <div id="heatmap"></div>
       <!-- Die Legende steht nicht hier: ihre Schwellen kommen aus den eigenen
            Sätzen und ändern sich mit ihnen (siehe heatScale() in charts.js). -->
       <div id="heatLegend"></div>
-    </div>
-
-    <div class="card archiv hide" id="archivCard">
-      <h2>Archiv <span class="sub">Punkte aus der alten Ära</span></h2>
-      <div id="archivBody"></div>
     </div>
 
     <button class="btn ghost full collapse-toggle" id="detailsToggle" type="button">Details anzeigen ▾</button>
@@ -176,47 +162,29 @@
         <h2>Muster nach Uhrzeit <span class="sub">wann eingetragen wird</span></h2>
         <div id="hourChart"></div>
       </div>
+      <!-- Das Archiv ändert sich nie wieder; es stand trotzdem zwischen den
+           Diagrammen, die sich täglich bewegen. -->
+      <div class="card archiv hide" id="archivCard">
+        <h2>Archiv <span class="sub">Punkte aus der alten Ära</span></h2>
+        <div id="archivBody"></div>
+      </div>
     </div>
   </div>
 
-  <!-- ============ REGELN ============ -->
-  <!-- Die Karten sind einklappbar (ui/collapse.js). Was zugeklappt startet,
-       steht in data-collapse-default — der lange Erklärtext und die Zahlenfelder
-       liest man einmal und dreht dann selten daran; die Modelle sind der Ort,
-       an dem tatsächlich gearbeitet wird. -->
+  <!-- ============ EINSTELLUNGEN ============ -->
+  <!-- Jede Karte ist einklappbar (ui/collapse.js), startet zugeklappt und trägt
+       in der Kopfzeile ihren Stand — „7 aktiv", „ab 14.05.26", „angemeldet".
+       So beantwortet die Seite „steht da noch, was ich denke" ohne einen Klick.
+       Wer eine Karte aufklappt, findet sie beim nächsten Mal offen vor. -->
   <div id="page-einstellungen" class="hide">
-    <div class="card collapse" data-collapse="erklaerung" data-collapse-default="zu">
-      <h2>So rechnet die App</h2>
-      <div class="collapse-body">
-      <div class="small" style="margin-top:0">
-        <b>Verschlossene Zeit verdient</b> — Stunden × Satz des getragenen Modells,
-        dazu ein Bonus für einen ganz verschlossenen Tag, das Ganze mal einem
-        gedeckelten Streak-Multiplikator.<br>
-        <b>Offene Zeit und Orgasmen kosten</b> — offene Stunden nach ihrem (negativen)
-        Satz, ein Orgasmus nach einem Preis, der mit der Wartezeit fällt.<br>
-        <b>Nicht jedes Ereignis ist ein Orgasmus</b> — je Ereignis steht neben dem
-        Preis, was von der orgasmusfreien Strecke übrig bleibt: 0 bricht sie (so
-        der Orgasmus), 1 lässt sie laufen, dazwischen bleibt der Anteil stehen.
-        Bezahlt wird in jedem Fall.<br>
-        <b>Eine Unterbrechung ist keins von beidem</b> — die Reinigung verdient nichts,
-        kostet nichts und beendet die verschlossene Phase nicht.<br>
-        <b>Die Differenz</b> landet im Konto (läuft mit) und im Form-Wert (klingt ab).<br>
-        <b>Verschlossen und ungeöffnet</b> sind zwei Uhren: die erste läuft über
-        Modellwechsel und Reinigung hinweg, die zweite zählt die Zeit am Stück im
-        selben Käfig und beginnt bei jedem Wechsel neu.<br>
-        <b>Die ungeöffnete Strecke zahlt</b> — je vollendeten 24 Stunden im selben
-        Käfig ein Zuschlag, der mit der Strecke steigt und gedeckelt ist. Was einmal
-        abgelaufen ist, bleibt: eine spätere Öffnung nimmt ihn nicht zurück.
-      </div>
-      </div>
-    </div>
+    <div class="abschnitt">Regeln</div>
 
-    <div class="card collapse" data-collapse="modelle" data-collapse-default="auf">
+    <div class="card collapse" data-collapse="modelle" data-collapse-default="zu">
       <h2>Modelle und Ereignisse <span class="sub" id="modelleSub"></span></h2>
       <div class="collapse-body">
       <div class="small" style="margin-top:0;margin-bottom:10px">
-        Was du trägst und was du einträgst. Änderungen wirken sofort auf die
-        ganze Historie — die Punkte sind abgeleitet, nicht gespeichert.
+        Antippen zum Ändern. Änderungen wirken auf die ganze Historie — die
+        Punkte sind abgeleitet, nicht gespeichert.
       </div>
       <div id="modelList"></div>
       <div class="row2" style="margin-top:10px">
@@ -227,7 +195,7 @@
     </div>
 
     <div class="card collapse" data-collapse="punkte" data-collapse-default="zu">
-      <h2>Punktesätze</h2>
+      <h2>Punktesätze <span class="sub" id="punkteSub"></span></h2>
       <div class="collapse-body">
       <div id="pointSettings"></div>
       <div style="height:12px"></div>
@@ -250,6 +218,39 @@
       </div>
     </div>
 
+    <div class="card collapse" data-collapse="erklaerung" data-collapse-default="zu">
+      <h2>So rechnet die App</h2>
+      <div class="collapse-body">
+      <div class="small" style="margin-top:0">
+        <b>Verschlossene Zeit verdient</b> — Stunden × Satz des getragenen Modells,
+        dazu ein Bonus für einen ganz verschlossenen Tag, das Ganze mal einem
+        gedeckelten Streak-Multiplikator.<br>
+        <b>Offene Zeit und Orgasmen kosten</b> — offene Stunden nach ihrem (negativen)
+        Satz, ein Orgasmus nach einem Preis, der mit der Wartezeit fällt.<br>
+        <b>Nicht jedes Ereignis ist ein Orgasmus</b> — je Ereignis steht neben dem
+        Preis, was von der orgasmusfreien Strecke übrig bleibt: 0 bricht sie (so
+        der Orgasmus), 1 lässt sie laufen, dazwischen bleibt der Anteil stehen.
+        Bezahlt wird in jedem Fall.<br>
+        <b>Eine Unterbrechung ist keins von beidem</b> — die Reinigung verdient nichts,
+        kostet nichts und beendet die verschlossene Phase nicht.<br>
+        <b>Die Differenz</b> landet im Konto und im Form-Wert. Das <b>Konto</b>
+        summiert alles seit dem Stichtag. Die <b>Form</b> klingt täglich ab und
+        zeigt, wie es zuletzt lief — sie hat eine Obergrenze und bleibt dadurch
+        über Jahre vergleichbar.<br>
+        <b>Verschlossen und ungeöffnet</b> sind zwei Uhren: die erste läuft über
+        Modellwechsel und Reinigung hinweg, die zweite zählt die Zeit am Stück im
+        selben Käfig und beginnt bei jedem Wechsel neu.<br>
+        <b>Die ungeöffnete Strecke zahlt</b> — je vollendeten 24 Stunden im selben
+        Käfig ein Zuschlag, der mit der Strecke steigt und gedeckelt ist. Was einmal
+        abgelaufen ist, bleibt: eine spätere Öffnung nimmt ihn nicht zurück.<br>
+        <b>Die Farben im Kalender</b> zeigen das Tagesergebnis. Die Schwellen
+        kommen aus den eigenen Sätzen: ein Tag durchgehend verschlossen ist „++",
+        „+++" beginnt auf halbem Weg zum besten denkbaren Tag, mit vollem
+        Ungeöffnet-Zuschlag und Streak-Deckel.
+      </div>
+      </div>
+    </div>
+
     <div class="card collapse" data-collapse="reset" data-collapse-default="zu">
       <h2>Zurücksetzen</h2>
       <div class="collapse-body">
@@ -258,76 +259,27 @@
         <button class="btn danger-outline full" id="btnResetSettings" type="button">Auf Standard zurücksetzen</button>
       </div>
     </div>
-  </div>
 
-  <!-- ============ DATEN ============ -->
-  <div id="page-daten" class="hide">
-    <div class="card">
-      <h2>OneDrive-Sync</h2>
-      <div class="small" id="authStatus">Nicht angemeldet</div>
-      <div style="height:10px"></div>
-      <div class="file-actions">
-        <button class="btn ghost" id="btnLogin" type="button">Mit Microsoft anmelden</button>
+    <div class="abschnitt">Daten und Geräte</div>
+
+    <div class="card collapse" data-collapse="sync" data-collapse-default="zu">
+      <h2>OneDrive <span class="sub" id="syncSub"></span></h2>
+      <div class="collapse-body">
+      <div class="sync-zeile">
+        <div class="small" id="authStatus" style="margin-top:0">Nicht angemeldet</div>
+        <button class="btn primary" id="btnLogin" type="button">Mit Microsoft anmelden</button>
         <button class="btn ghost hide" id="btnLogout" type="button">Abmelden</button>
-        <button class="btn ghost" id="btnReload" type="button">Neu laden</button>
       </div>
-      <div class="small" id="cloudPath"></div>
       <div class="small" id="authRedirectInfo"></div>
-      <div style="height:10px"></div>
-      <div class="setting breit">
+      <div class="setting breit" style="margin-top:6px">
         <label for="cloudFolder">Ordner in OneDrive</label>
-        <input type="text" id="cloudFolder" spellcheck="false" autocapitalize="off"
-               placeholder="/Documents/sonstiges/Keuschhaltung">
-      </div>
-      <div class="file-actions">
-        <button class="btn ghost" id="btnCloudFolder" type="button">Ordner übernehmen</button>
+        <div class="feld-mit-knopf">
+          <input type="text" id="cloudFolder" spellcheck="false" autocapitalize="off"
+                 placeholder="/Documents/sonstiges/Keuschhaltung">
+          <button class="btn ghost" id="btnCloudFolder" type="button">Übernehmen</button>
+        </div>
       </div>
       <div class="small" id="cloudFolderHint"></div>
-    </div>
-
-    <div class="card">
-      <h2>Jemanden zusehen lassen <span class="sub">nur lesen</span></h2>
-      <div class="small" style="margin-top:0">
-        Der Block „Jetzt“ als Link — ohne Einträge, ohne Einstellungen, ohne
-        Konto. Die Uhren darin laufen beim Betrachter weiter und der Preis
-        fällt; für neue Einträge braucht es einen neuen Link.
-      </div>
-      <div style="height:10px"></div>
-      <button class="btn primary full" id="btnJetztSnapshot" type="button">Momentaufnahme kopieren</button>
-
-      <!-- Der Weg über eine laufende Datei ist gebaut und geprüft, führt über
-           OneDrive aber ins Leere (siehe README). Er steht deshalb zugeklappt
-           da statt gelöscht: an einem Ort, der Dateien herausgibt, trägt er
-           sofort. -->
-      <button class="btn ghost full collapse-toggle" id="jetztLiveToggle" type="button"
-              style="margin-top:10px">Laufende Datei ▾</button>
-      <div id="jetztLiveSection" class="hide">
-        <div class="small" style="margin-top:0">
-          <b>Geht über OneDrive derzeit nicht.</b> Anonyme Dateien werden dort
-          nicht an fremdes JavaScript herausgegeben — gemessen am 07.09.26, alle
-          Adressformen abschlägig. Der Aufbau bleibt trotzdem stehen: er trägt,
-          sobald <code>jetzt.json</code> an einem Ort liegt, der das tut.
-        </div>
-      <div class="setting schalter">
-        <label for="jetztAktiv">jetzt.json mitschreiben</label>
-        <input type="checkbox" id="jetztAktiv">
-      </div>
-      <div class="setting breit">
-        <label for="jetztShareUrl">Quelle: OneDrive-Freigabelink <span style="font-weight:500;opacity:.75">— nicht der Link zum Weitergeben</span></label>
-        <input type="text" id="jetztShareUrl" spellcheck="false" autocapitalize="off"
-               placeholder="https://1drv.ms/…">
-      </div>
-      <div style="height:10px"></div>
-      <div class="row2">
-        <button class="btn ghost" id="btnJetztFreigabe" type="button">Freigabelink erzeugen</button>
-        <button class="btn danger-outline hide" id="btnJetztFreigabeWeg" type="button">Freigabe zurücknehmen</button>
-      </div>
-      <div class="small" id="jetztHinweis"></div>
-      <div style="height:10px"></div>
-      <div class="row2">
-        <button class="btn ghost" id="btnJetztLink" type="button">Link kopieren</button>
-        <button class="btn ghost" id="btnJetztDiagnose" type="button">Diagnose-Link</button>
-      </div>
       </div>
     </div>
 
@@ -345,46 +297,67 @@
       </div>
     </div>
 
-    <div class="card">
-      <h2>Kurzbefehle <span class="sub">Startbildschirm, Automation, Uhr</span></h2>
-      <div class="small" style="margin-top:0" id="shortcutIntro"></div>
-      <div class="sc-list" id="shortcutList"></div>
-      <div class="sc-perm hide" id="shortcutPerm"></div>
-      <div class="small" id="shortcutHint"></div>
-    </div>
-
-    <div class="card">
-      <h2>Datei (manuell)</h2>
-      <div class="small" id="fileStatus">Falls OneDrive nicht funktioniert: <code>locked2.json</code> von Hand laden und speichern.</div>
-      <div style="height:10px"></div>
-      <div class="file-actions">
-        <button class="btn ghost" id="btnLoad" type="button">Laden…</button>
-        <button class="btn ghost" id="btnSave" type="button">Speichern</button>
+    <div class="card collapse" data-collapse="zusehen" data-collapse-default="zu">
+      <h2>Jemanden zusehen lassen <span class="sub">nur lesen</span></h2>
+      <div class="collapse-body">
+      <div class="small" style="margin-top:0">
+        Der Block „Jetzt“ als Link — ohne Einträge, Einstellungen oder Konto.
+        Die Uhren laufen beim Betrachter weiter; für neue Einträge braucht es
+        einen neuen Link.
       </div>
-      <div class="small" id="fsaHint"></div>
+      <div style="height:10px"></div>
+      <button class="btn primary full" id="btnJetztSnapshot" type="button">Momentaufnahme kopieren</button>
+      <!-- Nur, solange eine Freigabe aus der Zeit der laufenden Datei besteht:
+           die App hat sie angelegt und muss sie auch wieder zurücknehmen können. -->
+      <div class="alt-freigabe hide" id="altFreigabe">
+        <div class="small" style="margin-top:0">Von früher besteht noch eine öffentliche
+          Freigabe der <code>jetzt.json</code>.</div>
+        <button class="btn danger-outline" id="btnJetztFreigabeWeg" type="button">Zurücknehmen</button>
+      </div>
+      </div>
     </div>
 
-    <div class="card">
-      <h2>Export</h2>
-      <div class="small" style="margin-top:0">Backup als JSON, Excel-Mappe mit Einträgen, Tageswertung und Regeln, oder Roh-Einträge als CSV.</div>
+    <div class="card collapse" data-collapse="kurzbefehle" data-collapse-default="zu">
+      <h2>Kurzbefehle <span class="sub" id="shortcutSub">Startbildschirm · Uhr</span></h2>
+      <div class="collapse-body">
+      <div class="small" style="margin-top:0" id="shortcutIntro"></div>
+      <div class="sc-perm hide" id="shortcutPerm"></div>
+      <div class="sc-list" id="shortcutList"></div>
+      <div class="small" id="shortcutHint"></div>
+      </div>
+    </div>
+
+    <div class="card collapse" data-collapse="sicherung" data-collapse-default="zu">
+      <h2>Sicherung und Export</h2>
+      <div class="collapse-body">
+      <div class="small" style="margin-top:0">Backup als JSON, Excel-Mappe mit Einträgen,
+        Tageswertung und Regeln, oder Roh-Einträge als CSV.</div>
       <div style="height:10px"></div>
       <div class="file-actions">
         <button class="btn ghost" id="btnBackup" type="button">JSON-Backup</button>
-        <button class="btn ghost" id="btnExportXlsx" type="button">Excel-Export</button>
-        <button class="btn ghost" id="btnExportCsv" type="button">CSV-Export</button>
+        <button class="btn ghost" id="btnExportXlsx" type="button">Excel</button>
+        <button class="btn ghost" id="btnExportCsv" type="button">CSV</button>
+        <button class="btn ghost" id="btnLoad" type="button">Datei laden…</button>
+      </div>
+      <!-- Von Hand in eine Datei speichern braucht nur, wer nicht bei OneDrive
+           angemeldet ist — sonst geht jede Änderung von selbst hoch. -->
+      <div id="manuellBox">
+        <div style="height:8px"></div>
+        <button class="btn ghost full" id="btnSave" type="button">In Datei speichern</button>
+        <div class="small" id="fsaHint"></div>
+      </div>
+      <div class="small" id="fileStatus"></div>
       </div>
     </div>
 
-    <div class="card">
-      <h2>Version</h2>
-      <div class="small" id="versionInfo">—</div>
-    </div>
+    <div class="fusszeile" id="versionInfo">—</div>
   </div>
 </div>
 
+<!-- Nur da, wo nicht von selbst gespeichert wird: ohne OneDrive-Anmeldung,
+     oder wenn das letzte automatische Speichern fehlschlug (siehe main.js). -->
 <div class="savebar hide" id="savebar">
   <div class="inner">
-    <button class="btn ghost" id="resetDay" type="button">Tag leeren</button>
     <button class="btn primary" id="quickSave" type="button">Speichern</button>
   </div>
 </div>

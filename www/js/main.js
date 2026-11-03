@@ -32,7 +32,7 @@ import {
 } from './platform.js';
 
 const $ = id => document.getElementById(id);
-const TABS = ['eintrag', 'dashboard', 'einstellungen', 'daten'];
+const TABS = ['eintrag', 'dashboard', 'einstellungen'];
 let aktiverTab = 'eintrag';
 
 // =========================== TABS ===========================
@@ -41,7 +41,7 @@ function switchTab(name) {
   aktiverTab = name;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   for (const t of TABS) $('page-' + t).classList.toggle('hide', t !== name);
-  $('savebar').classList.toggle('hide', name !== 'eintrag');
+  updateSavebar();
   renderAktiv();
   window.scrollTo({ top: 0 });
 }
@@ -52,8 +52,12 @@ function renderAktiv() {
   try {
     if (aktiverTab === 'eintrag') eintrag.render();
     else if (aktiverTab === 'dashboard') dashboard.render();
-    else if (aktiverTab === 'einstellungen') einstellungen.render();
-    else daten.render();
+    else {
+      // Ein Tab, zwei Module: die Regeln rechnen, die Daten verbinden. Sie
+      // waren zwei Tabs und bleiben zwei Dateien — nur die Seite ist eine.
+      einstellungen.render();
+      daten.render();
+    }
     updateMeta();
   } catch (e) {
     console.error('Render fehlgeschlagen', e);
@@ -63,6 +67,21 @@ function renderAktiv() {
 
 // =========================== KOPFZEILE ===========================
 let saveState = 'idle';
+
+/**
+ * Die Speichern-Leiste unten — nur, wo sie etwas tut.
+ *
+ * Mit OneDrive speichert jede Änderung von selbst; die Leiste stand trotzdem
+ * immer da, verdeckte die Einträge darüber und bot einen Knopf an, der nichts
+ * hinzufügte. Sie erscheint jetzt ohne Anmeldung (dann ist sie der einzige Weg
+ * in eine Datei) und dann, wenn das automatische Speichern fehlschlug.
+ */
+function updateSavebar() {
+  const noetig = !isSignedIn() || saveState === 'error';
+  const zeigen = aktiverTab === 'eintrag' && noetig;
+  $('savebar').classList.toggle('hide', !zeigen);
+  document.body.classList.toggle('mit-savebar', zeigen);
+}
 
 /**
  * Wann zuletzt abgeglichen wurde — als Uhrzeit, nicht als „vor 5 Minuten".
@@ -108,6 +127,7 @@ setRefreshStateHandler(() => { updateRefreshBtn(); updateMeta(); });
 setSaveStateHandler((zustand) => {
   saveState = zustand;
   updateMeta();
+  updateSavebar();
   if (zustand === 'saved') {
     setTimeout(() => { if (saveState === 'saved') { saveState = 'idle'; updateMeta(); } }, 1500);
   }
@@ -293,7 +313,7 @@ async function start() {
   initPersistence();
   registerSaver(autosave);
   setAuthHandlers({
-    change: () => { daten.renderAuth(); updateMeta(); },
+    change: () => { daten.renderAuth(); updateMeta(); updateSavebar(); },
     signedIn: async () => { await ladenUndMerken(); },
   });
 
@@ -309,7 +329,7 @@ async function start() {
   daten.initDaten();
   subscribe(renderAktiv);
 
-  $('savebar').classList.remove('hide');
+  updateSavebar();
   renderAktiv();
 
   // Nativer Speicher schlägt den localStorage-Cache: er überlebt ein Räumen
@@ -376,7 +396,16 @@ $('refreshBtn').addEventListener('click', () => { refresh(); });
 
 $('quickSave').addEventListener('click', async () => {
   try {
-    if (isSignedIn()) { const { saveToCloud } = await import('./sync/onedrive.js'); await saveToCloud(); showToast('In OneDrive gespeichert'); }
+    if (isSignedIn()) {
+      const { saveToCloud } = await import('./sync/onedrive.js');
+      await saveToCloud();
+      // Der Knopf steht mit Anmeldung nur nach einem Fehlschlag da — nach dem
+      // geglückten Nachholen hat er seinen Zweck erfüllt.
+      saveState = 'idle';
+      updateMeta();
+      updateSavebar();
+      showToast('In OneDrive gespeichert');
+    }
     else { const { saveFile } = await import('./sync/files.js'); const r = await saveFile(); showToast(r.method === 'fsa' ? 'Gespeichert' : 'Heruntergeladen'); }
     notify();
   } catch (e) { console.error(e); showToast('Fehler beim Speichern', true); }

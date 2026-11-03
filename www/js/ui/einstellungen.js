@@ -40,10 +40,19 @@ function renderModelle() {
   const wrap = $('modelList');
   wrap.innerHTML = s.models.map(m => modelRow(m)).join('');
 
-  wrap.querySelectorAll('[data-open]').forEach(el => el.addEventListener('click', () => {
-    offen = offen === el.dataset.open ? null : el.dataset.open;
-    renderModelle();
-  }));
+  // Die ganze Zeile ist der Schalter. Vorher stand an jeder ein eigener
+  // „Ändern"-Knopf — sieben gleiche Knöpfe untereinander, die mehr Raum nahmen
+  // als die Namen daneben.
+  wrap.querySelectorAll('[data-open]').forEach(el => {
+    const um = () => {
+      offen = offen === el.dataset.open ? null : el.dataset.open;
+      renderModelle();
+    };
+    el.addEventListener('click', um);
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); um(); }
+    });
+  });
   wrap.querySelectorAll('input[data-feld]').forEach(el => {
     el.addEventListener('change', () => feldGeaendert(el));
   });
@@ -89,16 +98,19 @@ function modelRow(m) {
     ? `Preis ${fmtNum(m.priceMin, 0)}–${fmtNum(m.priceMax, 0)} · Halbwertszeit ${fmtNum(m.halflifeDays, 0)} T`
     : `${m.rate >= 0 ? '+' : ''}${fmtNum(m.rate, 2)} Punkte/Stunde`;
 
-  return `<div class="model-row ${m.archived ? 'archived' : ''}">
+  // Die ID steht erst im Editor: in der Liste ist sie Technik, beim Einrichten
+  // eines Kurzbefehls gehört sie dazu — und dort steht sie mit ihrer Adresse.
+  const auf = offen === m.id;
+  return `<div class="model-row ${m.archived ? 'archived' : ''} ${auf ? 'offen' : ''}"
+        data-open="${escapeHtml(m.id)}" role="button" tabindex="0" aria-expanded="${auf}">
       <span class="swatch" style="background:${m.color}"></span>
       <div>
         <div class="name">${escapeHtml(m.label)} ${badges}</div>
         <div class="sub">${sub} · ${anzahl} Eintrag${anzahl === 1 ? '' : 'e'}</div>
       </div>
-      <span class="sub">${escapeHtml(m.id)}</span>
-      <button class="btn ghost" type="button" data-open="${m.id}" style="padding:6px 10px">${offen === m.id ? 'Fertig' : 'Ändern'}</button>
+      <span class="chev">${auf ? '▾' : '▸'}</span>
     </div>`
-    + (offen === m.id ? modelEditor(m, anzahl) : '');
+    + (auf ? modelEditor(m, anzahl) : '');
 }
 
 /** Die drei Verschluss-Zustände, in der Reihenfolge, in der sie zu erklären sind. */
@@ -475,6 +487,10 @@ function renderKopfzeilen() {
 
   const wirksam = stichtagOf(STATE.data, s);
   $('stichtagSub').textContent = wirksam ? `ab ${fmtDate(wirksam)}` : 'alles zählt';
+
+  const p = s.points;
+  $('punkteSub').textContent =
+    `Streak bis × ${fmtNum(p.streakCap, p.streakCap % 1 ? 2 : 0)} · Zuschlag bis ${fmtNum(p.bonusUngeoeffnetCap, 0)}`;
 
   const r = s.rules;
   $('inaktivSub').textContent =

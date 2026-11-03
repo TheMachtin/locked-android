@@ -1,5 +1,10 @@
 /**
- * Daten-Tab: Synchronisation, Dateien, Export, Umzug und Version.
+ * Der Abschnitt „Daten und Geräte" im Tab Einstellungen: Synchronisation,
+ * Zusehen-Link, Kurzbefehle, Sicherung, Umzug und Version.
+ *
+ * Bis 2.4 war das ein eigener Tab. Alles darin richtet man einmal ein und sieht
+ * dann selten wieder hin — die Karten starten deshalb zugeklappt und tragen
+ * ihren Stand in der Kopfzeile.
  */
 
 import { STATE, calc, setData, clearSyncBase, settings as getSettings } from '../state.js';
@@ -7,12 +12,10 @@ import { showToast, confirmAction } from './toast.js';
 import { fmtDateShort, escapeHtml } from './format.js';
 import { AUTH, login, logout, isSignedIn } from '../sync/auth.js';
 import {
-  loadFromCloud, saveToCloud, fetchLegacyFile, sanityCheck,
-  schreibeJetzt, jetztVeroeffentlichen, setJetztVeroeffentlichen, vergissJetztStand,
-  erzeugeFreigabe, entferneFreigabe,
+  loadFromCloud, saveToCloud, fetchLegacyFile, sanityCheck, entferneFreigabe,
 } from '../sync/onedrive.js';
 import {
-  cloudOrdner, setCloudOrdner, normalizeOrdner, datenPfad, jetztPfad,
+  cloudOrdner, setCloudOrdner, normalizeOrdner, datenPfad,
 } from '../sync/paths.js';
 import { openFile, saveFile, readJsonFile, backup, exportCsv, exportXlsx } from '../sync/files.js';
 import { importLegacyData } from '../core/migrate.js';
@@ -28,17 +31,23 @@ import {
 const $ = id => document.getElementById(id);
 
 export function renderAuth() {
-  $('authRedirectInfo').innerHTML = AUTH.redirectUri
+  const status = $('authStatus');
+  const sub = $('syncSub');
+  // Die Redirect-URI braucht nur, wer die Anmeldung gerade einrichtet — also
+  // genau dann, wenn sie nicht klappt. Angemeldet ist sie Technik ohne Frage.
+  $('authRedirectInfo').innerHTML = !AUTH.account && AUTH.redirectUri
     ? `Redirect-URI dieser Installation: <code>${escapeHtml(AUTH.redirectUri)}</code>`
     : '';
-  $('cloudPath').innerHTML = `Datei: <code>${escapeHtml(datenPfad())}</code>`;
-  const status = $('authStatus');
   if (AUTH.account) {
-    status.textContent = `Angemeldet als ${AUTH.account.username || AUTH.account.name}`;
+    status.innerHTML = `Angemeldet als <b>${escapeHtml(AUTH.account.username || AUTH.account.name)}</b>`;
+    sub.textContent = 'angemeldet';
+    sub.classList.remove('warn');
     $('btnLogin').classList.add('hide');
     $('btnLogout').classList.remove('hide');
   } else {
-    status.textContent = AUTH.ready ? 'Nicht angemeldet' : 'Lade…';
+    status.textContent = AUTH.ready ? 'Nicht angemeldet — es wird nur auf diesem Gerät gespeichert.' : 'Lade…';
+    sub.textContent = AUTH.ready ? 'nicht angemeldet' : '';
+    sub.classList.toggle('warn', AUTH.ready);
     $('btnLogin').classList.remove('hide');
     $('btnLogout').classList.add('hide');
   }
@@ -70,10 +79,9 @@ function renderOrdner() {
   if (!feld) return;
   if (document.activeElement !== feld) feld.value = cloudOrdner();
   $('cloudFolderHint').innerHTML =
-    'Gilt für <code>locked2.json</code>, <code>jetzt.json</code> und die alte '
-    + '<code>locked.json</code>. Die Dateien werden dabei <b>nicht</b> verschoben — '
-    + 'erst in OneDrive umlegen, dann hier eintragen. Der Ordner gehört zu dieser '
-    + 'Installation; an den anderen Geräten ist er getrennt zu setzen.';
+    `Datei: <code>${escapeHtml(datenPfad())}</code>. Beim Wechsel wird nichts `
+    + 'verschoben — erst in OneDrive umlegen, dann hier eintragen. Gilt nur für '
+    + 'dieses Gerät.';
 }
 
 async function ordnerUebernehmen() {
@@ -104,125 +112,48 @@ async function ordnerUebernehmen() {
 }
 
 // =========================== ZUSEHEN LASSEN ===========================
-// Die Momentaufnahme steht offen da — sie tut, was sie soll. Der Weg über eine
-// laufende Datei ist gebaut und geprüft, führt über OneDrive aber ins Leere
-// (siehe README); er liegt deshalb zugeklappt darunter statt gelöscht zu sein.
-let liveOffen = false;
+/*
+ * Der Link trägt den Block „Jetzt" in sich selbst (`jetzt.html#d=…`) — keine
+ * Datei, keine Freigabe, kein Konto beim Empfänger.
+ *
+ * Daneben stand bis 2.4 zugeklappt ein zweiter Weg: eine laufende `jetzt.json`
+ * in OneDrive, die eine Anzeigeseite minütlich nachholt. Er war gebaut und
+ * geprüft, führte aber ins Leere — OneDrive gibt anonyme Dateien nicht an
+ * fremdes JavaScript heraus (gemessen am 07.09.26, siehe README). In der App
+ * steht er deshalb nicht mehr; die Anzeigeseite versteht `#q=` weiterhin, für
+ * eine Datei an einem Ort, der sie herausgibt.
+ *
+ * Geblieben ist das Zurücknehmen: wer damals einen Freigabelink erzeugt hat,
+ * hat in OneDrive eine öffentliche Freigabe liegen, und die App, die sie
+ * angelegt hat, muss sie auch wieder einziehen können.
+ */
+const LS_PERM = 'locked_jetzt_perm_v1';
+const ALTE_SCHLUESSEL = ['locked_jetzt_publish_v1', 'locked_jetzt_share_v1'];
 
-const LS_SHARE = 'locked_jetzt_share_v1';
-// Die Kennung der von der App angelegten Freigabe — ohne sie ließe sie sich
-// später nur noch in der OneDrive-Oberfläche zurücknehmen.
-const LS_PERM  = 'locked_jetzt_perm_v1';
-
-function shareUrl() {
-  try { return localStorage.getItem(LS_SHARE) || ''; } catch { return ''; }
-}
-function setShareUrl(v) {
-  try { localStorage.setItem(LS_SHARE, String(v || '').trim()); } catch (e) { console.warn(e); }
-}
 function permId() {
   try { return localStorage.getItem(LS_PERM) || ''; } catch { return ''; }
-}
-function setPermId(v) {
-  try {
-    if (v) localStorage.setItem(LS_PERM, String(v));
-    else localStorage.removeItem(LS_PERM);
-  } catch (e) { console.warn(e); }
-}
-
-/**
- * Freigabelink anlegen — mit allem, was davor nötig ist.
- *
- * Ein Link auf eine Datei, die es nicht gibt, wäre nichts wert: der Schalter
- * geht deshalb mit an und die Datei entsteht, bevor Graph gefragt wird. Das ist
- * der ganze Sinn des Knopfes — sonst bliebe die Reihenfolge beim Benutzer
- * hängen, und der einzige Hinweis darauf wäre eine Fehlermeldung.
- */
-async function freigabeAnlegen() {
-  if (!isSignedIn()) { showToast('Dafür erst mit Microsoft anmelden', true); return; }
-
-  if (!jetztVeroeffentlichen()) setJetztVeroeffentlichen(true);
-  // Den Änderungs-Vergleich absichtlich zurücksetzen: sonst hieße ein „false"
-  // von schreibeJetzt() entweder „unverändert" oder „fehlgeschlagen", und der
-  // Unterschied entschiede darüber, ob die Datei überhaupt da ist.
-  vergissJetztStand();
-  if (!await schreibeJetzt()) {
-    throw new Error('jetzt.json ließ sich nicht schreiben — ohne sie gibt es nichts freizugeben');
-  }
-
-  const { url, permissionId } = await erzeugeFreigabe();
-  setShareUrl(url);
-  setPermId(permissionId);
-  renderJetztKarte();
-  showToast('Freigabelink erzeugt');
 }
 
 async function freigabeZuruecknehmen() {
   const id = permId();
   if (!id) return;
-  if (!confirmAction('Die Freigabe zurücknehmen?\n\n'
+  if (!isSignedIn()) { showToast('Dafür erst mit Microsoft anmelden', true); return; }
+  if (!confirmAction('Die alte Freigabe der jetzt.json zurücknehmen?\n\n'
     + 'Der Link hört danach auf zu funktionieren — auch bei denen, die ihn schon haben.')) return;
   await entferneFreigabe(id);
-  setPermId('');
-  setShareUrl('');
-  renderJetztKarte();
+  try { localStorage.removeItem(LS_PERM); } catch {}
+  renderZusehen();
   showToast('Freigabe zurückgenommen');
+}
+
+function renderZusehen() {
+  $('altFreigabe').classList.toggle('hide', !permId());
 }
 
 /** Die Adresse der Anzeigeseite — im Web neben der App, sonst die Web-Fassung. */
 function ansichtBasis() {
   if (!IS_WEB) return WEB_APP_URL + 'jetzt.html';
   return location.origin + location.pathname.replace(/[^/]*$/, '') + 'jetzt.html';
-}
-
-function renderJetztKarte() {
-  const an = jetztVeroeffentlichen();
-  $('jetztAktiv').checked = an;
-  const feld = $('jetztShareUrl');
-  if (document.activeElement !== feld) feld.value = shareUrl();
-
-  // „Zurücknehmen" nur, wenn es etwas zurückzunehmen gibt: eine von Hand in
-  // OneDrive angelegte Freigabe kennt die App nicht und kann sie nicht lösen.
-  $('btnJetztFreigabeWeg').classList.toggle('hide', !permId());
-  $('btnJetztFreigabe').textContent = shareUrl() ? 'Freigabelink erneuern' : 'Freigabelink erzeugen';
-
-  const teile = [];
-  teile.push(`Datei: <code>${escapeHtml(jetztPfad())}</code>`);
-  if (!isSignedIn()) {
-    teile.push('<b>Ohne Anmeldung geht hier nichts</b> — weder Schreiben noch Freigeben.');
-  } else if (!shareUrl()) {
-    teile.push('<b>Freigabelink erzeugen</b> schaltet das Mitschreiben ein, legt die Datei an '
-      + 'und holt den Anzeigen-Link von OneDrive — in einem Schritt.');
-  } else {
-    // Der Link ist gebaut und richtig; er scheitert am Abruf, nicht am Aufbau.
-    // Das gehört hierher, sonst liest sich „Link kopieren" wie ein Angebot.
-    teile.push('<b>Link kopieren</b> liefert die Ansicht-Adresse — die zeigt derzeit '
-      + '<code>HTTP 401</code>, weil OneDrive die Datei nicht herausgibt. '
-      + '<b>Diagnose-Link</b> misst das nach.');
-    teile.push(`<code>${escapeHtml(ansichtLink())}</code>`);
-    if (an) teile.push('<b>Der Schalter ist an</b> — die Datei wird bei jedem Speichern '
-      + 'mitgeschrieben, obwohl sie derzeit niemand lesen kann. Ausschalten kostet nichts.');
-    if (!permId()) {
-      teile.push('Diesen Link kennt die App nur als Adresse. Zurücknehmen lässt er sich in OneDrive '
-        + '(<b>Teilen → Zugriff verwalten</b>) — oder hier neu erzeugen lassen.');
-    }
-  }
-  $('jetztHinweis').innerHTML = teile.map(z => `<div style="margin-top:6px">${z}</div>`).join('');
-}
-
-function ansichtLink() {
-  return `${ansichtBasis()}#q=${encodeURIComponent(shareUrl())}`;
-}
-
-/**
- * Derselbe Link, aber im Prüfmodus.
- *
- * Ob OneDrive eine anonyme Freigabe überhaupt an fremdes JavaScript herausgibt,
- * lässt sich nur dort feststellen, wo die Verbindung besteht. Die Seite probiert
- * damit die Adressformen durch und schreibt hin, welche antwortet.
- */
-function diagnoseLink() {
-  return `${ansichtBasis()}#diag=${encodeURIComponent(shareUrl())}`;
 }
 
 function momentaufnahmeLink() {
@@ -258,9 +189,8 @@ function renderShortcuts() {
   const kurz = kuerzelMap(s);
 
   $('shortcutIntro').innerHTML =
-    'Diese Adressen tragen beim Öffnen genau einen Eintrag ein — mit der aktuellen '
-    + 'Uhrzeit, ohne Rückfrage. Sie funktionieren überall, wo sich eine URL hinterlegen '
-    + 'lässt: Startbildschirm, Automations-App, Uhr.';
+    'Jede Adresse trägt beim Öffnen genau einen Eintrag ein — mit der aktuellen '
+    + 'Uhrzeit, ohne Rückfrage. Hinterlegen lässt sie sich überall, wo eine URL geht.';
 
   $('shortcutList').innerHTML = modelle.map(m => `<div class="sc-row">
       <span class="dot" style="background:${m.color}"></span>
@@ -282,18 +212,14 @@ function renderShortcuts() {
   const basis = IS_WEB ? (location.origin + location.pathname) : WEB_APP_URL;
   $('shortcutHint').innerHTML = [
     IS_NATIVE
-      ? `<b>Am Telefon:</b> lang auf das App-Symbol — bis zu ${MAX_SHORTCUTS} Zustände liegen`
-        + ' dort schon als Kurzbefehl und lassen sich auf den Startbildschirm ziehen.'
-        + ' Ereignisse mit Preis stehen bewusst nicht dabei: ein Kurzbefehl fragt nicht nach.'
-      : '<b>Am Telefon:</b> die App legt aus den ersten Modellen selbst Kurzbefehle an'
+      ? `<b>Startbildschirm:</b> lang auf das App-Symbol — bis zu ${MAX_SHORTCUTS} Zustände liegen`
+        + ' dort als Kurzbefehl. Ereignisse mit Preis bewusst nicht: ein Kurzbefehl fragt nicht nach.'
+      : '<b>Startbildschirm:</b> die App legt aus den ersten Modellen selbst Kurzbefehle an'
         + ' (langer Druck auf das App-Symbol).',
-    '<b>Von der Uhr:</b> die Kachel der Galaxy Watch schickt dasselbe Kommando und braucht'
-      + ' keine dieser Adressen — sie bekommt die Modelle über den Datenkanal. Ohne Uhr-App'
-      + ' löst eine Automations-App mit Wear-Begleiter (MacroDroid, Tasker) die Adresse aus.'
-      + ' Die Bestätigung kommt so oder so als Benachrichtigung zurück aufs Handgelenk.',
-    'Nach dem Eintrag geht die App von allein wieder in den Hintergrund;'
-      + ' <code>&amp;app=1</code> am Ende der Adresse hält sie offen.',
-    `Im Browser dieselbe Anweisung als Parameter: <code>${escapeHtml(webCommandUrl(basis, beispiel))}</code>`,
+    '<b>Uhr:</b> die Kachel der Galaxy Watch braucht keine dieser Adressen. Ohne Uhr-App'
+      + ' löst eine Automations-App mit Wear-Begleiter (MacroDroid, Tasker) sie aus.',
+    '<code>&amp;app=1</code> am Ende hält die App nach dem Eintrag offen. Im Browser: '
+      + `<code>${escapeHtml(webCommandUrl(basis, beispiel))}</code>`,
   ].map(z => `<div style="margin-top:6px">${z}</div>`).join('');
 }
 
@@ -325,18 +251,23 @@ function renderUhrBerechtigung() {
 export function render() {
   renderAuth();
   renderOrdner();
-  renderJetztKarte();
+  renderZusehen();
   renderShortcuts();
+
+  // Mit OneDrive geht jede Änderung von selbst hoch — „In Datei speichern" ist
+  // dann ein Knopf ohne Zweck.
+  const angemeldet = isSignedIn();
+  $('manuellBox').classList.toggle('hide', angemeldet);
+  $('fsaHint').textContent = window.showOpenFilePicker
+    ? 'Tipp: nach „Datei laden…" einmal die locked2.json auswählen — die Sitzung merkt sich die Datei zum direkten Schreiben.'
+    : 'Dieser Browser kann nicht direkt schreiben: „In Datei speichern" lädt die Datei herunter.';
+
   const v = versionLabel();
   const commit = APP_COMMIT.startsWith('__') ? null : APP_COMMIT;
-  $('versionInfo').innerHTML = `<b>Locked v${escapeHtml(v)}</b> · ${platformName()}`
-    + (commit ? ` · Commit <code>${escapeHtml(commit)}</code>` : '')
+  $('versionInfo').innerHTML = `Locked v${escapeHtml(v)} · ${platformName()}`
+    + (commit ? ` · <code>${escapeHtml(commit)}</code>` : '')
     + (calc().startedAt ? `<br>Punktekonto seit ${fmtDateShort(calc().startedAt)}` : '')
     + (STATE.data.legacy ? ` · Archiv bis ${fmtDateShort(STATE.data.legacy.bis)}` : '');
-
-  $('fsaHint').textContent = window.showOpenFilePicker
-    ? 'Tipp: nach „Laden…" einmal die locked2.json aus dem OneDrive-Ordner auswählen — die Sitzung merkt sich die Datei zum direkten Schreiben.'
-    : 'Hinweis: Dieser Browser kann nicht direkt schreiben. „Speichern" lädt die Datei herunter, die du dann in den OneDrive-Ordner kopierst.';
 }
 
 async function uebernehmen(quelle, alt) {
@@ -355,6 +286,10 @@ async function uebernehmen(quelle, alt) {
 }
 
 export function initDaten() {
+  // Reste der laufenden Datei: der Schalter fürs Mitschreiben und der gemerkte
+  // Link. Ohne den Weg in der App bedeuten sie nichts mehr.
+  try { for (const k of ALTE_SCHLUESSEL) localStorage.removeItem(k); } catch {}
+
   $('btnLogin').addEventListener('click', async () => {
     try { await login(); }
     catch (e) { console.error(e); showToast('Anmeldung fehlgeschlagen: ' + (e.errorMessage || e.message || e), true); }
@@ -363,14 +298,7 @@ export function initDaten() {
     await logout();
     STATE.etag = null;
     clearSyncBase();
-    // Das nächste Konto hat seine eigene Ablage — der gemerkte Stand der
-    // jetzt.json gehörte zur vorigen.
-    vergissJetztStand();
     showToast('Abgemeldet');
-  });
-  $('btnReload').addEventListener('click', async () => {
-    if (!isSignedIn()) { showToast('Nicht angemeldet', true); return; }
-    await loadFromCloud({ onMessage: (m, bad) => showToast(m, bad) });
   });
 
   $('btnLoad').addEventListener('click', async () => {
@@ -409,57 +337,9 @@ export function initDaten() {
     catch (e) { console.error(e); showToast('Ordnerwechsel fehlgeschlagen: ' + (e.message || e), true); }
   });
 
-  $('jetztAktiv').addEventListener('change', async (e) => {
-    const an = !!e.target.checked;
-    setJetztVeroeffentlichen(an);
-    renderJetztKarte();
-    if (!an) { showToast('Wird nicht mehr geschrieben — die vorhandene Datei bleibt liegen'); return; }
-    if (!isSignedIn()) { showToast('Gemerkt — geschrieben wird nach der Anmeldung'); return; }
-    // Gleich anlegen: der Freigabelink lässt sich erst zu einer Datei erzeugen,
-    // die es gibt.
-    showToast(await schreibeJetzt() ? 'jetzt.json angelegt' : 'jetzt.json nicht geschrieben — Konsole prüfen',
-      false);
-  });
-
-  $('jetztShareUrl').addEventListener('change', (e) => {
-    setShareUrl(e.target.value);
-    // Von Hand eingetragen heißt: nicht mehr die Freigabe, die die App kennt.
-    // Die alte Kennung stehen zu lassen böte ein „Zurücknehmen" an, das etwas
-    // anderes löste als das, was im Feld steht.
-    setPermId('');
-    renderJetztKarte();
-    showToast(shareUrl() ? 'Freigabelink gemerkt' : 'Freigabelink entfernt');
-  });
-
-  $('btnJetztFreigabe').addEventListener('click', async () => {
-    try { await freigabeAnlegen(); }
-    catch (e) {
-      console.error(e);
-      // Die häufigste echte Absage: ein Geschäftskonto, dem die Verwaltung
-      // anonyme Links verboten hat. Dann hilft nur der Weg über OneDrive.
-      showToast('Freigabe fehlgeschlagen: ' + (e.message || e), true);
-    }
-  });
-
   $('btnJetztFreigabeWeg').addEventListener('click', async () => {
     try { await freigabeZuruecknehmen(); }
     catch (e) { console.error(e); showToast('Zurücknehmen fehlgeschlagen: ' + (e.message || e), true); }
-  });
-
-  $('btnJetztLink').addEventListener('click', async () => {
-    if (!shareUrl()) { showToast('Erst den Freigabelink der jetzt.json eintragen', true); return; }
-    await kopieren(ansichtLink(), 'Link zur Live-Ansicht kopiert');
-  });
-
-  $('jetztLiveToggle').addEventListener('click', () => {
-    liveOffen = !liveOffen;
-    $('jetztLiveSection').classList.toggle('hide', !liveOffen);
-    $('jetztLiveToggle').textContent = liveOffen ? 'Laufende Datei ▴' : 'Laufende Datei ▾';
-  });
-
-  $('btnJetztDiagnose').addEventListener('click', async () => {
-    if (!shareUrl()) { showToast('Erst den Freigabelink der jetzt.json eintragen', true); return; }
-    await kopieren(diagnoseLink(), 'Diagnose-Link kopiert');
   });
 
   $('btnJetztSnapshot').addEventListener('click', async () => {
