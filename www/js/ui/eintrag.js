@@ -1,19 +1,20 @@
 /**
- * Eintrag-Seite: der Bildschirm, der im Alltag benutzt wird.
+ * „Heute": der Bildschirm, der im Alltag benutzt wird.
  *
- * Er beantwortet genau zwei Fragen: *was trage ich ein* und *was steht heute
- * schon drin*. Deshalb steht der Schnelleintrag ganz oben und darunter die
- * Einträge des gewählten Tages, sonst nichts. Der laufende Zustand — Modell,
- * die vier Uhren, Preis, Konto, Form — stand hier einmal zusätzlich und war
- * damit ein zweites Dashboard; er steht jetzt nur noch dort, in der Karte
- * „Jetzt", und kommt in beiden Fällen aus `ui/status.js`.
+ * Er beantwortet die Fragen, mit denen man die App öffnet: *wie steht es
+ * gerade*, *was trage ich ein*, *was steht heute schon drin*. Deshalb ganz oben
+ * eine Zeile mit den drei Uhren, darunter die Tasten, darunter der Tag. Keine
+ * Karten, keine Überschriften — es ist der einzige Ort für diese Dinge.
  *
- * Eine Auskunft davon ist trotzdem wieder hier, nur an anderer Stelle: welches
- * Modell gerade läuft, steht auf seiner Taste. Ohne das fiel ein Wechsel, der
- * nicht angekommen war, erst am nächsten Tag auf.
+ * Bis 2.5 stand der Zustand in einer Karte „Jetzt" im Dashboard und hier gar
+ * nicht; in 2.2 stand er an beiden Stellen. Jetzt steht er nur hier, als eine
+ * Zeile statt einer Karte, und kommt aus `ui/status.js` — derselben Rechnung,
+ * aus der die Live-Ansicht ihre Kacheln baut.
  *
- * Geblieben ist das Tagesergebnis, aber als Fußzeile der Einträge: die Zahl
- * gehört zu dem, was darüber steht, und ihre Aufschlüsselung kommt direkt aus
+ * Zwei Auskünfte stehen dort, wo man drückt: welches Modell läuft, auf seiner
+ * Taste, und was ein Orgasmus gerade kostet, auf dessen Taste.
+ *
+ * Das Tagesergebnis steht neben dem Tag; seine Aufschlüsselung kommt direkt aus
  * `scoreDay()` — Anzeige und Rechnung können so nicht auseinanderlaufen.
  */
 
@@ -24,15 +25,19 @@ import {
   fmtCountdownHM, fmtCountdownDH, escapeHtml, weekdayOf,
 } from './format.js';
 import { dayTimeline } from './charts.js';
+import { statusContext, statusKompakt } from './status.js';
 import { isoOf, isoDateAdd, hmOf } from '../core/time.js';
-import { regenState, expiredRegenEvents } from '../core/calc.js';
-import { resolveModel, modelMap, KIND_ORGASM } from '../core/settings.js';
+import { regenState, expiredRegenEvents, lastOrgasmMs } from '../core/calc.js';
+import { resolveModel, modelMap, orgasmPrice, KIND_ORGASM } from '../core/settings.js';
 import { pendingEscalation, escalationEvents } from '../core/escalation.js';
 import { planCommand, currentRunAt } from '../core/command.js';
 
 const $ = id => document.getElementById(id);
 let gewaehltesDatum = isoOf(new Date());
 let aufschluesselungOffen = false;
+let statusOffen = false;
+/** Der Eintrag, dessen Zeile gerade zum Bearbeiten offen ist — `date|time|type`. */
+let offenerEintrag = null;
 let onNachEintrag = () => {};
 
 export function setDate(iso) { gewaehltesDatum = iso; }
@@ -77,9 +82,9 @@ function taste(m, voll) {
   if (voll) klassen.push('span-all');
   const farbe = m.kind === KIND_ORGASM || m.regen ? ''
     : `style="--qb-farbe:${escapeHtml(m.color)};--qb-ton:${getoent(m.color, 0.22)}"`;
-  // Jede Taste außer dem Ereignis hat eine Unterzeile: beim laufenden Modell
-  // steht darin, seit wann, bei der Regeneration ihr Zustand.
-  const sub = m.kind === KIND_ORGASM ? '' : '<div class="qb-sub"></div>';
+  // Jede Taste hat eine Unterzeile: beim laufenden Modell steht darin, seit
+  // wann, bei der Regeneration ihr Zustand, bei einem Ereignis sein Preis.
+  const sub = '<div class="qb-sub"></div>';
   return `<button class="${klassen.join(' ')}" data-model="${escapeHtml(m.id)}" type="button" ${farbe}>
     <div class="qb-main">${escapeHtml(m.label)}</div>${sub}
   </button>`;
@@ -206,9 +211,22 @@ function seitText(ms) {
  */
 function renderAktiv() {
   const s = getSettings();
-  const lauf = currentRunAt(STATE.data.events, s, Date.now());
+  const jetzt = Date.now();
+  const lauf = currentRunAt(STATE.data.events, s, jetzt);
+  // Der Preis eines Ereignisses hängt am Abstand zum letzten Orgasmus. Er
+  // steht auf der Taste, weil das die Stelle ist, an der man ihn wissen will —
+  // bis 2.5 stand er als rote Box im Dashboard, einen Tab entfernt.
+  const letzter = lastOrgasmMs(STATE.data.events || [], s, jetzt);
+  const abstand = letzter != null ? (jetzt - letzter) / 86400000 : Infinity;
+  const map = modelMap(s);
   document.querySelectorAll('#quick .qb').forEach(btn => {
-    if (btn.classList.contains('danger')) return;
+    if (btn.classList.contains('danger')) {
+      const m = resolveModel(s, map, btn.dataset.model);
+      const preis = Math.round(orgasmPrice(m, abstand, 1));
+      const sub = btn.querySelector('.qb-sub');
+      if (sub) sub.textContent = preis > 0 ? `kostet gerade −${fmtInt(preis)}` : '';
+      return;
+    }
     const aktiv = btn.dataset.model === lauf.id;
     btn.classList.toggle('aktiv', aktiv);
     btn.setAttribute('aria-pressed', aktiv ? 'true' : 'false');
@@ -216,6 +234,33 @@ function renderAktiv() {
     const sub = btn.querySelector('.qb-sub');
     if (sub) sub.textContent = aktiv ? (lauf.ms != null ? seitText(lauf.ms) : 'läuft') : '';
   });
+}
+
+/**
+ * Die drei Uhren oben: verschlossen, ungeöffnet, orgasmusfrei.
+ *
+ * Immer *jetzt*, nicht der gewählte Tag — dieselbe Regel wie für die
+ * Markierung auf den Tasten. Ein Tipp zeigt, seit wann jede läuft; die Zeile
+ * selbst bleibt dadurch kurz genug, um die Tasten nicht nach unten zu schieben.
+ */
+function renderStatus() {
+  const { days, byDate, settings } = calc();
+  const ctx = statusContext(heute(), { days, byDate, settings, events: STATE.data.events || [] });
+  const uhren = statusKompakt(ctx);
+  // Die Einheiten leiser als die Zahl: „4 T 6 h" liest sich als „4 · 6".
+  const zahl = w => escapeHtml(w).replace(/(\d) (T|h|min)\b/g, '$1<small> $2</small>');
+  $('statusZeile').innerHTML = uhren.map(u => `<div class="uhr">
+      <div class="v">${zahl(u.wert)}</div>
+      <div class="l">${u.label}${u.zusatz ? ` · <b>${u.zusatz}</b>` : ''}</div>
+    </div>`).join('');
+  $('statusZeile').setAttribute('aria-expanded', statusOffen ? 'true' : 'false');
+  const zeile = (l, v) => `<div class="sd-zeile"><span>${l}</span><span>${v}</span></div>`;
+  $('statusDetails').innerHTML =
+      zeile('Verschlossen', uhren[0].seit)
+    + zeile('Ungeöffnet', uhren[1].seit)
+    + zeile('Orgasmusfrei', uhren[2].seit)
+    + zeile(`Multiplikator ${uhren[2].zusatz}`, uhren[2].deckel);
+  $('statusDetails').classList.toggle('hide', !statusOffen);
 }
 
 /**
@@ -301,14 +346,16 @@ function tagWechseln(iso) {
   if (!iso) return;
   const h = heute();
   gewaehltesDatum = iso > h ? h : iso;
+  offenerEintrag = null;
   render();
 }
 
 /**
- * Die Fußzeile der Einträge: eine Zahl, die Aufschlüsselung auf Klick.
+ * Das Ergebnis des Tages, rechts neben dem Tag; die Aufschlüsselung auf Tipp.
  *
- * Sie war einmal die große Zahl über der halben Seite. Was sie sagt, ändert
- * sich dadurch nicht — nur, dass sie jetzt bei dem steht, woraus sie entsteht.
+ * Es war einmal die große Zahl über der halben Seite, dann die Fußzeile der
+ * Einträge. Jetzt steht es dort, wo man auf den Tag schaut, und braucht keine
+ * eigene Zeile mehr.
  */
 function renderTagesergebnis() {
   const { byDate } = calc();
@@ -320,7 +367,8 @@ function renderTagesergebnis() {
   num.textContent = d ? fmtSigned(netto) : '—';
   num.classList.toggle('neg', !!d && netto < 0);
   num.classList.toggle('zero', !d || netto === 0);
-  $('dayResultLabel').textContent = d && !d.zaehlt ? 'vor dem Stichtag' : 'Tagesergebnis';
+  $('dayResultLabel').textContent = d && !d.zaehlt ? 'vor Stichtag'
+    : gewaehltesDatum === heute() ? 'heute' : 'Ergebnis';
 
   const html = d ? breakdownHtml(d, s) : '';
   const box = $('dayBreakdown');
@@ -328,7 +376,7 @@ function renderTagesergebnis() {
   const zeigbar = !!html;
   $('dayResult').classList.toggle('leer', !zeigbar);
   box.classList.toggle('hide', !(zeigbar && aufschluesselungOffen));
-  $('dayResultChev').textContent = zeigbar && aufschluesselungOffen ? '▴' : '▾';
+  $('dayResult').setAttribute('aria-expanded', zeigbar && aufschluesselungOffen ? 'true' : 'false');
 }
 
 /** Die Aufschlüsselung des Tages, Zeile für Zeile. */
@@ -383,6 +431,15 @@ function zeile(label, betrag, klasse) {
 }
 
 // =========================== EINTRÄGE ===========================
+/**
+ * Die Einträge des Tages als ruhige Liste: Uhrzeit, Farbe, Name.
+ *
+ * Bis 2.5 war jede Zeile ein kleines Formular — Auswahlfeld, daneben derselbe
+ * Name noch einmal, ein Zeitfeld und ein ×, und das Auswahlfeld war bei allen
+ * grün, auch bei der Reinigung. Gelesen wird die Liste aber viel öfter, als in
+ * ihr geändert wird. Jetzt öffnet ein Tipp die Zeile zum Bearbeiten; offen ist
+ * immer nur eine.
+ */
 function renderEvents() {
   const s = getSettings();
   const map = modelMap(s);
@@ -399,56 +456,76 @@ function renderEvents() {
     : '';
 
   if (!evs.length) {
-    if (!d) { wrap.innerHTML = '<div class="empty" style="text-align:center">Noch keine Einträge</div>'; return; }
+    if (!d) { wrap.innerHTML = '<div class="empty">Noch keine Einträge</div>'; return; }
     const carry = resolveModel(s, map, d.prevEndModel);
-    wrap.innerHTML = `<div class="ev carry">
-      <span class="tag" style="background:${carry.color}22;color:${carry.color};border-color:${carry.color}">${escapeHtml(carry.id)}</span>
-      <span style="color:var(--muted);font-size:13px"><b style="color:var(--text)">${escapeHtml(carry.label)}</b> · läuft vom Vortag durch</span>
-      <span style="color:var(--muted);font-size:12px">durchgehend</span><span></span></div>`;
+    wrap.innerHTML = `<div class="ev-zeile carry"><div class="ev-kopf">
+      <span class="t">00:00</span><span class="dot" style="background:${escapeHtml(carry.color)}"></span>
+      <span class="n">${escapeHtml(carry.label)} <i>· läuft vom Vortag durch</i></span><span></span></div></div>`;
     return;
   }
 
+  const schluessel = ev => `${ev.date}|${ev.time}|${ev.type}`;
+  const preise = new Map((d ? d.orgasmen : []).map(o => [schluessel(o.event), o.price]));
   const optionen = s.models.filter(m => !m.archived || evs.some(e => e.type === m.id));
   wrap.innerHTML = '';
   for (const ev of evs) {
     const m = resolveModel(s, map, ev.type);
-    const row = document.createElement('div');
-    row.className = 'ev' + (ev.time_estimated ? ' estimated' : '');
-    const opts = optionen.map(o =>
-      `<option value="${escapeHtml(o.id)}" ${o.id === ev.type ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('')
-      + (optionen.some(o => o.id === ev.type) ? '' : `<option value="${escapeHtml(ev.type)}" selected>${escapeHtml(ev.type)} (unbekannt)</option>`);
+    const key = schluessel(ev);
+    const auf = offenerEintrag === key;
     const auto = ev.auto_inactivity || ev.auto_regen_timeout;
-    row.innerHTML = `
-      <select class="tag-select ${m.kind === KIND_ORGASM ? 'danger' : (m.regen ? 'warm' : '')}" title="Modell ändern">${opts}</select>
-      <span style="color:var(--muted);font-size:13px">${escapeHtml(m.label)}${ev.time_estimated ? ' <i>(geschätzt)</i>' : ''}${auto ? ' <i>(automatisch)</i>' : ''}</span>
-      <input type="time" value="${ev.time}">
-      <button class="del" title="Entfernen" type="button">×</button>`;
-
-    row.querySelector('select').addEventListener('change', e => {
-      const neu = e.target.value;
-      mutate(data => {
-        const ziel = data.events.find(x => x.date === ev.date && x.time === ev.time && x.type === ev.type);
-        if (ziel) ziel.type = neu;
-      });
-    });
-    row.querySelector('input').addEventListener('change', e => {
-      const neu = e.target.value;
-      if (!/^\d{2}:\d{2}$/.test(neu)) return;
-      mutate(data => {
-        const ziel = data.events.find(x => x.date === ev.date && x.time === ev.time && x.type === ev.type);
-        if (!ziel) return;
-        ziel.time = neu;
-        delete ziel.time_estimated;
-        data.events.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-      });
-    });
-    row.querySelector('.del').addEventListener('click', () => {
-      withUndo(() => {
+    const vermerk = [ev.time_estimated ? 'geschätzt' : '', auto ? 'automatisch' : ''].filter(Boolean).join(', ');
+    const preis = preise.get(key);
+    const row = document.createElement('div');
+    row.className = 'ev-zeile' + (auf ? ' offen' : '');
+    row.innerHTML = `<button class="ev-kopf" type="button" aria-expanded="${auf}">
+        <span class="t">${escapeHtml(ev.time)}</span>
+        <span class="dot" style="background:${escapeHtml(m.color)}"></span>
+        <span class="n">${escapeHtml(m.label)}${vermerk ? ` <i>· ${vermerk}</i>` : ''}</span>
+        <span class="r">${preis ? `<b class="preis-klein">−${fmtInt(preis)}</b>` : ''}<span class="chev">${auf ? '▾' : '›'}</span></span>
+      </button>`;
+    if (auf) {
+      const opts = optionen.map(o =>
+        `<option value="${escapeHtml(o.id)}" ${o.id === ev.type ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('')
+        + (optionen.some(o => o.id === ev.type) ? '' : `<option value="${escapeHtml(ev.type)}" selected>${escapeHtml(ev.type)} (unbekannt)</option>`);
+      const ed = document.createElement('div');
+      ed.className = 'ev-edit';
+      ed.innerHTML = `<input type="time" value="${escapeHtml(ev.time)}" aria-label="Uhrzeit">
+        <select aria-label="Modell">${opts}</select>
+        <button class="btn danger-outline klein" type="button">Löschen</button>`;
+      ed.querySelector('select').addEventListener('change', e => {
+        const neu = e.target.value;
+        offenerEintrag = `${ev.date}|${ev.time}|${neu}`;
         mutate(data => {
-          const i = data.events.findIndex(x => x.date === ev.date && x.time === ev.time && x.type === ev.type);
-          if (i >= 0) data.events.splice(i, 1);
+          const ziel = data.events.find(x => x.date === ev.date && x.time === ev.time && x.type === ev.type);
+          if (ziel) ziel.type = neu;
         });
-      }, showToast, `${m.label} ${ev.time} entfernt`);
+      });
+      ed.querySelector('input').addEventListener('change', e => {
+        const neu = e.target.value;
+        if (!/^\d{2}:\d{2}$/.test(neu)) return;
+        offenerEintrag = `${ev.date}|${neu}|${ev.type}`;
+        mutate(data => {
+          const ziel = data.events.find(x => x.date === ev.date && x.time === ev.time && x.type === ev.type);
+          if (!ziel) return;
+          ziel.time = neu;
+          delete ziel.time_estimated;
+          data.events.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+        });
+      });
+      ed.querySelector('.btn').addEventListener('click', () => {
+        offenerEintrag = null;
+        withUndo(() => {
+          mutate(data => {
+            const i = data.events.findIndex(x => x.date === ev.date && x.time === ev.time && x.type === ev.type);
+            if (i >= 0) data.events.splice(i, 1);
+          });
+        }, showToast, `${m.label} ${ev.time} entfernt`);
+      });
+      row.appendChild(ed);
+    }
+    row.querySelector('.ev-kopf').addEventListener('click', () => {
+      offenerEintrag = auf ? null : key;
+      renderEvents();
     });
     wrap.appendChild(row);
   }
@@ -497,6 +574,10 @@ export function initEintrag() {
     aufschluesselungOffen = !aufschluesselungOffen;
     renderTagesergebnis();
   });
+  $('statusZeile').addEventListener('click', () => {
+    statusOffen = !statusOffen;
+    renderStatus();
+  });
   $('escalationApply').addEventListener('click', () => {
     const v = pendingEscalation(STATE.data, { settings: getSettings() });
     if (!v.faellig) return;
@@ -534,6 +615,7 @@ export function render() {
   const s = getSettings();
   const kennung = JSON.stringify(s.models.map(m => [m.id, m.label, m.color, m.archived, !!m.regen]));
   if (kennung !== letzteRegistry) { letzteRegistry = kennung; renderQuickButtons(); }
+  renderStatus();
   renderRegenButton();
   renderAktiv();
   renderQuickHinweis();

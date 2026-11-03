@@ -1,22 +1,22 @@
 /**
- * Der laufende Zustand: das getragene Modell und die vier Uhren daneben.
+ * Der laufende Zustand: die Uhren am Käfig und am Orgasmus.
  *
- * Dieser Block steht an zwei Stellen — im Dashboard in der Karte „Jetzt" und in
- * der Live-Ansicht (`jetzt.html`), die ihn aus einem mitgegebenen Paket füllt.
- * Er liegt deshalb hier und nicht in einer der beiden Seiten: zwei Fassungen
- * desselben Blocks wären zwei Wahrheiten, und die Abweichung fiele erst auf,
- * wenn eine davon falsch ist.
+ * Er steht an zwei Stellen — als Zeile oben auf „Heute" (`statusKompakt()`) und
+ * als vier Kacheln in der Live-Ansicht (`jetzt.html`), die sie aus einem
+ * mitgegebenen Paket füllt. Beide Formen kommen aus derselben Rechnung
+ * (`statusItems()`): zwei Fassungen desselben Blocks wären zwei Wahrheiten, und
+ * die Abweichung fiele erst auf, wenn eine davon falsch ist.
  *
  * Alles kommt über `statusContext()` herein, inklusive `now` — dieselbe Regel
  * wie im Rechenkern, damit sich beide Seiten reproduzierbar prüfen lassen.
  */
 
 import { lockPhaseStart, unopenedPhaseStart, lastOrgasmMs } from '../core/calc.js';
-import { labelOf, modelMap, resolveModel, KIND_ORGASM } from '../core/settings.js';
+import { labelOf } from '../core/settings.js';
 import { isoOf, hmOf } from '../core/time.js';
-import { currentRunAt } from '../core/command.js';
 import {
-  fmtInt, fmtNum, fmtDateShort, fmtDurationLong, msToHours, msToDays, escapeHtml, refTimeFor,
+  fmtInt, fmtNum, fmtDateShort, fmtDurationShort, fmtDurationLong, msToHours, msToDays,
+  escapeHtml, refTimeFor,
 } from './format.js';
 
 /**
@@ -38,40 +38,6 @@ export function statusContext(iso, q) {
     lock: lockPhaseStart(events, q.settings, refMs),
     uo: unopenedPhaseStart(events, q.settings, refMs),
   };
-}
-
-/** „Modell jetzt: Holy Trainer (seit 08:30)" — eine Zeile, kein Rätsel. */
-export function currentModelHtml(ctx) {
-  const { d, settings: s, iso, lock } = ctx;
-  const map = modelMap(s);
-  let cur = d ? d.prevEndModel : null;
-  let curZeit = '00:00';
-  if (d) {
-    for (const ev of d.events) {
-      if (resolveModel(s, map, ev.type).kind === KIND_ORGASM) continue;
-      cur = ev.type; curZeit = ev.time;
-    }
-  }
-  // Heute zählt der ganze Lauf, nicht der Tag: ein Käfig vom Vortag lief nicht
-  // „seit 00:00", und dieselbe Angabe steht auf seiner Schnelltaste.
-  if (ctx.heute) {
-    const lauf = currentRunAt(ctx.events, s, ctx.refMs);
-    cur = lauf.id;
-    if (lauf.ms != null) {
-      const t = new Date(lauf.ms);
-      curZeit = isoOf(t) === iso ? hmOf(t) : `${fmtDateShort(isoOf(t))} ${hmOf(t)}`;
-    }
-  }
-  const curM = cur ? resolveModel(s, map, cur) : null;
-  if (!curM) return '';
-  // Bei einer laufenden Unterbrechung ist die wichtigere Auskunft, dass die
-  // verschlossene Phase davon unberührt weiterläuft — sonst liest sich
-  // „Modell jetzt: Reinigung" wie ein Abbruch, und genau das ist es nicht.
-  const seit = (curM.locked || curM.pause) ? ` (seit ${curZeit})` : '';
-  const weiter = curM.pause && lock ? ' <span class="hint">— Phase läuft weiter</span>' : '';
-  return `<span class="dot" style="background:${curM.color}"></span>`
-    + `<span>Modell ${ctx.heute ? 'jetzt' : 'Ende ' + fmtDateShort(iso)}: `
-    + `<b>${escapeHtml(curM.label)}</b>${seit}${weiter}</span>`;
 }
 
 /**
@@ -149,6 +115,42 @@ export function statusRowFromItems(items) {
   </div>`).join('');
 }
 
-export function statusRowHtml(ctx) {
-  return statusRowFromItems(statusItems(ctx));
+/**
+ * Die Zeile oben auf „Heute": drei Uhren statt vier Kacheln.
+ *
+ * Gerechnet wird hier nichts Neues — die Zahlen kommen aus `statusItems()`,
+ * damit die Zeile und die Live-Ansicht nicht auseinanderlaufen. Was sich
+ * ändert, ist die Form: „4 T 6 h" statt „4 T (102 h)", und der Multiplikator
+ * steht als Zusatz an der Strecke, aus der er entsteht, statt als vierte
+ * Kachel. Der Zuschlag der ungeöffneten Strecke steht an ihr, solange er heute
+ * etwas bringt.
+ *
+ * @returns {Array<{ wert, label, zusatz, seit, deckel? }>}  seit ist HTML (escaped)
+ */
+export function statusKompakt(ctx) {
+  const [verschl, ungeoeffnet, ofrei, mult] = statusItems(ctx);
+  const { lock, d, settings: s } = ctx;
+  const pause = lock && lock.paused ? escapeHtml(labelOf(s, lock.pauseModel)) : null;
+  const bonus = d && d.uoBonus ? `+${fmtNum(d.uoBonus, d.uoBonus % 1 ? 1 : 0)} heute` : null;
+  return [
+    {
+      wert: verschl.ms != null ? fmtDurationShort(verschl.ms) : '—',
+      label: lock ? 'verschlossen' : 'gerade offen',
+      zusatz: pause,
+      seit: verschl.since,
+    },
+    {
+      wert: ungeoeffnet.ms != null ? fmtDurationShort(ungeoeffnet.ms) : '—',
+      label: 'ungeöffnet',
+      zusatz: bonus,
+      seit: ungeoeffnet.since,
+    },
+    {
+      wert: `${ofrei.days} T`,
+      label: 'orgasmusfrei',
+      zusatz: mult.text,
+      seit: ofrei.since,
+      deckel: mult.since,
+    },
+  ];
 }

@@ -29,6 +29,9 @@ import { isoDateAdd } from '../core/time.js';
 
 const $ = id => document.getElementById(id);
 let offen = null;      // ID des gerade aufgeklappten Modells
+/** Modelle, deren Bereich „Erweitert" offen ist — überlebt das Neuzeichnen
+ *  nach jeder Änderung, sonst klappte er bei jedem Feld wieder zu. */
+const erweitertOffen = new Set();
 
 function zaehleEvents(id) {
   return (STATE.data.events || []).filter(e => e.type === id).length;
@@ -56,6 +59,10 @@ function renderModelle() {
   wrap.querySelectorAll('input[data-feld]').forEach(el => {
     el.addEventListener('change', () => feldGeaendert(el));
   });
+  wrap.querySelectorAll('details[data-erweitert]').forEach(el => el.addEventListener('toggle', () => {
+    if (el.open) erweitertOffen.add(el.dataset.erweitert);
+    else erweitertOffen.delete(el.dataset.erweitert);
+  }));
   wrap.querySelectorAll('[data-lockkind] .seg-opt').forEach(el => el.addEventListener('click', () => {
     const id = el.parentElement.dataset.lockkind;
     mutateSettings(s2 => {
@@ -128,9 +135,13 @@ function modelEditor(m, anzahl) {
     `<div><label>${label}</label>`
     + `<input type="${typ}" data-feld="${id}" data-id="${m.id}" value="${wert}" ${extra}></div>`;
 
+  // Vorne steht, was man beim Anlegen einstellt; was man fast nie anfasst,
+  // steht unter „Erweitert". Bei einem Ereignis sind das drei von fünf
+  // Zahlenfeldern — sie haben sinnvolle Vorgaben und eine Bedeutung, die man
+  // erst braucht, wenn man ein zweites Ereignis neben dem Orgasmus anlegt.
   let felder = feld('Bezeichnung', 'label', 'text', escapeHtml(m.label))
-    + feld('Farbe', 'color', 'color', m.color)
-    + idFeld(m, anzahl);
+    + feld('Farbe', 'color', 'color', m.color);
+  let erweitert = idFeld(m, anzahl);
 
   if (m.kind === KIND_MODEL) {
     felder += feld('Punkte je Stunde', 'rate', 'number', m.rate, 'step="0.05"');
@@ -145,12 +156,17 @@ function modelEditor(m, anzahl) {
   } else {
     felder += feld('Preis Minimum', 'priceMin', 'number', m.priceMin, 'step="1" min="0"');
     felder += feld('Preis Maximum', 'priceMax', 'number', m.priceMax, 'step="1" min="0"');
-    felder += feld('Halbwertszeit (Tage)', 'halflifeDays', 'number', m.halflifeDays, 'step="0.5" min="0.5"');
-    felder += feld('Aufschlag je weiterem am Tag', 'repeatFactor', 'number', m.repeatFactor, 'step="0.1" min="1"');
-    felder += feld('Rest der Strecke', 'streakFactor', 'number', m.streakFactor, 'step="0.1" min="0" max="1"');
     felder += `<div class="full sub">${preisVorschau(m)}</div>`;
-    felder += `<div class="full sub">${streckeVorschau(m)}</div>`;
+    erweitert += feld('Halbwertszeit (Tage)', 'halflifeDays', 'number', m.halflifeDays, 'step="0.5" min="0.5"');
+    erweitert += feld('Aufschlag je weiterem am Tag', 'repeatFactor', 'number', m.repeatFactor, 'step="0.1" min="1"');
+    erweitert += feld('Rest der Strecke', 'streakFactor', 'number', m.streakFactor, 'step="0.1" min="0" max="1"');
+    erweitert += `<div class="full sub">${streckeVorschau(m)}</div>`;
   }
+
+  felder += `<details class="full erweitert" data-erweitert="${escapeHtml(m.id)}"${erweitertOffen.has(m.id) ? ' open' : ''}>
+      <summary>Erweitert</summary>
+      <div class="model-edit">${erweitert}</div>
+    </details>`;
 
   const loeschbar = !m.isOpen && anzahl === 0;
   felder += `<div class="full row2" style="margin-top:4px">
@@ -309,26 +325,29 @@ function neuesModell(kind) {
 }
 
 // =========================== PUNKTE UND REGELN ===========================
+// Die Beschreibungen sagen, was eine Zahl bewirkt, in einem Satz. Die
+// Begründungen dahinter stehen im README — hier liest man sie einmal und
+// scrollt danach jedes Mal an ihnen vorbei.
 const PUNKT_FELDER = [
   { key: 'bonusUngeoeffnet', name: 'Zuschlag je Tag am Stück im selben Käfig',
-    desc: 'Ein Tag sind 24 Stunden ab dem Verschluss. Der Zuschlag steigt mit der Strecke — der fünfte ungeöffnete Tag bringt das Fünffache — und jeder Modellwechsel wie jede Unterbrechung setzt sie zurück. 0 schaltet die Belohnung ab.',
+    desc: 'Der n-te Tag bringt das n-fache. Wechsel und Unterbrechung setzen zurück; 0 schaltet ab.',
     step: 0.5 },
-  { key: 'bonusUngeoeffnetCap', name: 'Höchster Zuschlag für die ungeöffnete Strecke',
-    desc: 'Der Deckel des Anstiegs — bei Satz 1 also der Tag, ab dem es nicht mehr weiter steigt. Ohne ihn wüchse die Strecke über alles andere hinaus.',
-    step: 1 },
+  { key: 'bonusUngeoeffnetCap', name: 'Höchster Zuschlag',
+    desc: 'Ab hier steigt er nicht weiter.', step: 1 },
   { key: 'streakK', name: 'Multiplikator-Zuwachs je orgasmusfreiem Tag',
-    desc: '0,02 heißt: nach 25 Tagen zählt jede Stunde anderthalbfach.', step: 0.005 },
+    desc: '0,02: nach 25 Tagen zählt jede Stunde anderthalbfach.', step: 0.005 },
   { key: 'streakCap', name: 'Höchster Multiplikator',
-    desc: 'Die Obergrenze. Ohne sie wüchse der Streak-Effekt unbegrenzt — genau daran ist die alte Formel gescheitert.',
-    step: 0.1 },
-  { key: 'formDecay', name: 'Abklingfaktor des Form-Werts',
-    desc: '0,97 entspricht rund 23 Tagen Halbwertszeit. Kleiner = die Form reagiert schneller und vergisst schneller.',
-    step: 0.005 },
+    desc: 'Ohne Deckel wüchse der Streak unbegrenzt.', step: 0.1 },
+  { key: 'formDecay', name: 'Abklingfaktor der Form',
+    desc: '0,97 ≈ 23 Tage Halbwertszeit. Kleiner vergisst schneller.', step: 0.005 },
 ];
 const REGEL_FELDER = [
-  { key: 'inactivityReminderDays', name: 'Erinnerung nach … Tagen ohne Lebenszeichen', desc: 'Nur Android: die Benachrichtigung. Gezählt wird ab dem letzten Eintrag oder dem letzten Blick in die App — je nachdem, was später war.', step: 1 },
-  { key: 'inactivityAutoDays', name: 'Vorschläge nach … Tagen ohne Lebenszeichen', desc: 'Ab hier schlägt die App fehlende Einträge vor — geschrieben wird erst nach deiner Bestätigung.', step: 1 },
-  { key: 'seenAfterSeconds', name: 'Als Blick zählt die App ab … Sekunden', desc: 'So lange muss sie offen sein, damit die Frist neu beginnt. Ein Fehlgriff in der Hosentasche soll das nicht können. 0 lässt jedes Öffnen zählen.', step: 1 },
+  { key: 'inactivityReminderDays', name: 'Erinnerung nach … Tagen ohne Lebenszeichen',
+    desc: 'Nur Android. Lebenszeichen ist ein Eintrag oder ein Blick in die App.', step: 1 },
+  { key: 'inactivityAutoDays', name: 'Vorschläge nach … Tagen',
+    desc: 'Die App schlägt fehlende Einträge vor; geschrieben wird erst nach Bestätigung.', step: 1 },
+  { key: 'seenAfterSeconds', name: 'Ein Blick zählt ab … Sekunden',
+    desc: 'So lange muss die App offen sein. 0 lässt jedes Öffnen zählen.', step: 1 },
 ];
 
 function renderZahlen() {

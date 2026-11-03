@@ -81,6 +81,27 @@ export function aggregatePeriods(days, scale) {
   return out;
 }
 
+/**
+ * Der mittlere Abstand zwischen zwei Orgasmen über einen Ausschnitt.
+ *
+ * Gezählt wird wie in `aggregatePeriods()`: nur gewertete Tage, nur Ereignisse,
+ * die die Strecke brechen, und der erste erfasste Orgasmus hat keinen Abstand
+ * — ihn als 0 zu zählen zöge den Schnitt nach unten.
+ *
+ * @returns {number|null}  Tage, oder null ohne einen einzigen Abstand
+ */
+export function mittlererAbstand(days) {
+  let summe = 0, anzahl = 0;
+  for (const d of days) {
+    if (!d.zaehlt) continue;
+    for (const o of d.orgasmen) {
+      if (!brichtStrecke(o.model) || !isFinite(o.abstandTage)) continue;
+      summe += o.abstandTage; anzahl++;
+    }
+  }
+  return anzahl ? summe / anzahl : null;
+}
+
 /** Maßstab und Nulllinie eines Balkendiagramms. */
 function achsen(werte, innerH, padT, ganzzahlig) {
   const posMax = Math.max(0, ...werte);
@@ -407,45 +428,33 @@ export function verlaufChart(days) {
 }
 
 // =========================== TRAGEZEIT JE MODELL ===========================
-export function modellDonut(hoursByModel, settings) {
+/**
+ * Die Aufteilung des Zeitraums als ein einziger gestapelter Balken.
+ *
+ * Bis 2.5 war das ein Donut von 168 Pixeln Höhe mit derselben Liste darunter.
+ * Ein Balken sagt dasselbe — welcher Käfig wie viel —, braucht eine Zeile und
+ * lässt sich mit den Prozenten in der Liste direkt vergleichen.
+ *
+ * @returns {{ html: string, gesamt: number }}
+ */
+export function tragezeitBalken(hoursByModel, settings) {
   const map = modelMap(settings);
   const eintraege = Object.entries(hoursByModel)
     .filter(([, h]) => h > 0)
     .map(([id, h]) => ({ id, h, m: resolveModel(settings, map, id) }))
     .filter(x => x.m.kind !== KIND_ORGASM)
     .sort((a, b) => b.h - a.h);
-  const total = eintraege.reduce((s, x) => s + x.h, 0);
-  if (!total) return { svg: leer('Noch keine Tragezeit'), liste: '' };
+  const gesamt = eintraege.reduce((s, x) => s + x.h, 0);
+  if (!gesamt) return { html: leer('Noch keine Tragezeit'), gesamt: 0 };
 
-  const size = 168, r = 62, sw = 22, cx = size / 2, cy = size / 2;
-  let winkel = -Math.PI / 2;
-  let svg = `<svg viewBox="0 0 ${size} ${size}" style="width:168px;height:168px;display:block">`;
-  for (const x of eintraege) {
-    const anteil = x.h / total;
-    const ende = winkel + anteil * Math.PI * 2;
-    const gross = anteil > 0.5 ? 1 : 0;
-    const x1 = cx + r * Math.cos(winkel), y1 = cy + r * Math.sin(winkel);
-    const x2 = cx + r * Math.cos(ende), y2 = cy + r * Math.sin(ende);
-    // Ein voller Kreis ließe sich als Bogen nicht zeichnen (Start = Ende).
-    if (anteil > 0.999) {
-      svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${x.m.color}" stroke-width="${sw}">`
-        + `<title>${escapeHtml(x.m.label)}: ${fmtInt(x.h)} h</title></circle>`;
-    } else {
-      svg += `<path d="M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${gross} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}" `
-        + `stroke="${x.m.color}" stroke-width="${sw}" fill="none" stroke-linecap="butt">`
-        + `<title>${escapeHtml(x.m.label)}: ${fmtInt(x.h)} h</title></path>`;
-    }
-    winkel = ende;
-  }
-  svg += `<text x="${cx}" y="${cy - 2}" text-anchor="middle" font-size="20" font-weight="700" fill="var(--text)">${fmtInt(total)}</text>`;
-  svg += `<text x="${cx}" y="${cy + 14}" text-anchor="middle" font-size="10" fill="var(--muted)">Stunden</text></svg>`;
-
+  const balken = eintraege.map(x => `<span style="width:${(x.h / gesamt * 100).toFixed(2)}%;background:${x.m.color}"
+      title="${escapeHtml(x.m.label)}: ${fmtInt(x.h)} h"></span>`).join('');
   const liste = eintraege.map(x => `<div class="model-line">
     <span class="dot" style="background:${x.m.color}"></span>
     <span class="name">${escapeHtml(x.m.label)}</span>
-    <span class="val">${fmtInt(x.h)} h · ${fmtNum(x.h / total * 100, 0)} %</span>
+    <span class="val">${fmtInt(x.h)} h · ${fmtNum(x.h / gesamt * 100, 0)} %</span>
   </div>`).join('');
-  return { svg, liste };
+  return { html: `<div class="trage-balken">${balken}</div>${liste}`, gesamt };
 }
 
 // =========================== KALENDER ===========================
@@ -537,10 +546,23 @@ export function heatmap(days, settings) {
   return Object.keys(byYear).sort().map(y => heatmapYear(y, byYear[y], scale)).join('');
 }
 
+/**
+ * Welche Monate eines Jahres der Kalender zeigt: vom ersten bis zum letzten
+ * mit Daten. Bis 2.5 waren es immer alle zwölf — bei vier erfassten Monaten
+ * acht leere, und die vier vollen in Kästchen von wenigen Pixeln.
+ *
+ * @returns {{ von: number, bis: number }}  Monatsindizes 0–11
+ */
+export function kalenderMonate(isoListe) {
+  const monate = isoListe.map(iso => parseInt(iso.slice(5, 7), 10) - 1);
+  return { von: Math.min(...monate), bis: Math.max(...monate) };
+}
+
 function heatmapYear(year, byIso, scale) {
   const jahr = parseInt(year, 10);
-  const start = new Date(jahr, 0, 1);
-  const ende = new Date(jahr, 11, 31);
+  const { von, bis } = kalenderMonate(Object.keys(byIso));
+  const start = new Date(jahr, von, 1);
+  const ende = new Date(jahr, bis + 1, 0);
   const tage = [];
   for (let d = new Date(start); d <= ende; d.setDate(d.getDate() + 1)) tage.push(new Date(d));
 
@@ -551,7 +573,9 @@ function heatmapYear(year, byIso, scale) {
   const H = padT + 7 * (cell + gap);
 
   let svg = `<div style="margin-bottom:12px"><div style="font-size:13px;color:var(--muted);font-weight:600;margin-bottom:4px">${year}</div>`;
-  svg += `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">`;
+  // Wenige Monate sollen keine handtellergroßen Kästchen werden: die Breite
+  // wächst mit, aber höchstens auf das Doppelte der gezeichneten Größe.
+  svg += `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMinYMid meet" style="width:100%;max-width:${W * 2}px;height:auto;display:block">`;
   for (const [idx, name] of [[0, 'Mo'], [2, 'Mi'], [4, 'Fr']]) {
     svg += `<text x="0" y="${padT + idx * (cell + gap) + cell - 1}" font-size="8" fill="var(--muted)">${name}</text>`;
   }
