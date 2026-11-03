@@ -16,14 +16,20 @@
     font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
     -webkit-tap-highlight-color: transparent; }
   body { padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
-  .app { max-width: 520px; margin: 0 auto; padding: 16px 14px 40px; }
-  /* Platz für die Speichern-Leiste — nur, wenn sie da ist (main.js). */
-  body.mit-savebar .app { padding-bottom: 110px; }
+  /* Unten Platz für die Laschen (am Telefon fest am unteren Rand). Auf der
+     Einstellungsseite gibt es keine — dort reicht der normale Abstand. */
+  .app { max-width: 520px; margin: 0 auto;
+    padding: 12px 14px calc(84px + env(safe-area-inset-bottom)); }
+  body.in-einstellungen .app { padding-bottom: 40px; }
 
-  header { display:flex; align-items:center; justify-content:space-between; padding: 6px 4px 14px; gap: 8px; }
-  header h1 { font-size: 18px; font-weight: 600; margin: 0; }
-  header .meta { font-size: 11px; color: var(--muted); }
+  header { display:flex; align-items:center; justify-content:space-between; padding: 4px 2px 12px; gap: 8px; }
+  header h1 { font-size: 18px; font-weight: 600; margin: 0; white-space: nowrap; }
+  header .head-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  header .meta { font-size: 11px; color: var(--muted); text-align: right; }
+  header .meta .ok { color: var(--accent); font-weight: 700; }
+  header .meta.fehler { color: var(--bad); font-weight: 600; }
   header .head-right { display: flex; align-items: center; gap: 8px; }
+  .btn.klein { padding: 6px 12px; font-size: 13px; border-radius: 9px; flex: none; }
   .iconbtn { width: 32px; height: 32px; flex: none; padding: 0; cursor: pointer;
     background: var(--panel); border: 1px solid var(--line); border-radius: 9px;
     color: var(--muted); display: flex; align-items: center; justify-content: center; }
@@ -52,11 +58,17 @@
   .pull.laedt .ic { animation: drehen .9s linear infinite; }
   @keyframes drehen { to { transform: rotate(360deg); } }
 
-  .tabs { display:flex; gap: 4px; background: var(--panel); border: 1px solid var(--line);
-    border-radius: 12px; padding: 4px; margin-bottom: 14px; }
-  .tab { flex: 1; padding: 10px; border-radius: 9px; text-align: center; cursor: pointer;
-    color: var(--muted); font-weight: 600; font-size: 14px; user-select: none; }
-  .tab.active { background: var(--accent-dim); color: var(--accent); }
+  /* Zwei Laschen, am Telefon unten am Rand — dort, wo der Daumen ist. Am
+     Bildschirm stehen sie oben (Desktop-Block am Dateiende). */
+  .tabbar { position: fixed; z-index: 7; left: 0; right: 0; bottom: 0;
+    display: grid; grid-template-columns: 1fr 1fr;
+    background: var(--panel); border-top: 1px solid var(--line);
+    padding: 4px 0 calc(6px + env(safe-area-inset-bottom)); }
+  .tab { display: flex; flex-direction: column; align-items: center; gap: 2px;
+    background: none; border: none; font: inherit; cursor: pointer; user-select: none;
+    padding: 6px 0 2px; color: var(--muted); font-weight: 600; font-size: 11px; }
+  .tab svg { display: block; }
+  .tab.active { color: var(--accent); }
 
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
     padding: 14px; margin-bottom: 12px; }
@@ -132,26 +144,6 @@
     100% { box-shadow: 0 0 0 12px rgba(243,234,217,0); }
   }
 
-  .events { display: flex; flex-direction: column; gap: 6px; }
-  .ev { display: grid; grid-template-columns: auto 1fr auto auto; gap: 10px; align-items: center;
-    background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
-  .ev .tag { font-weight: 700; font-size: 14px; padding: 4px 8px; border-radius: 8px;
-    background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-strong);
-    min-width: 44px; text-align: center; }
-  .ev .tag.danger { background: var(--danger-dim); color: #fecaca; border-color: var(--danger); }
-  .ev .tag-select { appearance: none; -webkit-appearance: none; background: var(--accent-dim);
-    color: var(--accent); border: 1px solid var(--accent-strong); border-radius: 8px;
-    padding: 4px 8px; font: inherit; font-weight: 700; font-size: 14px; min-width: 44px;
-    text-align: center; text-align-last: center; cursor: pointer; outline: none; }
-  .ev .tag-select.danger { background: var(--danger-dim); color: #fecaca; border-color: var(--danger); }
-  .ev .tag-select.warm   { background: rgba(200,144,96,0.15); color: var(--warm); border-color: var(--warm); }
-  .ev input[type=time] { background: transparent; color: var(--text); border: none;
-    font: inherit; font-size: 15px; padding: 4px 0; outline: none; width: 90px; }
-  .ev .del { background: transparent; color: var(--muted); border: none; font-size: 20px;
-    padding: 4px 6px; cursor: pointer; line-height: 1; }
-  .ev .del:hover { color: var(--bad); }
-  .ev.estimated .tag { opacity: .7; }
-  .ev.carry { opacity: 0.92; background: var(--panel); }
   .empty { color: var(--muted); font-style: italic; text-align: center; padding: 14px 0; font-size: 14px; }
 
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -173,10 +165,6 @@
   .modell-row .val { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
   .modell-row .full { grid-column: 1 / -1; }
 
-  .savebar { position: fixed; left: 0; right: 0; bottom: 0;
-    padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
-    background: linear-gradient(180deg, rgba(43,36,27,0) 0%, var(--bg) 50%); }
-  .savebar .inner { max-width: 520px; margin: 0 auto; display:flex; gap: 8px; }
   .btn { padding: 14px; border-radius: 12px; border: none; font: inherit; font-weight: 700; cursor: pointer; }
   .btn.primary { background: var(--accent); color: #1a1a0e; flex: 1; }
   .btn.primary:active { background: var(--accent-strong); }
@@ -402,31 +390,72 @@
 .datum-warnung b { color: #fff; }
 .datum-warnung .btn { padding: 7px 12px; font-size: 12px; }
 
-/* Das Tagesergebnis als Fußzeile der Einträge: eine Zeile, die sich öffnen
-   lässt. Die Zahl war einmal 52 px groß und füllte den halben Bildschirm. */
-.tagesergebnis { display: flex; align-items: center; gap: 10px; width: 100%;
-  margin-top: 12px; padding: 11px 12px; font: inherit; cursor: pointer;
-  background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
-  color: var(--muted); text-align: left; }
-.tagesergebnis .l { flex: 1; font-size: 11px; text-transform: uppercase;
-  letter-spacing: .6px; font-weight: 600; }
-.tagesergebnis .v { font-size: 22px; font-weight: 700; color: var(--accent);
-  font-variant-numeric: tabular-nums; line-height: 1; }
-.tagesergebnis .v.neg { color: var(--bad); }
-.tagesergebnis .v.zero { color: var(--muted); }
-.tagesergebnis .chev { font-size: 12px; }
-.tagesergebnis.leer { cursor: default; }
-.tagesergebnis.leer .chev { visibility: hidden; }
+/* ==================== Heute ==================== */
 
-/* Die Datumszeile über den Einträgen: ‹ Heute · Di 03.11.26 ›. Das Datumsfeld
-   liegt unsichtbar über der Mitte und öffnet beim Tippen den Kalender. */
-.tag-nav { display: grid; grid-template-columns: 44px 1fr 44px; gap: 8px; align-items: center; }
+/* Die drei Uhren oben: Zahlen ohne Kacheln. Die Zeile ist ein Knopf — ein
+   Tipp zeigt darunter, seit wann jede läuft. */
+.status-zeile { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: 100%;
+  background: none; border: none; padding: 2px 2px 14px; margin: 0; font: inherit;
+  color: var(--text); text-align: left; cursor: pointer; }
+.status-zeile .uhr { min-width: 0; }
+.status-zeile .v { font-size: 22px; font-weight: 700; line-height: 1.1;
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+.status-zeile .v small { font-size: 14px; font-weight: 600; color: var(--muted); }
+.status-zeile .l { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.3; }
+.status-zeile .l b { color: var(--accent); font-weight: 700; }
+.status-details { margin: -6px 0 14px; padding: 8px 12px; border-radius: 10px;
+  background: var(--panel); border: 1px solid var(--line); font-size: 12px; }
+.status-details .sd-zeile { display: flex; justify-content: space-between; gap: 10px;
+  padding: 3px 0; color: var(--muted); }
+.status-details .sd-zeile span:last-child { color: var(--text); text-align: right;
+  font-variant-numeric: tabular-nums; }
+
+/* Der Tag unter den Tasten: ‹ Heute · Di 03.11. ›, rechts das Ergebnis. */
+.tag { margin-top: 22px; }
+.tag-kopf { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.tag-nav { flex: 1; min-width: 0; display: grid; grid-template-columns: 36px 1fr 36px; gap: 6px; align-items: center; }
+.tag-nav .zr-arrow { padding: 7px 0; }
 .tag-label { position: relative; display: flex; align-items: center; justify-content: center;
-  min-height: 38px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line);
-  font-size: 15px; font-variant-numeric: tabular-nums; cursor: pointer; }
+  min-height: 36px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line);
+  font-size: 14px; font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap; }
 .tag-label b { color: var(--accent); font-weight: 700; }
+/* Das Datumsfeld liegt unsichtbar über der Mitte und öffnet beim Tippen den Kalender. */
 .tag-label input[type=date] { position: absolute; inset: 0; width: 100%; height: 100%;
   opacity: 0; border: none; padding: 0; margin: 0; cursor: pointer; color-scheme: dark; }
+.tag-ergebnis { display: flex; align-items: baseline; gap: 6px; flex: none;
+  background: none; border: none; padding: 4px 2px; font: inherit; color: var(--muted); cursor: pointer; }
+.tag-ergebnis .l { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
+.tag-ergebnis .v { font-size: 22px; font-weight: 700; color: var(--accent);
+  font-variant-numeric: tabular-nums; line-height: 1; }
+.tag-ergebnis .v.neg { color: var(--bad); }
+.tag-ergebnis .v.zero { color: var(--muted); }
+.tag-ergebnis.leer { cursor: default; }
+#dayBreakdown .breakdown { margin: 0 0 10px; border-top: none; padding: 8px 12px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+#dayTimeline { margin: 2px 0 6px; }
+
+/* Die Einträge als Liste. Ein Tipp öffnet die Zeile zum Bearbeiten. */
+.events { display: flex; flex-direction: column; }
+.ev-zeile { border-bottom: 1px solid var(--line); }
+.ev-zeile:first-child { border-top: 1px solid var(--line); }
+.ev-kopf { display: grid; grid-template-columns: 50px 12px 1fr auto; gap: 8px; align-items: center;
+  width: 100%; padding: 11px 4px; background: none; border: none; font: inherit; font-size: 15px;
+  color: var(--text); text-align: left; cursor: pointer; }
+.ev-kopf .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+.ev-kopf .dot { width: 10px; height: 10px; border-radius: 50%; }
+.ev-kopf .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ev-kopf .n i { color: var(--muted); font-size: 13px; }
+.ev-kopf .r { display: flex; align-items: center; gap: 10px; }
+.ev-kopf .chev { color: var(--muted); font-size: 13px; }
+.preis-klein { color: var(--bad); font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ev-zeile.offen { background: var(--panel); border-radius: 10px; border: 1px solid var(--accent-strong); }
+.ev-zeile.offen + .ev-zeile { border-top: none; }
+.ev-zeile.carry .ev-kopf { cursor: default; }
+.ev-edit { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 0 10px 10px; }
+.ev-edit input[type=time], .ev-edit select { background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: inherit; font-size: 14px;
+  color-scheme: dark; min-width: 0; }
+.tag-fuss { display: flex; justify-content: flex-end; padding-top: 8px; }
 
 /* Ein Knopf, der wie ein Verweis aussieht — für seltene Aktionen in einer
    Kopfzeile, die nicht so laut sein sollen wie das, was die Karte zeigt. */
@@ -435,33 +464,46 @@
   text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .link-btn:active { color: var(--text); }
 
-/* Dashboard: der Orgasmus-Zähler als Zeile in der Karte „Jetzt" — vier Zahlen
-   ohne eigene Kacheln, damit sie die vier Uhren darüber nicht wiederholen. */
-.mini-kopf { font-size: 10px; color: var(--muted); text-transform: uppercase;
-  letter-spacing: .6px; font-weight: 600; margin-top: 14px; }
-.mini-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
-  margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
-.mini { text-align: center; }
-.mini .v { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; }
-.mini .l { font-size: 10px; color: var(--muted); margin-top: 1px; }
+/* ==================== Verlauf ==================== */
 
-/* Konto und Form: zwei Zahlen, zugleich die Legende der Linien darunter. */
-.kf-zahlen { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-.kf { display: flex; gap: 8px; align-items: flex-start; }
-.kf .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; margin-top: 9px; }
-.kf .v { font-size: 24px; font-weight: 700; color: var(--accent); line-height: 1.1;
+/* Abschnitte statt gerahmter Kästen: eine Überschrift, eine Linie dazwischen.
+   Die Kacheln mit den Kennzahlen sind die einzigen Flächen auf der Seite. */
+.block { padding: 16px 2px; border-top: 1px solid var(--line); }
+.block:first-child { border-top: none; padding-top: 0; }
+.block > h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--muted); margin: 0 0 12px; display: flex; justify-content: space-between;
+  align-items: center; gap: 8px; }
+.block > h2 .sub { font-size: 11px; font-weight: 500; text-transform: none; letter-spacing: 0; }
+.zr-sub { font-size: 11px; color: var(--muted); text-align: center; margin-top: 6px; }
+#dashKpis { margin-top: 12px; }
+
+/* Konto groß, Form klein — die Form ist die interessante, nicht die wichtige
+   Zahl. Beide sind zugleich die Legende der Linien darunter. */
+.kf-zahlen { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.kf { display: flex; gap: 8px; align-items: flex-start; min-width: 0; }
+.kf .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; margin-top: 11px; }
+.kf .v { font-size: 30px; font-weight: 700; color: var(--accent); line-height: 1.1;
   font-variant-numeric: tabular-nums; }
+.kf .l { font-size: 11px; color: var(--muted); }
+.kf.klein .dot { margin-top: 7px; width: 8px; height: 8px; }
+.kf.klein .v { font-size: 18px; }
 .kf .v.form { color: var(--warm); }
 .kf .v.neg { color: var(--bad); }
-.kf .l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
-.kf .l.sub { text-transform: none; letter-spacing: 0; font-weight: 500; }
 
-/* Rückblick: die Kennzahlen des Zeitraums stehen in derselben Karte wie seine Wahl. */
-#dashKpis { margin-top: 12px; }
 /* Zwei Umschalter übereinander: Kennzahl und Auflösung. Der zweite ist leiser. */
 #chartMetric { margin-bottom: 6px; }
 .seg.klein { margin-bottom: 12px; }
 .seg.klein .seg-opt { font-size: 12px; padding: 4px 6px; }
+
+/* Die Tragezeit als ein gestapelter Balken über der Liste. */
+.trage-balken { display: flex; height: 14px; border-radius: 7px; overflow: hidden;
+  background: var(--panel-2); margin-bottom: 8px; }
+.trage-balken span { display: block; height: 100%; }
+.trage-balken span + span { box-shadow: inset 1px 0 0 var(--bg); }
+
+/* Details: dieselben Abschnitte, nur unter einem Schalter. */
+#detailsSection > .block:first-child { border-top: 1px solid var(--line); padding-top: 16px; }
+.block.archiv { border-radius: 0; background: none; border-color: var(--line); }
 
 /* Einstellungen: zwei Abschnitte in einem Tab, je mit einer leisen Überschrift. */
 .abschnitt { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px;
@@ -521,38 +563,42 @@ input:disabled { opacity: .5; cursor: not-allowed; }
 
    Steht am Dateiende, und das ist kein Stil, sondern Bedingung: eine Media
    Query erhöht die Spezifität nicht. Bei gleicher Spezifität entscheidet die
-   Reihenfolge — von oben aus verloren `.qb`, `.kpis` und `.savebar .inner`
+   Reihenfolge — von oben aus verloren `.qb`, `.kpis` und die Speichern-Leiste
    gegen ihre eigenen Basis-Regeln weiter unten und waren wirkungslos. Wer hier etwas ergänzt, dessen Selektor auch oben vorkommt,
    muss den Block unten lassen.
    =========================================================================== */
   @media (min-width: 820px) {
     .app { max-width: 1080px; padding: 20px 24px 48px; }
-    body.mit-savebar .app { padding-bottom: 120px; }
-    #page-eintrag, #page-dashboard {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      grid-auto-flow: dense;
-      align-items: start;
-    }
-    /* Eintrag: die Warnkarte über beide Spalten, Schnelleintrag und Einträge
-       nebeneinander — beide werden gleichzeitig benutzt. */
-    #page-eintrag > .card.escalation { grid-column: 1 / -1; }
-    /* Dashboard: Jetzt, Rückblick und Details über die volle Breite, die vier
-       Diagramme darunter zwei mal zwei. Über die IDs, nicht über :nth-child()
-       — eine eingeschobene Karte hat die Positionen sonst stillschweigend um
-       eins verschoben. */
-    #page-dashboard > #cardJetzt,
-    #page-dashboard > #cardZeitraum,
-    #page-dashboard > .collapse-toggle,
-    #page-dashboard > #detailsSection { grid-column: 1 / -1; }
-    #detailsSection { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+    body.in-einstellungen .app { padding-bottom: 48px; }
+    /* Die Laschen stehen hier oben unter der Kopfzeile, nicht am Rand. */
+    .tabbar { position: static; display: flex; gap: 4px; padding: 4px; margin-bottom: 16px;
+      border: 1px solid var(--line); border-radius: 12px; }
+    .tab { flex: 1; flex-direction: row; justify-content: center; gap: 8px;
+      padding: 8px; border-radius: 9px; font-size: 14px; }
+    .tab.active { background: var(--accent-dim); }
+    /* Heute: links Zustand und Tasten, rechts der Tag — beides wird
+       gleichzeitig benutzt. */
+    #page-heute { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px;
+      grid-template-areas: "esc esc" "status tag" "details tag" "warn tag" "quick tag" ". tag";
+      grid-template-rows: auto auto auto auto auto 1fr; align-items: start; }
+    #page-heute > .card.escalation { grid-area: esc; }
+    #page-heute > .status-zeile { grid-area: status; }
+    #page-heute > .status-details { grid-area: details; }
+    #page-heute > .datum-warnung { grid-area: warn; }
+    #page-heute > .quick { grid-area: quick; }
+    #page-heute > .tag { grid-area: tag; margin-top: 0; }
+    /* Verlauf: Zeitraum und Details über die volle Breite, die vier
+       Abschnitte dazwischen zwei mal zwei. Über die IDs, nicht über
+       :nth-child() — ein eingeschobener Abschnitt hat die Positionen sonst
+       stillschweigend um eins verschoben. */
+    #page-verlauf { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; align-items: start; }
+    #page-verlauf > #cardZeitraum,
+    #page-verlauf > .collapse-toggle,
+    #page-verlauf > #detailsSection { grid-column: 1 / -1; }
+    #detailsSection { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; align-items: start; }
     /* Einstellungen kompakt mittig — Formulare werden nicht besser, wenn
        sie über 1000 Pixel laufen. */
     #page-einstellungen { max-width: 640px; margin: 0 auto; }
-    /* Savebar mit App breit halten */
-    .savebar .inner { max-width: 1080px; }
-    /* Schnelleintrag: Buttons größer auf Desktop */
     .qb { min-height: 72px; font-size: 17px; }
     /* Die vier Zähler passen hier nebeneinander */
     .streak-row { grid-template-columns: repeat(4, 1fr); }
@@ -561,7 +607,6 @@ input:disabled { opacity: .5; cursor: not-allowed; }
   }
   @media (min-width: 1200px) {
     .app { max-width: 1280px; }
-    .savebar .inner { max-width: 1280px; }
   }
 
 /* Felder, deren Inhalt breiter ist als 108 px: Pfade und Adressen. Sie stehen
@@ -588,3 +633,14 @@ input:disabled { opacity: .5; cursor: not-allowed; }
 
 /* Ein Datum braucht in der schmalen Feldspalte etwas weniger Polster. */
 .setting input[type=date] { padding: 8px 4px; font-size: 13px; }
+
+/* „Erweitert" im Modell-Editor: was man fast nie anfasst, unter einem Schalter. */
+.model-edit details.erweitert { background: none; border: none; border-top: 1px solid var(--line);
+  border-radius: 0; padding: 8px 0 0; }
+.model-edit details.erweitert summary { font-size: 12px; }
+.model-edit details.erweitert[open] summary { margin-bottom: 6px; }
+.model-edit details.erweitert > .model-edit { margin-top: 0; padding: 0; border: none; background: none; }
+
+/* Auf der Einstellungsseite trägt die OneDrive-Karte den Sync-Stand; die
+   Kopfzeile braucht dort nur Zurück, Titel und — falls nötig — Speichern. */
+body.in-einstellungen #meta, body.in-einstellungen #refreshBtn { display: none; }

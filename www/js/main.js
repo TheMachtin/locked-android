@@ -32,28 +32,47 @@ import {
 } from './platform.js';
 
 const $ = id => document.getElementById(id);
-const TABS = ['eintrag', 'dashboard', 'einstellungen'];
-let aktiverTab = 'eintrag';
+/**
+ * Drei Seiten, aber nur zwei Laschen.
+ *
+ * „Heute" und „Verlauf" sind die beiden Fragen, mit denen man die App öffnet:
+ * was gilt jetzt, und wie lief es. Die Einstellungen besucht man selten; sie
+ * hängen am Zahnrad in der Kopfzeile und schließen mit Zurück — dorthin, wo
+ * man vorher war.
+ */
+const SEITEN = ['heute', 'verlauf', 'einstellungen'];
+let aktiverTab = 'heute';
+let vorEinstellungen = 'heute';
 
-// =========================== TABS ===========================
+// =========================== SEITEN ===========================
 function switchTab(name) {
-  if (!TABS.includes(name)) return;
+  if (!SEITEN.includes(name)) return;
+  if (name === 'einstellungen' && aktiverTab !== 'einstellungen') vorEinstellungen = aktiverTab;
   aktiverTab = name;
+  const einst = name === 'einstellungen';
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-  for (const t of TABS) $('page-' + t).classList.toggle('hide', t !== name);
-  updateSavebar();
+  for (const t of SEITEN) $('page-' + t).classList.toggle('hide', t !== name);
+  $('tabbar').classList.toggle('hide', einst);
+  $('zurueckBtn').classList.toggle('hide', !einst);
+  $('einstellungenBtn').classList.toggle('hide', einst);
+  $('titel').textContent = einst ? 'Einstellungen' : 'Locked';
+  document.body.classList.toggle('in-einstellungen', einst);
   renderAktiv();
   window.scrollTo({ top: 0 });
 }
 
-/** Nur die sichtbare Seite neu zeichnen — das Dashboard rechnet die ganze
+function einstellungenSchliessen() {
+  switchTab(vorEinstellungen || 'heute');
+}
+
+/** Nur die sichtbare Seite neu zeichnen — der Verlauf rechnet die ganze
  *  Historie durch und muss nicht mitlaufen, während man Einträge tippt. */
 function renderAktiv() {
   try {
-    if (aktiverTab === 'eintrag') eintrag.render();
-    else if (aktiverTab === 'dashboard') dashboard.render();
+    if (aktiverTab === 'heute') eintrag.render();
+    else if (aktiverTab === 'verlauf') dashboard.render();
     else {
-      // Ein Tab, zwei Module: die Regeln rechnen, die Daten verbinden. Sie
+      // Eine Seite, zwei Module: die Regeln rechnen, die Daten verbinden. Sie
       // waren zwei Tabs und bleiben zwei Dateien — nur die Seite ist eine.
       einstellungen.render();
       daten.render();
@@ -69,18 +88,16 @@ function renderAktiv() {
 let saveState = 'idle';
 
 /**
- * Die Speichern-Leiste unten — nur, wo sie etwas tut.
+ * Der Speichern-Knopf in der Kopfzeile — nur, wo er etwas tut.
  *
- * Mit OneDrive speichert jede Änderung von selbst; die Leiste stand trotzdem
- * immer da, verdeckte die Einträge darüber und bot einen Knopf an, der nichts
- * hinzufügte. Sie erscheint jetzt ohne Anmeldung (dann ist sie der einzige Weg
- * in eine Datei) und dann, wenn das automatische Speichern fehlschlug.
+ * Mit OneDrive speichert jede Änderung von selbst. Der Knopf erscheint ohne
+ * Anmeldung (dann ist er der einzige Weg in eine Datei) und dann, wenn das
+ * automatische Speichern fehlschlug. Bis 2.5 war er eine Leiste am unteren
+ * Rand; dort sitzen jetzt die Laschen.
  */
 function updateSavebar() {
   const noetig = !isSignedIn() || saveState === 'error';
-  const zeigen = aktiverTab === 'eintrag' && noetig;
-  $('savebar').classList.toggle('hide', !zeigen);
-  document.body.classList.toggle('mit-savebar', zeigen);
+  $('quickSave').classList.toggle('hide', !noetig);
 }
 
 /**
@@ -107,19 +124,23 @@ function updateRefreshBtn() {
 function updateMeta() {
   const el = $('meta');
   let txt;
+  // Die Kopfzeile sagt, wo die Daten gerade stehen — nicht, wie viele es sind.
+  // „87 Einträge" war eine Zahl ohne Frage dahinter.
+  let ok = false;
   if (isSignedIn()) {
+    ok = !isRefreshing() && saveState !== 'saving' && saveState !== 'error';
     txt = isRefreshing() ? 'gleiche ab…'
       : saveState === 'saving' ? 'speichere…'
-      : saveState === 'saved' ? '✓ gespeichert'
-      : saveState === 'error' ? '⚠ Fehler'
+      : saveState === 'saved' ? 'gespeichert'
+      : saveState === 'error' ? '⚠ nicht gespeichert'
       : abgleichLabel();
   } else if (STATE.fileHandle) {
     txt = `${STATE.fileHandle.name}${STATE.dirty ? ' •' : ''}`;
   } else {
-    const n = (STATE.data.events || []).length;
-    txt = n ? `${n} Einträge${STATE.dirty ? ' •' : ''}` : 'keine Datei';
+    txt = `nur auf diesem Gerät${STATE.dirty ? ' •' : ''}`;
   }
-  el.textContent = txt;
+  el.innerHTML = (ok ? '<span class="ok">✓</span> ' : '') + escapeHtml(txt);
+  el.classList.toggle('fehler', saveState === 'error');
 }
 
 setRefreshStateHandler(() => { updateRefreshBtn(); updateMeta(); });
@@ -324,7 +345,7 @@ async function start() {
   eintrag.initEintrag();
   eintrag.setEntryHook(reminderNeu);
   dashboard.initDashboard();
-  dashboard.setDrilldownHandler(iso => { eintrag.setDate(iso); switchTab('eintrag'); });
+  dashboard.setDrilldownHandler(iso => { eintrag.setDate(iso); switchTab('heute'); });
   einstellungen.initEinstellungen();
   daten.initDaten();
   subscribe(renderAktiv);
@@ -348,7 +369,8 @@ async function start() {
   shortcuts.initShortcuts().catch(e => console.error('Kommandos nicht eingerichtet', e));
 
   setupBackButton(() => {
-    if (aktiverTab !== 'eintrag') { switchTab('eintrag'); return true; }
+    if (aktiverTab === 'einstellungen') { einstellungenSchliessen(); return true; }
+    if (aktiverTab !== 'heute') { switchTab('heute'); return true; }
     if (window.scrollY > 0) { window.scrollTo({ top: 0, behavior: 'smooth' }); return true; }
     return false;
   });
@@ -363,7 +385,7 @@ async function start() {
   // mahnte irgendwann, während sie angeschaut wird.
   setInterval(() => {
     if (document.visibilityState === 'visible') markiereGesehen();
-    if (aktiverTab === 'eintrag') eintrag.render();
+    if (aktiverTab === 'heute') eintrag.render();
   }, 60000);
 
   // Drei Wege in den Vordergrund: Capacitor meldet es nativ am sichersten,
@@ -393,6 +415,8 @@ async function start() {
 }
 
 $('refreshBtn').addEventListener('click', () => { refresh(); });
+$('einstellungenBtn').addEventListener('click', () => switchTab('einstellungen'));
+$('zurueckBtn').addEventListener('click', einstellungenSchliessen);
 
 $('quickSave').addEventListener('click', async () => {
   try {

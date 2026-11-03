@@ -127,7 +127,7 @@ also von allein jede Stunde, die der Käfig gebracht hätte.
 
 ### Zwei Uhren: „verschlossen" und „ungeöffnet"
 
-Im Dashboard, im Block **Jetzt**, stehen beide nebeneinander, und sie
+Oben auf **Heute** stehen beide nebeneinander, und sie
 beantworten verschiedene Fragen. **Verschlossen** misst den Verschluss und läuft über
 Modellwechsel und Reinigungen hinweg — wer zweimal täglich den Käfig tauscht,
 war trotzdem durchgehend zu. **Ungeöffnet** ist die strengere Frage: der
@@ -141,10 +141,10 @@ beiden ist genau das, was die Wechsel gekostet haben.
 
 Bezahlt wird die Strecke **je vollendetem Tag**, und ein Tag sind 24 Stunden ab
 dem Verschluss: `min(1 × Tage am Stück, 7)`, gutgeschrieben an dem Datum, an dem
-der Block abläuft. Beide Kacheln zählen deshalb in vollendeten
+der Block abläuft. Beide Uhren zählen deshalb in vollendeten
 24-h-Abschnitten und nicht in Kalendertagen — dieselbe Einheit, in der bezahlt
-wird, und die einzige, die zu den Stunden daneben passt. („Orgasmusfrei" zählt
-weiter Kalendertage, weil der Multiplikator ein Tagesfaktor ist.)
+wird, und die einzige, die zu den Stunden daneben passt („4 T 6 h"). („Orgasmusfrei"
+zählt weiter Kalendertage, weil der Multiplikator ein Tagesfaktor ist.)
 
 Ein Tag ohne Eintrag zählt dabei als ungeöffnet, weil der Zustand des Vortags
 fortgilt — das ist *nicht* die 1.x-Falle, in der die Abwesenheit von Einträgen
@@ -223,12 +223,12 @@ Ereignis trotzdem nicht — der machte aus dem Eintrag eine Einnahmequelle und
 wiederholte damit den Fehler von 1.x, wo sich die günstigste Buchung von selbst
 aufdrängte.
 
-**Die Zähler heißen weiter nach dem, was sie zählen.** Die Kachel
-„Orgasmusfrei", die Balken „Orgasmen im Verlauf", der Zähler mit seinen vier
-Fenstern und die Zeile „Tage mit Orgasmus" lassen ein Ereignis mit Faktor 1
-aus — sonst stünde „letzte 30 T: 1" neben „Orgasmusfrei: 40 T" auf demselben
-Bildschirm. Verschwiegen wird es nicht: es steht als eigene Zahl unter dem
-Zähler, in der Zeitleiste des Tages und in den Kosten.
+**Die Zähler heißen weiter nach dem, was sie zählen.** Die Uhr
+„orgasmusfrei", die Orgasmus-Balken im Verlauf, die Kennzahlen „Orgasmen" und
+„Ø Abstand" und die Zeile „Tage mit Orgasmus" lassen ein Ereignis mit Faktor 1
+aus — sonst stünde „Orgasmen: 1" neben „orgasmusfrei: 40 T". Verschwiegen wird
+es nicht: es steht als eigene Zahl unter der Kennzahl, in der Liste des Tages
+und in den Kosten.
 
 **Der strengste Eintrag des Tages entscheidet.** Wer morgens geschont und
 abends gebrochen hat, hat gebrochen.
@@ -284,11 +284,54 @@ nach dem nächsten Schreiben aus der Datei verschwunden.
 
 ## Was die Oberfläche zeigt
 
-**Drei Tabs, jeder beantwortet eine Frage.** *Eintrag*: was trage ich ein, was
-steht heute schon drin. *Dashboard*: wie steht es. *Einstellungen*: wonach wird
-gerechnet, und wohin wird gespeichert. Bis 2.4 waren die Einstellungen zwei Tabs,
-„Regeln" und „Daten" — beide besucht man selten, und das meiste darin richtet man
-einmal ein. Sie stehen jetzt als zwei Abschnitte auf einer Seite.
+**Zwei Laschen und ein Zahnrad.** *Heute*: wie steht es gerade, was trage ich
+ein, was steht heute schon drin. *Verlauf*: wie lief es. Die Einstellungen —
+Regeln, Sync, Kurzbefehle, Sicherung — hängen am Zahnrad oben rechts und
+schließen mit Zurück; man richtet dort einmal etwas ein und kommt selten wieder.
+Am Telefon stehen die Laschen unten, wo der Daumen ist, am Bildschirm oben.
+
+Bis 2.5 waren es drei Tabs — Eintrag, Dashboard, Einstellungen — und das
+Dashboard mischte zwei Sorten Zahlen: was *jetzt* gilt und was im gewählten
+Zeitraum geschah. Es brauchte eine Trennkarte und an mehreren Karten den
+Zusatz „unabhängig vom Zeitraum", um sie auseinanderzuhalten. 3.0 trennt sie
+nach der Zeit: das Jetzt steht auf *Heute*, der Rückblick im *Verlauf*.
+
+### Heute
+
+**Ein Bildschirm, keine Karten.** Ganz oben die drei Uhren in einer Zeile —
+verschlossen, ungeöffnet, orgasmusfrei —, als „4 T 6 h" statt „4 T (102 h)". Der
+Multiplikator steht an der Strecke, aus der er entsteht, der Ungeöffnet-Zuschlag
+an seiner, und eine laufende Reinigung an „verschlossen". Ein Tipp auf die Zeile
+zeigt, seit wann jede läuft. In 2.2 stand dieser Block schon einmal auf der
+Eintragsseite, als ganze Karte und *zusätzlich* zum Dashboard; er schob die Tasten
+nach unten und wurde deshalb entfernt. Jetzt steht er nur hier, als eine Zeile.
+
+Darunter die Schnelltasten, dann der Tag: ‹ Heute · Di 03.11. › mit dem
+Tagesergebnis rechts daneben, die Zeitleiste und die Einträge.
+
+**Zwei Auskünfte stehen dort, wo man drückt.** Welches Modell läuft, steht auf
+seiner Taste (siehe unten). Was ein Orgasmus gerade kostet, steht auf dessen
+Taste — „kostet gerade −44". Bis 2.5 stand der Preis als rote Box im Dashboard,
+einen Tab entfernt von der Stelle, an der man ihn wissen will.
+
+**Die Einträge sind eine Liste, kein Formular.** „00:30 ● Neosteel ›"; ein Tipp
+öffnet die Zeile mit Uhrzeit, Modell und Löschen, offen ist immer nur eine.
+Vorher war jede Zeile ein Auswahlfeld, daneben derselbe Name noch einmal, ein
+Zeitfeld und ein × — und das Auswahlfeld war bei allen grün, auch bei der
+Reinigung. Gelesen wird die Liste viel öfter, als in ihr geändert wird.
+
+**Das Tagesergebnis steht neben dem Tag**, ein Tipp schlüsselt es auf (Stunden
+× Satz, Zuschläge, Orgasmuspreise, Summe). Weil die Tasten *über* der Datumswahl
+stehen, warnt ein Hinweis über ihnen, sobald ein anderer Tag als heute
+eingestellt ist: ohne das landete ein Eintrag stillschweigend auf dem Tag, den
+man vorhin zum Nachsehen ausgewählt hat. „Tag leeren" ist ein kleiner Verweis
+unter der Liste.
+
+**Die Kopfzeile sagt, wo die Daten stehen**: „✓ abgeglichen 06:12",
+„speichere…", rot „⚠ nicht gespeichert" — oder ohne Anmeldung „nur auf diesem
+Gerät". Bis 2.5 stand dort die Zahl der Einträge, eine Zahl ohne Frage dahinter.
+Ein **Speichern**-Knopf erscheint daneben nur, wo er etwas tut: ohne
+OneDrive-Anmeldung und nach einem fehlgeschlagenen automatischen Speichern.
 
 ### Eintragen: tippen, nicht halten
 
@@ -321,68 +364,54 @@ zweimal.
 vor sechs Sekunden: dazwischen kann ein Abgleich mit dem anderen Gerät gelegen
 haben.
 
-**Darunter der gewählte Tag** mit einer Zeile ‹ Heute · Di 03.11.26 ›. Die Pfeile
-gehen einen Tag weiter, die Mitte öffnet den Kalender; in die Zukunft geht es
-nicht. Vorher standen hier ein Datumsfeld und vier Knöpfe für dieselbe Frage.
-Als Fußzeile das Tagesergebnis — eine Zeile, die sich zur vollen Aufschlüsselung
-öffnet (Stunden × Satz, Zuschläge, Orgasmuspreise, Summe). Weil die Tasten *über*
-der Datumswahl stehen, warnt die Karte sichtbar, sobald ein anderer Tag als heute
-eingestellt ist: ohne das landete ein Eintrag stillschweigend auf dem Tag, den
-man vorhin zum Nachsehen ausgewählt hat.
+**Was selten gebraucht wird, archiviert man.** Ein archiviertes Modell
+verschwindet von den Tasten, seine Einträge bleiben; „Wieder aktivieren" holt
+es zurück. Die Regeneration etwa, wenn sie nur einmal im Jahr vorkommt.
 
-**Die Speichern-Leiste erscheint nur, wo sie etwas tut**: ohne OneDrive-Anmeldung
-(dann ist sie der einzige Weg in eine Datei) und wenn das automatische Speichern
-fehlgeschlagen ist. Mit OneDrive geht jede Änderung von selbst hoch; die Leiste
-stand trotzdem immer da und verdeckte die Einträge. „Tag leeren" ist ein kleiner
-Verweis in der Kopfzeile der Einträge geworden — man braucht ihn selten, und
-jeder Eintrag hat sein eigenes ×.
+### Verlauf
 
-### Dashboard: jetzt und Rückblick
+**Der Zeitraum steht ganz oben**, und alles darunter hängt an ihm. Statt einer
+Reihe von Jahreszahlen, die mit jedem Jahr länger wird, wählt man **Alles · Jahr
+· Quartal · Monat** und blättert mit ‹ › durch. Die Pfeile sperren am Rand der
+erfassten Spanne — steht die Auswahl außerhalb, bleibt der Weg zurück offen,
+sonst klemmte sie in einem leeren Monat fest. Wird die Ebene feiner, bleibt der
+Zeitpunkt: von „2026" auf „Quartal" ist das laufende Quartal gemeint, nicht Q1.
 
-**Die Karte „Rückblick" teilt die Seite.** Darüber steht **Jetzt**: das
-getragene Modell, der Orgasmus-Preis, die vier Uhren und der Orgasmus-Zähler als
-eine Zeile (laufender Monat, 30, 90 und 365 Tage). Das sind Fragen an die
-Gegenwart, und die ändern sich nicht dadurch, dass man darunter 2025 auswählt.
-Bis 2.2 stand dieser Block zusätzlich im Eintrag-Tab, der damit ein zweites
-Dashboard war; bis 2.4 war der Zähler eine eigene Karte mit vier Kacheln, deren
-vierte („seit dem letzten") in derselben Karte schon zweimal stand.
+**Vier Kennzahlen, jede mit ihrem Bezug**: Ø Punkte je Kalendertag, Ø
+verschlossene Stunden je Tag, Orgasmen samt ihren Kosten und der mittlere
+Abstand zwischen zwei Orgasmen. Ein Durchschnitt ohne Nenner ist keine Auskunft;
+an der Kachel steht deshalb, durch wie viele Tage geteilt wurde. Der
+Orgasmus-Zähler mit seinen rollenden Fenstern (30, 90, 365 Tage) ist in 3.0
+entfallen — „letzte 30 Tage" neben „November" waren zwei Ausschnitte, die fast
+dasselbe sagten; geblieben ist, was er darüber hinaus wusste, der Abstand.
 
-**Der Statusblock hat nur eine Fassung.** Die vier Uhren, das Modell und der
-Preis kommen aus `ui/status.js` — dieselbe Datei, aus der auch die Live-Ansicht
-(`jetzt.html`) baut. Zwei eigene Fassungen desselben Blocks wären zwei
-Wahrheiten, und die Abweichung fiele erst auf, wenn eine davon falsch ist.
-
-**Der Zeitraum hat eine Ebene und einen Anker.** Statt einer Reihe von
-Jahreszahlen, die mit jedem Jahr länger wird, wählt man **Alles · Jahr · Quartal
-· Monat** und blättert mit ‹ › durch. Zwei Klicks reichen damit von „alles" bis
-„März 2025". Die Pfeile sperren am Rand der erfassten Spanne — steht die Auswahl
-außerhalb, bleibt der Weg zurück offen, sonst klemmte sie in einem leeren Monat
-fest. Wird die Ebene feiner, bleibt der Zeitpunkt: von „2026" auf „Quartal" ist
-das laufende Quartal gemeint, nicht Q1. In derselben Karte stehen die vier
-Kennzahlen des Zeitraums.
-
-**Unter jeder Zahl steht, worauf sie sich bezieht.** Ein Durchschnitt ohne
-Nenner ist keine Auskunft: an der Kachel steht deshalb, durch wie viele
-Kalendertage geteilt wurde. Die einzigen Zahlen unterhalb der Grenze, die nicht
-am Zeitraum hängen, sagen es im Namen: **Konto heute** und **Form heute** über
-ihrem Verlauf. Sie sind zugleich dessen Legende.
+**Das Konto groß, die Form klein.** Beide laufen über die ganze Historie, die
+Linien darunter zeigen den Zeitraum; die Zahl heißt deshalb **Konto heute**. Die
+Form ist die interessante Zahl, nicht die wichtige.
 
 **Ein Diagramm, drei Kennzahlen.** *Je Zeitraum* zeigt Punkte, Stunden oder
-Orgasmen, und jede in der Form, die zu ihr passt: Punkte als Balken mit
-Vorzeichen, Stunden gestapelt in den Modellfarben (wann der eine Käfig den
-anderen ersetzt hat), Orgasmen als Balken mit dem durchschnittlichen Abstand als
-Linie auf eigener Achse. Bis 2.4 waren die beiden letzten eigene Karten, und
-dieses Diagramm zeigte dieselben Zahlen daneben noch einmal als einfache Balken.
-Die **Auflösung** (Monat/Woche/Tag) steht deshalb wieder hier und nicht mehr
-beim Zeitraum — sie betrifft nur noch dieses Diagramm. Ein Klick auf einen
-Balken springt in den Eintrag-Tab dieses Tages. Alles teilt sich eine
-Zusammenfassung (`aggregatePeriods()`) — drei eigene Fassungen davon
-entwickelten früher oder später drei Vorstellungen davon, was ein Monat ist.
+Orgasmen, jede in der Form, die zu ihr passt: Punkte als Balken mit Vorzeichen,
+Stunden gestapelt in den Modellfarben (wann der eine Käfig den anderen ersetzt
+hat), Orgasmen als Balken mit dem durchschnittlichen Abstand als Linie auf
+eigener Achse. Darunter die **Auflösung** (Monat/Woche/Tag). Ein Klick auf einen
+Balken springt auf *Heute* zu diesem Tag. Alles teilt sich eine Zusammenfassung
+(`aggregatePeriods()`) — drei eigene Fassungen davon entwickelten früher oder
+später drei Vorstellungen davon, was ein Monat ist.
 
-Daneben der Donut der Tragezeit, der Kalender, und unter „Details" Monate,
-Rekorde, Wochentag, das Muster nach Uhrzeit und das Archiv der alten Ära — das
-ändert sich nie wieder und stand trotzdem zwischen den Diagrammen, die sich
-täglich bewegen.
+**Die Tragezeit ist ein Balken**, kein Donut: welcher Käfig wie viel, in einer
+Zeile, mit den Prozenten in der Liste darunter. **Der Kalender** zeigt nur die
+Monate vom ersten bis zum letzten mit Daten — bis 2.5 waren es immer zwölf, bei
+vier erfassten acht leere und die vier vollen in Kästchen von wenigen Pixeln.
+
+**Abschnitte statt Kästen.** Die Seite gliedert sich durch Überschriften und
+Linien; die Kacheln der Kennzahlen sind die einzigen Flächen. Unter „Details"
+stehen Monatstabelle, Rekorde, Ergebnis nach Wochentag, das Muster nach Uhrzeit
+und das Archiv der alten Ära.
+
+**Der Statusblock hat nur eine Rechnung.** Die Uhren auf *Heute* und die
+Kacheln der Live-Ansicht (`jetzt.html`) kommen beide aus `statusItems()` in
+`ui/status.js`. Zwei eigene Fassungen wären zwei Wahrheiten, und die Abweichung
+fiele erst auf, wenn eine davon falsch ist.
 
 ### Einstellungen: zugeklappt, mit Stand in der Kopfzeile
 
@@ -392,14 +421,19 @@ täglich bewegen.
 „steht da noch, was ich denke" ohne einen Klick. Der Zustand bleibt je Karte
 gemerkt.
 
-**Eine Modellzeile ist selbst der Schalter.** Vorher stand an jeder ein eigener
-„Ändern"-Knopf — sieben gleiche Knöpfe untereinander. Die interne ID steht erst
-im Editor, zusammen mit der Adresse, in der sie gebraucht wird.
+**Eine Modellzeile ist selbst der Schalter.** Im Editor steht vorne, was man beim
+Anlegen einstellt; unter **Erweitert** steht, was man fast nie anfasst: die ID
+(mit der Adresse, in der sie gebraucht wird) und bei Ereignissen Halbwertszeit,
+Aufschlag je weiterem am Tag und Rest der Strecke. Die drei haben sinnvolle
+Vorgaben und eine Bedeutung, die man erst braucht, wenn man ein zweites Ereignis
+neben dem Orgasmus anlegt.
+
+**Die Punktesätze zeigen zuerst, was sie ergeben** — „24 h verschlossen, 7. Tag
+am Stück: +19" —, dann die Felder, jedes mit einem Satz statt eines Absatzes.
 
 **Was nur einmal gebraucht wird, steht nur dann da.** Die Redirect-URI der
 Anmeldung erscheint, solange man nicht angemeldet ist — dann, wenn sie bei der
-Einrichtung fehlt. „In Datei speichern" steht nur ohne OneDrive da. „Neu laden"
-ist weg: dafür gibt es den Knopf oben rechts und das Herunterziehen.
+Einrichtung fehlt. „In Datei speichern" steht nur ohne OneDrive da.
 
 **Die Farbskala des Kalenders kommt aus den eigenen Sätzen.** Feste Schwellen
 („++ ab 25 Punkten") messen an einem Maßstab, den die Datei gar nicht kennt: wer
@@ -427,7 +461,7 @@ nicht im HTML.
 
 ## Jemanden zusehen lassen
 
-Die Karte **Jetzt** lässt sich teilen, ohne die Historie mitzugeben. Möglich ist
+Der laufende Zustand lässt sich teilen, ohne die Historie mitzugeben. Möglich ist
 das, weil der Block aus einer Handvoll Zeitstempeln besteht — verschlossen seit,
 ungeöffnet seit, letzter Orgasmus — und alles andere daraus rechnet. Wer die
 Anker hat, kann die Uhren selbst weiterlaufen lassen: die Stunden zählen hoch,
@@ -789,7 +823,7 @@ eingegeben.
 
 Beim ersten Start rechnet `www/js/core/legacy.js` die alte Formel ein letztes Mal
 durch und legt das Ergebnis als `legacy` in der Datei ab. Danach wird dort nichts
-mehr gerechnet, nur noch angezeigt — als Archiv-Karte im Dashboard. Das neue
+mehr gerechnet, nur noch angezeigt — im Verlauf unter „Details". Das neue
 Konto startet bei null.
 
 Der Schnappschuss steht **in der Datei, nicht im Programm**: wer die App frisch
@@ -801,7 +835,7 @@ entfernen; getrennte Dateien halten 1.x als Rückfallebene lauffähig. Die
 Übernahme läuft über **Einstellungen → Daten aus Version 1.x übernehmen** (aus OneDrive
 oder aus einer Datei) und erkennt Dubletten, ist also gefahrlos wiederholbar.
 
-Die Einträge selbst bleiben unangetastet: Tragezeit, Orgasmus-Zähler und der
+Die Einträge selbst bleiben unangetastet: Tragezeit, Orgasmen und der
 getragene Zustand laufen über den Schnitt hinweg durch. Nur die Punkte beginnen neu.
 
 ## Aufbau
@@ -824,9 +858,9 @@ www/
       jetzt.js        der Statusblock als Paket: bauen und weiterrechnen
     sync/             auth.js · onedrive.js · files.js
       paths.js        wo die Dateien in OneDrive liegen (einstellbar)
-    ui/               eintrag · dashboard · charts · einstellungen und daten
-                      (zwei Module, ein Tab)
-      status.js       der laufende Zustand — Dashboard und Live-Ansicht
+    ui/               eintrag (Heute) · dashboard (Verlauf) · charts
+                      einstellungen und daten (zwei Module, eine Seite)
+      status.js       der laufende Zustand — Heute und Live-Ansicht
       jetzt.js        derselbe Block, aus einem Paket statt aus der Historie
       zeitraum.js     Ebene, Anker, Blättern — ohne DOM, deshalb testbar
       collapse.js     einklappbare Karten, Zustand gemerkt
@@ -845,7 +879,7 @@ Keine Build-Kette, kein Framework: ES-Module, die der Browser direkt lädt.
 Derselbe Ordner geht unverändert in die APK, in den Installer und nach Pages.
 
 ```bash
-npm test          # 179 Tests, nur Node-Builtins
+npm test          # 185 Tests, nur Node-Builtins
 npm start         # Desktop-App lokal starten
 npm run build:win # Windows-Installer (auf Windows)
 npx serve www     # Web-Version lokal

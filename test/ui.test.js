@@ -8,8 +8,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { heatScale, heatBand, aggregatePeriods } from '../www/js/ui/charts.js';
-import { statusContext, statusItems } from '../www/js/ui/status.js';
+import {
+  heatScale, heatBand, aggregatePeriods, mittlererAbstand, kalenderMonate, heatmap, tragezeitBalken,
+} from '../www/js/ui/charts.js';
+import { statusContext, statusItems, statusKompakt } from '../www/js/ui/status.js';
 import { computeAll } from '../www/js/core/calc.js';
 import { normalizeSettings } from '../www/js/core/settings.js';
 
@@ -161,4 +163,77 @@ test('Der Erguss steht nicht in den Orgasmus-Balken', () => {
   const [jan] = aggregatePeriods(days, 'month');
   assert.equal(jan.orgasmen, 1);
   assert.equal(jan.abstand, null, 'der Erguss ist kein Vorgänger, zu dem sich ein Abstand messen ließe');
+});
+
+
+// =========================== HEUTE: DIE DREI UHREN ===========================
+test('Die Zeile oben zeigt dieselben Uhren wie die Kacheln, nur kürzer', () => {
+  const s = S();
+  const events = [ev('2026-03-01', '08:00', 'HT'), ev('2026-02-25', '10:00', 'OR')];
+  const now = new Date('2026-03-09T14:30:00');
+  const { days, byDate, settings } = computeAll({ events, settings: s }, { now });
+  const ctx = statusContext('2026-03-09', { days, byDate, settings, events, now });
+  const [verschl, ungeoeffnet, ofrei] = statusKompakt(ctx);
+
+  assert.equal(verschl.wert, '8 T 6 h', '„8 T 6 h" statt „8 T (198 h)"');
+  assert.equal(verschl.label, 'verschlossen');
+  assert.equal(ungeoeffnet.wert, '8 T 6 h');
+  assert.equal(ungeoeffnet.zusatz, '+7 heute', 'der Zuschlag steht an der Strecke, die ihn bringt');
+  assert.equal(ofrei.wert, '12 T');
+  assert.equal(ofrei.zusatz, statusItems(ctx)[3].text, 'der Multiplikator kommt aus derselben Rechnung');
+  assert.match(ofrei.deckel, /Deckel/);
+});
+
+test('Offen heißt in der Zeile: keine Dauer, sondern „gerade offen"', () => {
+  const s = S();
+  const events = [ev('2026-03-01', '08:00', 'KK')];
+  const now = new Date('2026-03-02T08:00:00');
+  const { days, byDate, settings } = computeAll({ events, settings: s }, { now });
+  const [verschl, ungeoeffnet] = statusKompakt(statusContext('2026-03-02', { days, byDate, settings, events, now }));
+  assert.equal(verschl.wert, '—');
+  assert.equal(verschl.label, 'gerade offen');
+  assert.equal(ungeoeffnet.wert, '—');
+});
+
+test('Während einer Reinigung läuft „verschlossen" weiter und sagt, warum', () => {
+  const s = S();
+  const events = [ev('2026-03-01', '08:00', 'HT'), ev('2026-03-02', '07:50', 'CLEAN')];
+  const now = new Date('2026-03-02T08:00:00');
+  const { days, byDate, settings } = computeAll({ events, settings: s }, { now });
+  const [verschl] = statusKompakt(statusContext('2026-03-02', { days, byDate, settings, events, now }));
+  assert.equal(verschl.label, 'verschlossen');
+  assert.equal(verschl.zusatz, 'Reinigung');
+  assert.equal(verschl.wert, '1 T 0 h');
+});
+
+// =========================== VERLAUF ===========================
+test('Der mittlere Abstand zählt den ersten Orgasmus nicht als 0', () => {
+  const s = S();
+  const events = [
+    ev('2026-01-05', '08:00', 'HT'),
+    ev('2026-01-10', '21:00', 'OR'),
+    ev('2026-02-09', '21:00', 'OR'),
+    ev('2026-02-19', '21:00', 'OR'),
+  ];
+  const { days } = computeAll({ events, settings: s }, { now: new Date('2026-02-20T12:00:00') });
+  assert.ok(Math.abs(mittlererAbstand(days) - 20) < 0.01, '(30 + 10) / 2');
+  const nurJanuar = days.filter(d => d.date < '2026-02-01');
+  assert.equal(mittlererAbstand(nurJanuar), null, 'ein einzelner Orgasmus hat keinen Abstand');
+});
+
+test('Der Kalender zeigt nur die Monate vom ersten bis zum letzten mit Daten', () => {
+  assert.deepEqual(kalenderMonate(['2026-08-14', '2026-10-02', '2026-09-01']), { von: 7, bis: 9 });
+  const s = S();
+  const events = [ev('2026-08-14', '08:00', 'HT')];
+  const { days, settings } = computeAll({ events, settings: s }, { now: new Date('2026-10-02T12:00:00') });
+  const zellen = (heatmap(days, settings).match(/class="hm-cell"/g) || []).length;
+  assert.equal(zellen, 31 + 30 + 31, 'August bis Oktober, nicht das ganze Jahr');
+});
+
+test('Die Tragezeit als Balken: Anteile in der Reihenfolge der Stunden', () => {
+  const s = S();
+  const { html, gesamt } = tragezeitBalken({ HT: 30, NS: 10, OR: 5 }, s);
+  assert.equal(gesamt, 40, 'ein Ereignis hat keine Tragezeit');
+  assert.ok(html.indexOf('width:75.00%') < html.indexOf('width:25.00%'), 'der größere Anteil zuerst');
+  assert.equal(tragezeitBalken({}, s).gesamt, 0);
 });

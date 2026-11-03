@@ -2,7 +2,7 @@
 // Netz zuerst, Cache als Rückfall. Microsoft Graph und Login werden nie
 // gecacht: veraltete Token oder Daten wären schlimmer als ein Fehler.
 
-const CACHE = 'locked-static-v10';
+const CACHE = 'locked-static-v11';
 const PRECACHE = [
   './', './index.html', './jetzt.html', './css/app.css', './manifest.webmanifest',
   './js/main.js', './js/state.js', './js/platform.js', './js/shortcuts.js', './js/jetzt-view.js',

@@ -11,32 +11,45 @@
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
+<body>
 <div class="app">
+  <!-- Die Kopfzeile trägt, was überall gilt: wo gespeichert wird, Abgleich,
+       Einstellungen. Auf der Einstellungsseite wird links ein Zurück daraus. -->
   <header>
-    <h1>Locked</h1>
+    <div class="head-left">
+      <button class="iconbtn hide" id="zurueckBtn" type="button" aria-label="Zurück"><span class="ic">‹</span></button>
+      <h1 id="titel">Locked</h1>
+    </div>
     <div class="head-right">
-      <span class="meta" id="meta">keine Datei</span>
+      <span class="meta" id="meta">nur lokal</span>
+      <!-- Nur da, wo nicht von selbst gespeichert wird: ohne OneDrive-Anmeldung,
+           oder wenn das letzte automatische Speichern fehlschlug (siehe main.js). -->
+      <button class="btn primary klein hide" id="quickSave" type="button">Speichern</button>
       <button class="iconbtn" id="refreshBtn" type="button"
               title="Mit OneDrive abgleichen" aria-label="Aktualisieren"><span class="ic">&#8635;</span></button>
+      <button class="iconbtn" id="einstellungenBtn" type="button"
+              title="Einstellungen" aria-label="Einstellungen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
     </div>
   </header>
 
-  <!-- Drei Tabs. „Regeln" und „Daten" waren zwei, aber beide besucht man
-       selten, und vieles darin richtet man einmal ein. Sie stehen jetzt als
-       zwei Abschnitte in „Einstellungen". -->
-  <div class="tabs">
-    <div class="tab active" data-tab="eintrag">Eintrag</div>
-    <div class="tab" data-tab="dashboard">Dashboard</div>
-    <div class="tab" data-tab="einstellungen">Einstellungen</div>
-  </div>
+  <!-- Zwei Laschen: jetzt und vorher. Am Telefon unten, wo der Daumen ist,
+       am Bildschirm oben (Stil in app.css). -->
+  <nav class="tabbar" id="tabbar">
+    <button class="tab active" data-tab="heute" type="button">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+      <span>Heute</span>
+    </button>
+    <button class="tab" data-tab="verlauf" type="button">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 20V11M12 20V5M19 20v-6"/></svg>
+      <span>Verlauf</span>
+    </button>
+  </nav>
 
-  <!-- ============ EINTRAG ============ -->
-  <!-- Nur was zum Eintragen gehört: die Tasten, der Tag, seine Einträge.
-       Der laufende Zustand (Modell, vier Uhren, Preis, Konto, Form) stand hier
-       einmal zusätzlich und war damit ein zweites Dashboard — er steht jetzt
-       nur noch dort, in der Karte „Jetzt". -->
-  <div id="page-eintrag">
-
+  <!-- ============ HEUTE ============ -->
+  <!-- Ein Bildschirm, keine Karten: der Zustand in einer Zeile, die Tasten,
+       der Tag. Das laufende Modell steht auf seiner Taste, der Preis eines
+       Orgasmus auf dessen Taste — die Auskunft dort, wo man drückt. -->
+  <div id="page-heute">
     <div class="card escalation hide" id="escalationCard">
       <h2>Länger kein Eintrag <span class="sub" id="escalationSince"></span></h2>
       <div class="small" id="escalationText"></div>
@@ -46,85 +59,67 @@
       </div>
     </div>
 
-    <div class="card" id="cardSchnell">
-      <!-- Tippen trägt ein, das Rückgängig steht in der Meldung. Das laufende
-           Modell ist auf seiner Taste markiert (ui/eintrag.js). -->
-      <h2>Schnelleintrag</h2>
-      <!-- Die Tasten stehen über der Datumswahl. Steht die nicht auf heute,
-           muss das hier stehen und nicht darunter: sonst landet der Eintrag
-           still auf dem Vortag. -->
-      <div class="datum-warnung hide" id="quickDatumHinweis">
-        <span id="quickDatumText"></span>
-        <button class="btn ghost" id="quickHeute" type="button">Auf heute</button>
-      </div>
-      <div class="quick" id="quick"></div>
-    </div>
+    <!-- Die drei Uhren. Ein Tipp zeigt, seit wann sie laufen. -->
+    <button class="status-zeile" id="statusZeile" type="button" aria-expanded="false"></button>
+    <div class="status-details hide" id="statusDetails"></div>
 
-    <div class="card" id="cardEintraege">
-      <h2>Einträge <button class="link-btn hide" id="resetDay" type="button">Tag leeren</button></h2>
-      <div class="tag-nav">
-        <button class="zr-arrow" id="tagPrev" type="button" aria-label="Vortag">‹</button>
-        <label class="tag-label">
-          <span id="tagText"></span>
-          <input type="date" id="datum" aria-label="Tag wählen">
-        </label>
-        <button class="zr-arrow" id="tagNext" type="button" aria-label="Folgetag">›</button>
-      </div>
-      <div id="dayTimeline" style="margin:14px 0 10px"></div>
-      <div class="events" id="events"></div>
-      <!-- Das Tagesergebnis als Fußzeile der Einträge, nicht als eigene Bühne:
-           die Zahl gehört zu den Einträgen darüber, die Aufschlüsselung ist
-           einen Klick entfernt. -->
-      <button class="tagesergebnis" id="dayResult" type="button">
-        <span class="l" id="dayResultLabel">Tagesergebnis</span>
-        <span class="v" id="dayResultNum">—</span>
-        <span class="chev" id="dayResultChev">▾</span>
-      </button>
-      <div id="dayBreakdown" class="hide"></div>
+    <!-- Die Tasten stehen über der Datumswahl. Steht die nicht auf heute,
+         muss das hier stehen und nicht darunter: sonst landet der Eintrag
+         still auf dem Vortag. -->
+    <div class="datum-warnung hide" id="quickDatumHinweis">
+      <span id="quickDatumText"></span>
+      <button class="btn ghost" id="quickHeute" type="button">Auf heute</button>
     </div>
+    <div class="quick" id="quick"></div>
+
+    <section class="tag" id="tagBereich">
+      <div class="tag-kopf">
+        <div class="tag-nav">
+          <button class="zr-arrow" id="tagPrev" type="button" aria-label="Vortag">‹</button>
+          <label class="tag-label">
+            <span id="tagText"></span>
+            <input type="date" id="datum" aria-label="Tag wählen">
+          </label>
+          <button class="zr-arrow" id="tagNext" type="button" aria-label="Folgetag">›</button>
+        </div>
+        <!-- Das Ergebnis des Tages neben dem Tag; ein Tipp schlüsselt es auf. -->
+        <button class="tag-ergebnis" id="dayResult" type="button" aria-expanded="false">
+          <span class="l" id="dayResultLabel">heute</span>
+          <span class="v" id="dayResultNum">—</span>
+        </button>
+      </div>
+      <div id="dayBreakdown" class="hide"></div>
+      <div id="dayTimeline"></div>
+      <div class="events" id="events"></div>
+      <div class="tag-fuss"><button class="link-btn hide" id="resetDay" type="button">Tag leeren</button></div>
+    </section>
   </div>
 
-  <!-- ============ DASHBOARD ============ -->
-  <!-- Zwei Teile, getrennt durch die Karte „Rückblick": darüber steht, was
-       jetzt gilt, darunter alles, was am gewählten Zeitraum hängt. Die Karten
-       mussten deshalb nicht mehr einzeln „unabhängig vom Zeitraum" dazusagen. -->
-  <div id="page-dashboard" class="hide">
-    <div class="card" id="cardJetzt">
-      <h2>Jetzt</h2>
-      <div class="current-model" id="jetztModell"></div>
-      <div class="preis hide" id="jetztPreis"></div>
-      <div class="streak-row" id="jetztStreaks"></div>
-      <!-- Der Orgasmus-Zähler war eine eigene Karte mit vier Kacheln. Was er
-           sagt, gehört zu „jetzt" — rollende Fenster, keine Ausschnitte —, und
-           „seit letztem" stand daneben schon zweimal (Kachel und Preis). -->
-      <div class="mini-kopf">Orgasmen</div>
-      <div class="mini-row" id="orgCounter"></div>
-      <div class="small" id="orgLast"></div>
-    </div>
-
-    <div class="card" id="cardZeitraum">
-      <h2>Rückblick <span class="sub" id="zeitraumSub"></span></h2>
+  <!-- ============ VERLAUF ============ -->
+  <!-- Alles hier hängt am gewählten Zeitraum, der deshalb ganz oben steht.
+       Was jetzt gilt, steht auf „Heute" — die Seite muss es nicht mehr
+       dazusagen. Abschnitte statt gerahmter Kästen. -->
+  <div id="page-verlauf" class="hide">
+    <section class="block" id="cardZeitraum">
       <div class="seg" id="zeitraumEbene"></div>
       <div class="zr-nav hide" id="zeitraumNav">
         <button class="zr-arrow" id="zrPrev" type="button" aria-label="zurück">‹</button>
         <div class="zr-label" id="zrLabel"></div>
         <button class="zr-arrow" id="zrNext" type="button" aria-label="vor">›</button>
       </div>
+      <div class="zr-sub" id="zeitraumSub"></div>
       <div class="kpis vier" id="dashKpis"></div>
-    </div>
+    </section>
 
-    <div class="card" id="cardVerlauf">
-      <h2>Konto und Form</h2>
-      <!-- Die beiden Zahlen sind zugleich die Legende der Linien darunter. -->
+    <section class="block" id="cardVerlauf">
+      <h2>Konto</h2>
+      <!-- Das Konto ist die Zahl; die Form steht klein daneben. Beide Zahlen
+           sind zugleich die Legende der Linien darunter. -->
       <div class="kf-zahlen" id="kontoForm"></div>
       <div id="verlaufChart"></div>
-    </div>
+    </section>
 
-    <!-- Ein Diagramm statt drei: Punkte, Stunden und Orgasmen waren je eine
-         eigene Karte und zeigten zweimal dasselbe. „Stunden" stapelt jetzt nach
-         Modell, „Orgasmen" trägt die Abstandslinie. Die Auflösung steht wieder
-         hier, weil sie nur noch dieses Diagramm betrifft. -->
-    <div class="card" id="cardErgebnis">
+    <section class="block" id="cardErgebnis">
       <h2>Je Zeitraum <span class="sub" id="metricSub"></span></h2>
       <div class="seg" id="chartMetric">
         <div class="seg-opt active" data-metric="netto">Punkte</div>
@@ -137,45 +132,43 @@
         <div class="seg-opt" data-scale="day">Tag</div>
       </div>
       <div id="punkteChart"></div>
-    </div>
+    </section>
 
-    <div class="card" id="cardModelle">
-      <h2>Tragezeit <span class="sub">Anteile im Zeitraum</span></h2>
-      <div id="modellDonut" style="display:flex;justify-content:center;margin-bottom:8px"></div>
-      <div id="modellList"></div>
-    </div>
+    <section class="block" id="cardModelle">
+      <h2>Tragezeit <span class="sub" id="tragezeitSub"></span></h2>
+      <div id="tragezeit"></div>
+    </section>
 
-    <div class="card" id="cardKalender">
+    <section class="block" id="cardKalender">
       <h2>Kalender <span class="sub">Farbe = Tagesergebnis</span></h2>
       <div id="heatmap"></div>
       <!-- Die Legende steht nicht hier: ihre Schwellen kommen aus den eigenen
            Sätzen und ändern sich mit ihnen (siehe heatScale() in charts.js). -->
       <div id="heatLegend"></div>
-    </div>
+    </section>
 
     <button class="btn ghost full collapse-toggle" id="detailsToggle" type="button">Details anzeigen ▾</button>
     <div id="detailsSection" class="hide">
-      <div class="card"><h2>Monate</h2><div id="monthTable"></div></div>
-      <div class="card"><h2>Rekorde</h2><div id="records"></div></div>
-      <div class="card"><h2>Ergebnis nach Wochentag</h2><div id="weekdayChart"></div></div>
-      <div class="card">
+      <section class="block"><h2>Monate</h2><div id="monthTable"></div></section>
+      <section class="block"><h2>Rekorde</h2><div id="records"></div></section>
+      <section class="block"><h2>Ergebnis nach Wochentag</h2><div id="weekdayChart"></div></section>
+      <section class="block">
         <h2>Muster nach Uhrzeit <span class="sub">wann eingetragen wird</span></h2>
         <div id="hourChart"></div>
-      </div>
-      <!-- Das Archiv ändert sich nie wieder; es stand trotzdem zwischen den
-           Diagrammen, die sich täglich bewegen. -->
-      <div class="card archiv hide" id="archivCard">
+      </section>
+      <section class="block archiv hide" id="archivCard">
         <h2>Archiv <span class="sub">Punkte aus der alten Ära</span></h2>
         <div id="archivBody"></div>
-      </div>
+      </section>
     </div>
   </div>
 
   <!-- ============ EINSTELLUNGEN ============ -->
-  <!-- Jede Karte ist einklappbar (ui/collapse.js), startet zugeklappt und trägt
+  <!-- Keine eigene Lasche: das Zahnrad oben öffnet die Seite, Zurück schließt
+       sie. Man stellt hier einmal etwas ein und kommt selten wieder.
+       Jede Karte ist einklappbar (ui/collapse.js), startet zugeklappt und trägt
        in der Kopfzeile ihren Stand — „7 aktiv", „ab 14.05.26", „angemeldet".
-       So beantwortet die Seite „steht da noch, was ich denke" ohne einen Klick.
-       Wer eine Karte aufklappt, findet sie beim nächsten Mal offen vor. -->
+       So beantwortet die Seite „steht da noch, was ich denke" ohne einen Klick. -->
   <div id="page-einstellungen" class="hide">
     <div class="abschnitt">Regeln</div>
 
@@ -197,10 +190,12 @@
     <div class="card collapse" data-collapse="punkte" data-collapse-default="zu">
       <h2>Punktesätze <span class="sub" id="punkteSub"></span></h2>
       <div class="collapse-body">
-      <div id="pointSettings"></div>
-      <div style="height:12px"></div>
-      <div class="unterkopf">Was das bedeutet</div>
+      <!-- Erst, was die Sätze ergeben, dann die Sätze: die Vorschau ist die
+           Frage, die man beim Öffnen hat. -->
+      <div class="unterkopf">Was die Sätze ergeben</div>
       <div id="settingsPreview"></div>
+      <div style="height:14px"></div>
+      <div id="pointSettings"></div>
       </div>
     </div>
 
@@ -351,14 +346,6 @@
     </div>
 
     <div class="fusszeile" id="versionInfo">—</div>
-  </div>
-</div>
-
-<!-- Nur da, wo nicht von selbst gespeichert wird: ohne OneDrive-Anmeldung,
-     oder wenn das letzte automatische Speichern fehlschlug (siehe main.js). -->
-<div class="savebar hide" id="savebar">
-  <div class="inner">
-    <button class="btn primary" id="quickSave" type="button">Speichern</button>
   </div>
 </div>
 
