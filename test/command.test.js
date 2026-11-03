@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  parseCommand, resolveCommandModel, planCommand, currentStateAt,
+  parseCommand, resolveCommandModel, planCommand, currentStateAt, currentRunAt,
   shortcutModels, commandUrl, webCommandUrl, MAX_SHORTCUTS, CMD_PARAMS,
   initialen, kuerzel, kuerzelMap, tileModels, watchPayload, MAX_TILE_BUTTONS,
 } from '../www/js/core/command.js';
@@ -166,6 +166,47 @@ test('Orgasmus-Ereignisse sagen nichts über den Verschluss', () => {
     { date: '2026-09-03', time: '09:00', type: 'OR' },
   ];
   assert.equal(currentStateAt(evs, S, JETZT.getTime()).type, 'HT');
+});
+
+// Die Markierung auf der Schnelltaste: welcher Zustand, und seit wann am Stück.
+test('Der Lauf beginnt beim Wechsel, nicht beim letzten Eintrag', () => {
+  const evs = [
+    { date: '2026-09-01', time: '21:00', type: 'NS' },
+    { date: '2026-09-02', time: '22:00', type: 'NS' },   // dasselbe noch einmal
+    { date: '2026-09-03', time: '09:00', type: 'OR' },   // kein Zustand
+  ];
+  const lauf = currentRunAt(evs, S, JETZT.getTime());
+  assert.equal(lauf.id, 'NS');
+  assert.equal(lauf.ms, new Date('2026-09-01T21:00:00').getTime(),
+    'der zweite NS-Eintrag verschiebt das „seit" nicht');
+});
+
+test('Ein Wechsel beginnt einen neuen Lauf, auch zurück zum alten Modell', () => {
+  const evs = [
+    { date: '2026-09-01', time: '08:00', type: 'HT' },
+    { date: '2026-09-02', time: '07:00', type: 'CLEAN' },
+    { date: '2026-09-02', time: '07:20', type: 'HT' },
+  ];
+  const lauf = currentRunAt(evs, S, JETZT.getTime());
+  assert.equal(lauf.id, 'HT');
+  assert.equal(lauf.ms, new Date('2026-09-02T07:20:00').getTime());
+});
+
+test('Der Lauf kennt keine Einträge aus der Zukunft und beginnt offen', () => {
+  const evs = [{ date: '2026-09-03', time: '23:00', type: 'HT' }];
+  assert.deepEqual(currentRunAt(evs, S, JETZT.getTime()), { id: 'KK', ms: null });
+  assert.deepEqual(currentRunAt([], S, JETZT.getTime()), { id: 'KK', ms: null });
+});
+
+// Dieselbe Prüfung, auf der die Schnelltaste ihr „läuft schon" aufbaut.
+test('Dasselbe Modell noch einmal ist als unverändert erkennbar', () => {
+  const daten = { events: [{ date: '2026-09-03', time: '08:00', type: 'HT' }] };
+  const plan = planCommand(daten, S, { modell: 'HT', zeit: '10:20', datum: '2026-09-03' }, JETZT);
+  assert.equal(plan.ok, true);
+  assert.equal(plan.doppelt, false);
+  assert.equal(plan.unveraendert, true);
+  const doppelt = planCommand(daten, S, { modell: 'HT', zeit: '08:00', datum: '2026-09-03' }, JETZT);
+  assert.equal(doppelt.doppelt, true, 'dieselbe Minute ist derselbe Eintrag');
 });
 
 // =========================== LAUNCHER ===========================

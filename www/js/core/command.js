@@ -135,6 +135,34 @@ export function currentStateAt(events, settings, refMs) {
     : { type: openModelId(settings), ms: null, time: null, date: null };
 }
 
+/**
+ * Der Zustand zu `refMs` und seit wann er *ununterbrochen* gilt.
+ *
+ * `currentStateAt()` nennt den letzten Eintrag. Für die Schnelltasten ist die
+ * Frage eine andere: seit wann trage ich das? Zweimal hintereinander derselbe
+ * Käfig ist ein Lauf, nicht zwei — der zweite Eintrag ändert an der Rechnung
+ * nichts und darf deshalb auch das „seit" nicht verschieben.
+ *
+ * @returns {{ id: string, ms: number|null }}  ms = null: kein Eintrag davor
+ */
+export function currentRunAt(events, settings, refMs) {
+  const map = modelMap(settings);
+  const liste = [];
+  for (const e of (events || [])) {
+    if (resolveModel(settings, map, e.type).kind === KIND_ORGASM) continue;
+    const t = eventMs(e);
+    if (!isFinite(t) || t > refMs) continue;
+    liste.push({ t, type: e.type });
+  }
+  liste.sort((a, b) => a.t - b.t);
+  let id = null;
+  let ms = null;
+  for (const x of liste) {
+    if (x.type !== id) { id = x.type; ms = x.t; }
+  }
+  return id ? { id, ms } : { id: openModelId(settings), ms: null };
+}
+
 function zeitAus(roh, now) {
   if (roh == null) return { time: hmOf(now) };
   const m = /^(\d{1,2}):?(\d{2})$/.exec(roh);

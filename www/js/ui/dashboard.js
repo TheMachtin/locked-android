@@ -1,27 +1,28 @@
 /**
- * Dashboard: der Rückblick.
+ * Dashboard: der laufende Stand und der Rückblick.
  *
- * Zwei Kennzahlen tragen die Seite. Das **Konto** summiert alles seit dem
+ * Die Seite hat zwei Teile, und die Karte „Rückblick" ist die Grenze zwischen
+ * ihnen. Darüber steht **Jetzt** — Modell, Preis, die vier Uhren und der
+ * Orgasmus-Zähler in rollenden Fenstern. Das sind Fragen an die Gegenwart, und
+ * die ändern sich nicht dadurch, dass man darunter 2025 auswählt. Darunter hängt
+ * alles am gewählten Zeitraum, mit einer Ausnahme, die sich selbst benennt: die
+ * beiden Zahlen über dem Verlauf heißen „Konto heute" und „Form heute".
+ *
+ * Zwei Kennzahlen tragen den Rückblick. Das **Konto** summiert alles seit dem
  * Stichtag und beantwortet „wie viel insgesamt". Die **Form** klingt mit 3 % pro
  * Tag ab und beantwortet „wie läuft es zuletzt" — sie hat einen Grenzwert und
  * bleibt dadurch über Jahre vergleichbar, während das Konto zwangsläufig wächst.
  *
- * Drei Blöcke stehen bewusst *außerhalb* des Zeitraums: „Jetzt", der
- * Orgasmus-Zähler und die beiden Kacheln Konto/Form. Sie beantworten Fragen an
- * die Gegenwart, und die ändert sich nicht dadurch, dass man daneben 2025
- * ausgewählt hat. Wo eine Kachel deshalb von ihrem Ausschnitt abweicht, sagt
- * sie es in ihrer Unterzeile.
- *
- * Ganz unten steht das Archiv der alten Ära, sofern die Datei eines enthält.
+ * Unter „Details" stehen Tabellen, Rekorde und das Archiv der alten Ära.
  */
 
 import { STATE, calc } from '../state.js';
 import {
-  fmtInt, fmtNum, fmtSigned, fmtHours, fmtDateShort, fmtDurationShort, fmtMonth,
+  fmtInt, fmtNum, fmtSigned, fmtHours, fmtDateShort, fmtMonth,
   escapeHtml, MONTHS_DE,
 } from './format.js';
 import {
-  metricChart, orgasmusChart, stundenStackChart, hourChart, verlaufChart,
+  metricChart, hourChart, verlaufChart,
   modellDonut, heatmap, heatScale, heatLegend, weekdayChart, METRIKEN,
 } from './charts.js';
 import { emptyTotals, computeTotals, currentOrgasmPrice } from '../core/calc.js';
@@ -128,31 +129,33 @@ export function render() {
   renderZeitraum(days);
 
   const gefiltert = days.filter(d => zeitraumMatch(zeitraum, d.date));
-  // Konto und Form laufen über die ganze Historie — ein Ausschnitt darf sie
-  // nicht zurücksetzen, sonst stünde im Januar ein leeres Konto da. Alles
-  // andere zählt nur den sichtbaren Ausschnitt.
   const t = gefiltert.length ? computeTotals(gefiltert) : emptyTotals();
-  t.konto = totals.konto;
-  t.form = totals.form;
 
   // Unter jeder Kachel steht, worauf sich ihre Zahl bezieht. „Ø pro Tag" allein
   // beantwortet die Frage nicht, die man dabei hat — Durchschnitt wovon, geteilt
-  // durch welche Tage —, und bei einem Ausschnitt kommt dazu, dass Konto und
-  // Form absichtlich über die ganze Historie laufen.
+  // durch welche Tage.
   const kachel = (v, l, sub) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div>`
     + (sub ? `<div class="l sub">${sub}</div>` : '')
     + '</div>';
-  const abklang = fmtNum((1 - settings.points.formDecay) * 100, 0);
   const nenner = `÷ ${fmtInt(t.kalendertage)} ${t.kalendertage === 1 ? 'Kalendertag' : 'Kalendertage'}`;
-  const ganzeHistorie = zeitraum.ebene !== 'all' ? 'ganze Historie · ' : '';
   $('dashKpis').innerHTML =
-      kachel(fmtInt(totals.konto), 'Kontostand',
-        ganzeHistorie + (startedAt ? 'seit ' + fmtDateShort(startedAt) : 'alles gezählt'))
-    + kachel(fmtInt(totals.form), 'Form', ganzeHistorie + `klingt ${abklang} %/Tag ab`)
-    + kachel(fmtNum(t.avgNetto, 1), 'Ø pro Tag', `Punkte ${nenner}`)
-    + kachel(fmtInt(t.stundenVerschlossen), 'Std verschlossen', zeitraumText(zeitraum))
+      kachel(fmtNum(t.avgNetto, 1), 'Ø Punkte/Tag', nenner)
     + kachel(fmtNum(t.avgStdTag, 1), 'Ø Std/Tag', `verschlossen ${nenner}`)
+    + kachel(fmtInt(t.stundenVerschlossen), 'Std verschlossen', zeitraumText(zeitraum))
     + kachel(fmtInt(t.orgasmen), 'Orgasmen', orgasmSub(t, zeitraum));
+
+  // Konto und Form laufen über die ganze Historie, die Linien darunter zeigen
+  // den Zeitraum. Die Zahlen heißen deshalb „heute" — sonst läse man im Januar
+  // ein Konto, das nur den Januar zählt.
+  const abklang = fmtNum((1 - settings.points.formDecay) * 100, 0);
+  const zahl = (farbe, v, l, sub, klasse = '') => `<div class="kf">
+      <span class="dot" style="background:${farbe}"></span>
+      <div><div class="v ${klasse}${v < 0 ? ' neg' : ''}">${fmtInt(v)}</div>
+      <div class="l">${l}</div><div class="l sub">${sub}</div></div></div>`;
+  $('kontoForm').innerHTML =
+      zahl('var(--accent)', totals.konto, 'Konto heute',
+        startedAt ? 'seit ' + fmtDateShort(startedAt) : 'alles gezählt')
+    + zahl('var(--warm)', totals.form, 'Form heute', `klingt ${abklang} %/Tag ab`, 'form');
 
   renderJetzt(days, byDate, settings);
   renderOrgasmCounter(settings);
@@ -163,7 +166,7 @@ export function render() {
   $('metricSub').textContent = m.beschreibung;
   document.querySelectorAll('#chartMetric .seg-opt').forEach(o =>
     o.classList.toggle('active', o.dataset.metric === metrik));
-  $('punkteChart').innerHTML = metricChart(gefiltert, skala, metrik);
+  $('punkteChart').innerHTML = metricChart(gefiltert, skala, metrik, settings);
   $('punkteChart').querySelectorAll('.bar-clickable').forEach(r =>
     r.addEventListener('click', () => onDrilldown(datumAusSchluessel(r.dataset.key))));
 
@@ -176,14 +179,11 @@ export function render() {
     ? `<div class="small">Davor, in der alten Ära: ${fmtHours(alt.stundenVerschlossen)} verschlossen
        (${fmtDateShort(alt.von)}–${fmtDateShort(alt.bis)}).</div>`
     : '');
-  $('stundenStack').innerHTML = stundenStackChart(gefiltert, settings, skala);
-
-  $('orgasmusChart').innerHTML = orgasmusChart(gefiltert, skala);
 
   $('heatmap').innerHTML = heatmap(gefiltert, settings);
   $('heatmap').querySelectorAll('.hm-cell').forEach(c =>
     c.addEventListener('click', () => onDrilldown(c.dataset.iso)));
-  $('heatLegend').innerHTML = heatLegend(heatScale(settings), settings);
+  $('heatLegend').innerHTML = heatLegend(heatScale(settings));
 
   renderArchiv();
   if (detailsOffen) renderDetails(t, gefiltert, settings);
@@ -197,7 +197,7 @@ export function render() {
  * zweimal in der App — die Seite zum Eintragen war ein zweites Dashboard.
  * Jetzt steht er nur hier. Der Block kommt aus `status.js`, die Live-Ansicht
  * (`jetzt.html`) benutzt denselben Code. Der Zeitraum gilt hier nicht: „jetzt"
- * ist jetzt, auch wenn daneben 2025 ausgewählt ist.
+ * ist jetzt, auch wenn darunter 2025 ausgewählt ist.
  */
 function renderJetzt(days, byDate, settings) {
   const iso = todayIso();
@@ -218,12 +218,12 @@ function renderJetzt(days, byDate, settings) {
 
 // =========================== ORGASMUS-ZÄHLER ===========================
 /**
- * Vier rollende Fenster.
+ * Vier rollende Fenster: laufender Monat, 30, 90 und 365 Tage.
  *
  * Der Zähler stand im Eintrag-Tab und beantwortete dort eine Frage, die
- * niemand beim Eintragen hat. Er gehört zum Rückblick — aber nicht zum
- * Zeitraum daneben: „letzte 30 Tage" heißt immer die letzten 30 Tage, sonst
- * stünde bei ausgewähltem 2025 eine 0 darin, die nichts bedeutet.
+ * niemand beim Eintragen hat. Er hängt nicht am Zeitraum: „30 Tage" heißt
+ * immer die letzten 30 Tage, sonst stünde bei ausgewähltem 2025 eine 0 darin,
+ * die nichts bedeutet. Deshalb steht er in der Karte „Jetzt".
  */
 function renderOrgasmCounter(s) {
   const map = modelMap(s);
@@ -245,23 +245,21 @@ function renderOrgasmCounter(s) {
   const fenster = tage => alle.filter(x => x.t >= refMs - tage * 86400000).length;
   const avgGap = alle.length >= 2 ? (letzter.t - alle[0].t) / (alle.length - 1) : null;
 
-  const kachel = (v, l, sub) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div>`
-    + (sub ? `<div class="l sub">${sub}</div>` : '') + '</div>';
+  // Vier Zahlen in einer Zeile statt vier Kacheln in einer eigenen Karte.
+  // „Seit dem letzten" fehlt mit Absicht: das steht in derselben Karte schon an
+  // der Kachel „Orgasmusfrei" und am Preis.
+  const zelle = (v, l) => `<div class="mini"><div class="v">${v}</div><div class="l">${l}</div></div>`;
   $('orgCounter').innerHTML =
-      kachel(fmtInt(alle.filter(x => x.e.date.startsWith(monat)).length),
-        MONTHS_DE[parseInt(monat.slice(5), 10) - 1], 'laufender Monat')
-    + kachel(fmtInt(fenster(30)), 'letzte 30 T')
-    + kachel(fmtInt(fenster(90)), 'letzte 90 T')
-    + kachel(letzter ? fmtDurationShort(refMs - letzter.t) : '—', 'seit letztem',
-        letzter ? `${fmtDateShort(letzter.e.date)} ${letzter.e.time}` : 'keiner erfasst');
+      zelle(fmtInt(alle.filter(x => x.e.date.startsWith(monat)).length),
+        MONTHS_DE[parseInt(monat.slice(5), 10) - 1])
+    + zelle(fmtInt(fenster(30)), '30 Tage')
+    + zelle(fmtInt(fenster(90)), '90 Tage')
+    + zelle(fmtInt(fenster(365)), '365 Tage');
 
-  // Die beiden längeren Maßstäbe stehen als Zeile statt als Kachel: sie
-  // beantworten dieselbe Frage eine Stufe gröber und sollen die vier Zahlen
-  // darüber nicht verdünnen.
   const auto = alle.filter(x => x.e.auto_inactivity).length;
-  const teile = [`Letzte 365 Tage: <b>${fmtInt(fenster(365))}</b>`];
-  if (avgGap != null) teile.push(`Ø Abstand: <b>${fmtNum(avgGap / 86400000, 1)} T</b>`);
-  if (alle.length) teile.push(`erfasst: <b>${fmtInt(alle.length)}</b>`);
+  const teile = [];
+  if (avgGap != null) teile.push(`Ø Abstand <b>${fmtNum(avgGap / 86400000, 1)} T</b>`);
+  if (alle.length) teile.push(`erfasst <b>${fmtInt(alle.length)}</b>`);
   if (auto) teile.push(`${auto} automatisch (Inaktivität)`);
   if (sonstige) teile.push(`dazu <b>${fmtInt(sonstige)}</b> ohne Bruch der Strecke`);
   $('orgLast').innerHTML = (alle.length || sonstige)
