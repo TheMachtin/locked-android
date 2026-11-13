@@ -12,7 +12,7 @@
  * drei verschiedene Vorstellungen davon entwickeln, was ein Monat ist.
  */
 
-import { isoWeek } from '../core/time.js';
+import { isoWeek, timeToMin } from '../core/time.js';
 import { fmtInt, fmtNum, fmtDateShort, escapeHtml, MONTHS_SHORT_DE as MON_KURZ } from './format.js';
 import { resolveModel, modelMap, brichtStrecke, KIND_ORGASM } from '../core/settings.js';
 
@@ -619,6 +619,26 @@ export function weekdayChart(byWeekday) {
 }
 
 // =========================== TAGESVERLAUF ===========================
+/**
+ * Was der Tag vom Vortag übernimmt: das Modell, das um 00:00 schon lief, und
+ * bis zu welcher Minute.
+ *
+ * Das ist das erste Stück des Balkens darunter — und das einzige, zu dem es
+ * keinen Eintrag an diesem Tag gibt. Die Liste der Einträge braucht dafür eine
+ * eigene Zeile, sonst zeigt der Balken morgens eine Farbe, die darunter
+ * nirgends steht. `bis` ist 1440, wenn der Tag keinen Wechsel hat; ein
+ * Orgasmus ist keiner. `null`, wenn gleich um 00:00 gewechselt wird.
+ *
+ * @returns {{ id: string, bis: number }|null}
+ */
+export function vortagsLauf(rec, settings) {
+  const map = modelMap(settings);
+  const wechsel = (rec.events || [])
+    .find(e => resolveModel(settings, map, e.type).kind !== KIND_ORGASM);
+  const bis = wechsel ? timeToMin(wechsel.time) : 1440;
+  return bis > 0 ? { id: rec.prevEndModel, bis } : null;
+}
+
 /** Der farbige Balken über 24 Stunden im Eintrag-Tab. */
 export function dayTimeline(rec, settings, nowMin) {
   const map = modelMap(settings);

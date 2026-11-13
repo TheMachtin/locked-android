@@ -24,7 +24,7 @@ import {
   fmtInt, fmtNum, fmtSigned, fmtDateShort, fmtDurationShort,
   fmtCountdownHM, fmtCountdownDH, escapeHtml, weekdayOf,
 } from './format.js';
-import { dayTimeline } from './charts.js';
+import { dayTimeline, vortagsLauf } from './charts.js';
 import { statusContext, statusKompakt } from './status.js';
 import { isoOf, isoDateAdd, hmOf } from '../core/time.js';
 import { regenState, expiredRegenEvents, lastOrgasmMs } from '../core/calc.js';
@@ -444,7 +444,7 @@ function renderEvents() {
   const s = getSettings();
   const map = modelMap(s);
   const iso = gewaehltesDatum;
-  const { byDate } = calc();
+  const { days, byDate } = calc();
   const d = byDate[iso];
   const wrap = $('events');
 
@@ -455,19 +455,30 @@ function renderEvents() {
     ? dayTimeline(d, s, iso === heute() ? new Date().getHours() * 60 + new Date().getMinutes() : 1440)
     : '';
 
+  // Was um 00:00 schon lief, hat an diesem Tag keinen Eintrag — der Balken
+  // zeigt es trotzdem. Die Zeile dafür stand bis 3.0 nur an Tagen ganz ohne
+  // Einträge: wer morgens wechselte, sah die Farbe im Balken und darunter nur
+  // noch das neue Modell. Am allerersten Tag gibt es keinen Vortag.
+  const vortag = d && days[0] !== d ? vortagsLauf(d, s) : null;
+  wrap.innerHTML = '';
+  if (vortag) {
+    const m = resolveModel(s, map, vortag.id);
+    const text = vortag.bis >= 1440 ? 'läuft vom Vortag durch' : 'vom Vortag';
+    const row = document.createElement('div');
+    row.className = 'ev-zeile carry';
+    row.innerHTML = `<div class="ev-kopf">
+      <span class="t">00:00</span><span class="dot" style="background:${escapeHtml(m.color)}"></span>
+      <span class="n">${escapeHtml(m.label)} <i>· ${text}</i></span><span></span></div>`;
+    wrap.appendChild(row);
+  }
   if (!evs.length) {
-    if (!d) { wrap.innerHTML = '<div class="empty">Noch keine Einträge</div>'; return; }
-    const carry = resolveModel(s, map, d.prevEndModel);
-    wrap.innerHTML = `<div class="ev-zeile carry"><div class="ev-kopf">
-      <span class="t">00:00</span><span class="dot" style="background:${escapeHtml(carry.color)}"></span>
-      <span class="n">${escapeHtml(carry.label)} <i>· läuft vom Vortag durch</i></span><span></span></div></div>`;
+    if (!vortag) wrap.innerHTML = '<div class="empty">Noch keine Einträge</div>';
     return;
   }
 
   const schluessel = ev => `${ev.date}|${ev.time}|${ev.type}`;
   const preise = new Map((d ? d.orgasmen : []).map(o => [schluessel(o.event), o.price]));
   const optionen = s.models.filter(m => !m.archived || evs.some(e => e.type === m.id));
-  wrap.innerHTML = '';
   for (const ev of evs) {
     const m = resolveModel(s, map, ev.type);
     const key = schluessel(ev);

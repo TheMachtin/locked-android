@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 
 import {
   heatScale, heatBand, aggregatePeriods, mittlererAbstand, kalenderMonate, heatmap, tragezeitBalken,
+  vortagsLauf, dayTimeline,
 } from '../www/js/ui/charts.js';
 import { statusContext, statusItems, statusKompakt } from '../www/js/ui/status.js';
 import { computeAll } from '../www/js/core/calc.js';
@@ -204,6 +205,38 @@ test('Während einer Reinigung läuft „verschlossen" weiter und sagt, warum', 
   assert.equal(verschl.label, 'verschlossen');
   assert.equal(verschl.zusatz, 'Reinigung');
   assert.equal(verschl.wert, '1 T 0 h');
+});
+
+// =========================== HEUTE: WAS VOM VORTAG LÄUFT ===========================
+test('Nach einem Wechsel am Morgen steht das Modell vom Vortag weiter in der Liste', () => {
+  const s = S();
+  const events = [ev('2026-03-01', '21:00', 'HT'), ev('2026-03-02', '07:30', 'NS')];
+  const { byDate, settings } = computeAll({ events, settings: s }, { now: new Date('2026-03-02T12:00:00') });
+  const tag = byDate['2026-03-02'];
+
+  assert.deepEqual(vortagsLauf(tag, settings), { id: 'HT', bis: 450 });
+  // Die Zeile beschreibt das erste Stück des Balkens — dieselbe Strecke, sonst
+  // stünde unter dem Balken etwas anderes, als er zeigt.
+  assert.match(dayTimeline(tag, settings, 720), /<title>Holy Trainer 00:00–07:30<\/title>/);
+});
+
+test('Ohne Wechsel läuft das Modell vom Vortag durch — ein Orgasmus ist kein Wechsel', () => {
+  const s = S();
+  const events = [ev('2026-03-01', '21:00', 'HT'), ev('2026-03-02', '06:00', 'OR'),
+    ev('2026-03-03', '06:00', 'OR'), ev('2026-03-03', '09:15', 'KK')];
+  const { byDate, settings } = computeAll({ events, settings: s }, { now: new Date('2026-03-04T12:00:00') });
+
+  assert.deepEqual(vortagsLauf(byDate['2026-03-02'], settings), { id: 'HT', bis: 1440 });
+  assert.deepEqual(vortagsLauf(byDate['2026-03-03'], settings), { id: 'HT', bis: 555 },
+    'der Orgasmus um 06:00 beendet den Lauf nicht, der Wechsel um 09:15 schon');
+  assert.deepEqual(vortagsLauf(byDate['2026-03-04'], settings), { id: 'KK', bis: 1440 });
+});
+
+test('Ein Wechsel um 00:00 lässt vom Vortag nichts übrig', () => {
+  const s = S();
+  const events = [ev('2026-03-01', '21:00', 'HT'), ev('2026-03-02', '00:00', 'NS')];
+  const { byDate, settings } = computeAll({ events, settings: s }, { now: new Date('2026-03-02T12:00:00') });
+  assert.equal(vortagsLauf(byDate['2026-03-02'], settings), null);
 });
 
 // =========================== VERLAUF ===========================
