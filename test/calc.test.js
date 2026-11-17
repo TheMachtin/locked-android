@@ -579,3 +579,77 @@ test('Ein Ereignis darf nichts kosten und bleibt trotzdem verzeichnet', () => {
   assert.equal(mit.totals.orgasmen, 0);
   assert.equal(mit.byDate['2026-03-09'].events.length, 1);
 });
+
+// =========================== CHALLENGE-MONATE ===========================
+import { offeneGlueckwuensche } from '../www/js/core/calc.js';
+
+test('LOCKtober: ganzer Oktober ohne Orgasmus bringt den Bonus am 31., erst wenn er vorbei ist', () => {
+  const data = { events: [ev('2026-09-20', '10:00', 'HT'), ev('2026-09-25', '10:00', 'OR')] };
+  const amLetzten = computeAll(data, { now: new Date('2026-10-31T23:00:00') });
+  assert.equal(amLetzten.byDate['2026-10-31'].challenge, null, 'der laufende Tag zählt noch nicht');
+  const r = computeAll(data, { now: new Date('2026-11-01T09:00:00') });
+  const d = r.byDate['2026-10-31'];
+  assert.equal(d.challenge.name, 'LOCKtober');
+  assert.equal(d.challengeBonus, 300);
+  assert.equal(d.challenge.triple, false);
+  const ohne = defaultSettings();
+  ohne.points.bonusChallenge = 0;
+  const r0 = computeAll({ ...data, settings: ohne }, { now: new Date('2026-11-01T09:00:00') });
+  assert.ok(Math.abs(d.netto - 300 - r0.byDate['2026-10-31'].netto) < 1e-6, 'genau 300 obendrauf');
+  assert.ok(Math.abs(r.totals.konto - 300 - r0.totals.konto) < 1e-6, 'im Konto');
+  assert.ok(Math.abs(r.totals.form - r0.totals.form) < 1e-6, 'nicht in der Form');
+  assert.deepEqual(r.totals.challenges.map(c => c.monat), ['2026-10']);
+  assert.equal(r.totals.challengeEinnahmen, 300);
+  assert.ok(Math.abs(r.totals.einnahmen - r.totals.kosten - r.totals.netto) < 1e-6, 'Einnahmen − Kosten = Netto');
+  assert.ok(r.totals.besterTag < 300, 'der Bonus macht den 31. nicht zum besten Tag');
+});
+
+test('LOCKtober: ein Orgasmus am 31. um 23:59 kostet den Monat', () => {
+  const data = { events: [ev('2026-09-20', '10:00', 'HT'), ev('2026-10-31', '23:59', 'OR')] };
+  const r = computeAll(data, { now: new Date('2026-11-05T09:00:00') });
+  assert.equal(r.totals.challenges.length, 0);
+});
+
+test('LOCKtober: ein Ereignis, das die Strecke nicht bricht, bricht auch den Monat nicht', () => {
+  const s = defaultSettings();
+  s.models.push({ id: 'ERG', kind: 'orgasm', label: 'Erguss', color: '#f00',
+    priceMin: 5, priceMax: 10, halflifeDays: 7, streakFactor: 1 });
+  const data = { settings: s, events: [ev('2026-09-20', '10:00', 'HT'), ev('2026-10-12', '20:00', 'ERG')] };
+  const r = computeAll(data, { now: new Date('2026-11-05T09:00:00') });
+  assert.deepEqual(r.totals.challenges.map(c => c.name), ['LOCKtober']);
+});
+
+test('LOCKtober: wer erst im Oktober anfängt, hat keinen', () => {
+  const r = computeAll({ events: [ev('2026-10-05', '10:00', 'HT')] }, { now: new Date('2026-11-05T09:00:00') });
+  assert.equal(r.totals.challenges.length, 0);
+  const s = defaultSettings();
+  s.startedAt = '2026-10-10';
+  const r2 = computeAll({ settings: s, events: [ev('2026-09-01', '10:00', 'HT')] }, { now: new Date('2026-11-05T09:00:00') });
+  assert.equal(r2.totals.challenges.length, 0, 'Stichtag mitten im Monat');
+});
+
+test('Challenge-Monate: alle drei bringen am 31. Dezember den Zusatz', () => {
+  const r = computeAll({ events: [ev('2026-09-01', '10:00', 'HT')] }, { now: new Date('2027-01-01T09:00:00') });
+  assert.deepEqual(r.totals.challenges.map(c => c.name), ['LOCKtober', 'NOvember', 'DENIALcember']);
+  const dez = r.byDate['2026-12-31'];
+  assert.equal(dez.challenge.triple, true);
+  assert.equal(dez.challengeBonus, 800);
+  assert.equal(r.totals.challengeEinnahmen, 1400);
+  assert.equal(r.byDate['2026-11-30'].challengeBonus, 300);
+});
+
+test('Challenge-Monate: Bonus 0 schaltet nur die Punkte ab', () => {
+  const s = defaultSettings();
+  s.points.bonusChallenge = 0;
+  const r = computeAll({ settings: s, events: [ev('2026-09-01', '10:00', 'HT')] }, { now: new Date('2026-11-02T09:00:00') });
+  assert.equal(r.byDate['2026-10-31'].challengeBonus, 0);
+});
+
+test('Glückwunsch: nur neue und nur jüngere als einen Monat', () => {
+  const c = (datum) => ({ datum });
+  const alle = [c('2025-10-31'), c('2026-10-31'), c('2026-11-30')];
+  assert.deepEqual(offeneGlueckwuensche(alle, '', '2026-11-01'), [c('2026-10-31'), c('2026-11-30')],
+    'der Locktober vom Vorjahr ist zu alt');
+  assert.deepEqual(offeneGlueckwuensche(alle, '2026-10-31', '2026-12-01'), [c('2026-11-30')]);
+  assert.deepEqual(offeneGlueckwuensche(alle, '2026-11-30', '2026-12-01'), []);
+});

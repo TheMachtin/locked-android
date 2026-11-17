@@ -59,6 +59,13 @@ export const DEFAULT_POINTS = {
    */
   bonusUngeoeffnet: 1,
   bonusUngeoeffnetCap: 7,
+  /**
+   * LOCKtober, NOvember, DENIALcember: ein ganzer Monat ohne Orgasmus bringt
+   * einmalig diesen Bonus, alle drei in einem Jahr zusätzlich den zweiten.
+   * Höchstens viermal im Jahr — eine feste Zahl, kein Multiplikator.
+   */
+  bonusChallenge: 300,
+  bonusChallengeTriple: 500,
   /** Einnahmen-Multiplikator: 1 + streakK × orgasmusfreie Tage, gedeckelt. */
   streakK: 0.02,
   streakCap: 2.0,
@@ -268,6 +275,8 @@ export function normalizeSettings(raw) {
       // 0 schaltet die Strecke sauber ab.
       bonusUngeoeffnet:    clamp(num(p.bonusUngeoeffnet,    DEFAULT_POINTS.bonusUngeoeffnet), 0, 1000),
       bonusUngeoeffnetCap: clamp(num(p.bonusUngeoeffnetCap, DEFAULT_POINTS.bonusUngeoeffnetCap), 0, 10000),
+      bonusChallenge:       clamp(num(p.bonusChallenge,       DEFAULT_POINTS.bonusChallenge), 0, 100000),
+      bonusChallengeTriple: clamp(num(p.bonusChallengeTriple, DEFAULT_POINTS.bonusChallengeTriple), 0, 100000),
       streakK:          clamp(num(p.streakK,          DEFAULT_POINTS.streakK), 0, 10),
       streakCap:        clamp(num(p.streakCap,        DEFAULT_POINTS.streakCap), 1, 100),
       formDecay:        clamp(num(p.formDecay,        DEFAULT_POINTS.formDecay), 0.5, 0.9999),

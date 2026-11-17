@@ -272,6 +272,9 @@ function renderDetails(t, gefiltert, settings) {
         + (t.bestUoStreak.end ? ` <span style="color:var(--muted);font-size:11px">bis ${fmtDateShort(t.bestUoStreak.end)}</span>` : ''))
     + r('Volle Tage ungeöffnet', fmtInt(t.tageUngeoeffnet) + (t.uoEinnahmen
         ? ` <span style="color:var(--muted);font-size:11px">+${fmtInt(t.uoEinnahmen)} Punkte</span>` : ''))
+    + (t.challenges.length ? r('Geschaffte Monate', t.challenges
+        .map(c => `${c.name} ${c.monat.slice(0, 4)}${c.triple ? ' 🏆' : ''}`).join(' · ')
+        + ` <span style="color:var(--muted);font-size:11px">+${fmtInt(t.challengeEinnahmen)} Punkte</span>`) : '')
     + r('Tage mit Orgasmus', fmtInt(t.tageMitOrgasmus))
     + r('Einnahmen gesamt', fmtInt(t.einnahmen))
     + r('Kosten gesamt', fmtInt(t.kosten));
