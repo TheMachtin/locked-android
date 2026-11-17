@@ -133,6 +133,32 @@ export function scoreDay(hours, orgasmen, streakTage, ctx, uoMarks) {
   };
 }
 
+// =========================== CHALLENGE-MONATE ===========================
+/**
+ * Die drei Monate, die die Szene jedes Jahr ausruft. „Geschafft" heißt hier:
+ * der ganze Monat ohne Orgasmus — nicht ungeöffnet. Die App kennt dafür schon
+ * genau die richtige Frage, `orgasmusfrei` je Tag; ein Ereignis, das die
+ * Strecke nicht bricht, bricht deshalb auch den Monat nicht.
+ */
+export const CHALLENGE_MONATE = { '10': 'LOCKtober', '11': 'NOvember', '12': 'DENIALcember' };
+
+/** Name des Challenge-Monats zu einem Datum (`2026-10-…` oder `2026-10`), sonst null. */
+export function challengeName(iso) {
+  return CHALLENGE_MONATE[String(iso || '').slice(5, 7)] || null;
+}
+
+/**
+ * Welche geschafften Monate noch einen Glückwunsch bekommen: gebucht nach der
+ * zuletzt gratulierten Marke und nicht länger als einen Monat her. Ohne die
+ * zweite Grenze gratulierte die erste Version mit diesem Feature zu jedem
+ * Locktober der ganzen Historie auf einmal.
+ */
+export function offeneGlueckwuensche(challenges, gratuliertBis, heuteIso) {
+  const grenze = isoDateAdd(heuteIso, -31);
+  const bis = gratuliertBis || '';
+  return (challenges || []).filter(c => c.datum > bis && c.datum >= grenze);
+}
+
 // =========================== DURCHLAUF ===========================
 /**
  * Alle Tageskennzahlen über die gesamte Event-Spanne.
@@ -167,6 +193,10 @@ export function computeAll(data, opts) {
   let streakTage = 0;          // orgasmusfreie Tage vor dem aktuellen
   let konto = 0, form = 0;
   let lastOrgasmMs = null;
+  // Läuft der Monat noch ohne Orgasmus? Zurückgesetzt am Ersten, und nur dann
+  // `true`, wenn der Monat überhaupt antreten darf (siehe unten).
+  let challengeOk = false;
+  const geschafftJeJahr = {};
   const days = [];
   const byDate = {};
 
@@ -212,9 +242,39 @@ export function computeAll(data, opts) {
     // Vor dem Stichtag wird nichts gutgeschrieben: die alte Ära liegt
     // eingefroren im Archiv, das neue Konto startet bei null.
     const zaehlt = cursor >= startedAt;
-    const netto = zaehlt ? score.netto : 0;
+    const orgasmusfrei = !orgasmen.some(o => brichtStrecke(o.model));
+
+    // Challenge-Monat. Antreten darf ein Monat nur, wenn die Historie am Ersten
+    // schon lief und er ganz nach dem Stichtag liegt — wer am 20. Oktober mit
+    // der App anfängt, hat keinen Locktober vorzuweisen, sondern elf Tage.
+    // Gebucht wird am Monatsletzten, und erst wenn der vorbei ist: dann ist der
+    // Bonus endgültig, wie die 24-h-Blöcke. Einen vorläufigen gibt es nicht.
+    const name = challengeName(cursor);
+    if (cursor.slice(8) === '01') challengeOk = !!name && start <= cursor && cursor >= startedAt;
+    if (!orgasmusfrei) challengeOk = false;
+    let challenge = null;
+    const morgen = isoDateAdd(cursor, 1);
+    if (name && challengeOk && zaehlt && morgen.slice(5, 7) !== cursor.slice(5, 7) && cursor < today) {
+      const jahr = cursor.slice(0, 4);
+      const geschafft = (geschafftJeJahr[jahr] ||= []);
+      geschafft.push(name);
+      // Alle drei in einem Jahr: einmal obendrauf, am 31. Dezember.
+      const triple = geschafft.length === 3;
+      const bonusMonat = settings.points.bonusChallenge;
+      const bonusTriple = triple ? settings.points.bonusChallengeTriple : 0;
+      challenge = {
+        name, monat: cursor.slice(0, 7), datum: cursor, triple,
+        bonusMonat, bonusTriple, bonus: bonusMonat + bonusTriple,
+      };
+    }
+    const challengeBonus = challenge ? challenge.bonus : 0;
+    const netto = zaehlt ? score.netto + challengeBonus : 0;
     konto += netto;
-    form = form * settings.points.formDecay + netto;
+    // Die Form bekommt den Challenge-Bonus nicht: sie misst, wie es gerade
+    // läuft, und ein ganzer Monat ohne Orgasmus steckt darin schon Tag für Tag.
+    // Ein Sprung um 800 am 31. Dezember klänge wochenlang nach und machte sie
+    // genau so unvergleichbar, wie sie es nicht sein soll.
+    form = form * settings.points.formDecay + (zaehlt ? score.netto : 0);
 
     const rec = {
       date: cursor,
@@ -224,8 +284,12 @@ export function computeAll(data, opts) {
       // Orgasmusfrei heißt: kein Orgasmus. Ein Ereignis mit Faktor 1 ist keiner
       // — es kostet, aber es beendet die Strecke nicht, und die Kachel daneben
       // heißt nach dem, was sie zählt.
-      orgasmusfrei: !orgasmen.some(o => brichtStrecke(o.model)),
+      orgasmusfrei,
       ...score,
+      // Der Challenge-Bonus ist eine Einnahme, aber keine, auf die der
+      // Multiplikator wirkt — er steht deshalb nach `score`, nicht darin.
+      einnahmen: score.einnahmen + challengeBonus,
+      challenge, challengeBonus,
       netto, zaehlt,
       konto, form,
       tracked: evs.length > 0,
@@ -269,6 +333,9 @@ export function emptyTotals() {
     /** Was die ungeöffneten Strecken eingebracht haben — mit Multiplikator,
      *  also das, was tatsächlich im Konto steht, nicht der rohe Zuschlag. */
     uoEinnahmen: 0,
+    /** Geschaffte Challenge-Monate (LOCKtober & Co.), älteste zuerst. */
+    challenges: [],
+    challengeEinnahmen: 0,
     besterTag: 0, schlechtesterTag: 0,
     monatlich: [],
     bestOfStreak: { days: 0, end: null },
@@ -303,11 +370,15 @@ export function computeTotals(days) {
     t.sonstigeEreignisse  += d.orgasmen.filter(o => !brichtStrecke(o.model)).length;
     t.orgasmenAuto        += d.orgasmen.filter(o => o.event.auto_inactivity).length;
     t.uoEinnahmen         += d.uoBonus * d.mult;
+    if (d.challenge) { t.challenges.push(d.challenge); t.challengeEinnahmen += d.challengeBonus; }
     if (d.uoTage) t.tageUngeoeffnet++;
     if (!d.orgasmusfrei) t.tageMitOrgasmus++;
     if (d.tracked) {
-      if (d.netto > t.besterTag) t.besterTag = d.netto;
-      if (d.netto < t.schlechtesterTag) t.schlechtesterTag = d.netto;
+      // Ohne den Challenge-Bonus: sonst wäre der beste Tag auf Dauer schlicht
+      // irgendein 31. Oktober, und die Zeile sagte nichts mehr über einen Tag.
+      const tag = d.netto - (d.challengeBonus || 0);
+      if (tag > t.besterTag) t.besterTag = tag;
+      if (tag < t.schlechtesterTag) t.schlechtesterTag = tag;
     }
     const wd = new Date(d.date + 'T12:00:00').getDay();
     t.byWeekday[wd].netto += d.netto;

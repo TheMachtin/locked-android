@@ -5,6 +5,9 @@
  * aussieht, in ui/; wo es herkommt, in sync/ und platform.js.
  */
 
+import { offeneGlueckwuensche } from './core/calc.js';
+import { isoOf } from './core/time.js';
+import { calc } from './state.js';
 import {
   STATE, subscribe, loadLocal, loadSyncBase, setData, registerSaver, notify, mutate,
 } from './state.js';
@@ -236,6 +239,34 @@ async function reminderNeu() {
   await scheduleReminder(erst, `Die App hat lange nichts von dir gehört — ab Tag ${s.rules.inactivityAutoDays} schlägt sie fehlende Einträge vor. Ein Blick genügt.`);
 }
 
+// =========================== GLÜCKWUNSCH ===========================
+/**
+ * LOCKtober, NOvember, DENIALcember: am Ersten des Folgemonats ist der Bonus
+ * gebucht, und das ist eine Nachricht wert. Sie bleibt stehen, bis sie
+ * weggetippt wird — erst dann gilt sie als gesehen, auf allen Geräten
+ * (`meta.challengeGratuliertBis`, beim Abgleich gewinnt die spätere Marke).
+ * Danach steht der Monat unter Verlauf → Details → Rekorde.
+ */
+function pruefeGlueckwunsch() {
+  if ($('challengeBanner')) return;
+  const neu = offeneGlueckwuensche(calc().totals.challenges,
+    (STATE.data.meta || {}).challengeGratuliertBis, isoOf(new Date()));
+  if (!neu.length) return;
+  const teile = neu.map(c => {
+    let t = `Du hast den <b>${escapeHtml(c.name)} ${c.monat.slice(0, 4)}</b> geschafft — einen ganzen Monat ohne Orgasmus. +${c.bonusMonat} Punkte.`;
+    if (c.triple) t += ` Damit sind alle drei Monate des Jahres geschafft: <b>+${c.bonusTriple} extra</b>.`;
+    return t;
+  });
+  zeigeBanner('challengeBanner',
+    `<span class="msg">🎉 <b>Herzlichen Glückwunsch!</b><br>${teile.join('<br>')}</span>`
+    + '<button type="button" class="btn primary">Danke</button>',
+    (btn, banner) => {
+      banner.remove();
+      const bis = neu[neu.length - 1].datum;
+      mutate(data => { data.meta ||= {}; data.meta.challengeGratuliertBis = bis; }, { dirty: false });
+    });
+}
+
 // =========================== UPDATE-BANNER ===========================
 function zeigeBanner(id, html, onClick) {
   let b = $(id);
@@ -378,13 +409,14 @@ async function start() {
   initDesktopUpdates();
   pruefeAppUpdate();
   reminderNeu();
+  pruefeGlueckwunsch();
 
   // Laufende Zähler (Regen-Countdown, Stunden, „jetzt"-Marke) jede Minute.
   // Dieselbe Minute frischt die Gesehen-Marke auf: eine App, die tagelang offen
   // auf dem Schreibtisch steht, hätte sonst nur den Zeitpunkt des Öffnens und
   // mahnte irgendwann, während sie angeschaut wird.
   setInterval(() => {
-    if (document.visibilityState === 'visible') markiereGesehen();
+    if (document.visibilityState === 'visible') { markiereGesehen(); pruefeGlueckwunsch(); }
     if (aktiverTab === 'heute') eintrag.render();
   }, 60000);
 
@@ -396,7 +428,7 @@ async function start() {
     // Auch beim Verschwinden: die Uhr wird dabei gestoppt, damit ein kurzes
     // Aufblitzen im Hintergrund nicht doch noch als Blick durchgeht.
     beobachteVerweildauer();
-    if (document.visibilityState === 'visible') refreshBeiRueckkehr();
+    if (document.visibilityState === 'visible') { refreshBeiRueckkehr(); pruefeGlueckwunsch(); }
   });
   window.addEventListener('focus', refreshBeiRueckkehr);
   beobachteVerweildauer();

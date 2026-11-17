@@ -122,7 +122,7 @@ export function mergeData(base, local, remote) {
   // welchem Gerät er passiert ist. Sonst mahnte das Telefon eine Woche lang
   // etwas an, das am PC längst nachgesehen wurde.
   const meta = { ...(r.meta || {}), ...(l.meta || {}) };
-  for (const k of ['escalationDismissedAt', 'lastSeenAt']) {
+  for (const k of ['escalationDismissedAt', 'lastSeenAt', 'challengeGratuliertBis']) {
     const dl = Date.parse((l.meta || {})[k] || '') || 0;
     const dr = Date.parse((r.meta || {})[k] || '') || 0;
     if (dr > dl && (r.meta || {})[k]) meta[k] = r.meta[k];

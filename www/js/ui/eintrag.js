@@ -416,7 +416,12 @@ function breakdownHtml(d, s) {
     // sonst stünde der Ungeöffnet-Zuschlag zweimal in der Liste und die Zeilen
     // summierten sich nicht mehr auf das Tagesergebnis.
     zeilen.push(zeile(`Streak-Multiplikator × ${fmtNum(d.mult, 2)}`,
-      d.einnahmen - (d.verdienstBasis + d.uoBonus), 'plus'));
+      d.einnahmen - (d.challengeBonus || 0) - (d.verdienstBasis + d.uoBonus), 'plus'));
+  }
+  if (d.challenge) {
+    const c = d.challenge;
+    zeilen.push(zeile(`${c.name} ${c.monat.slice(0, 4)} geschafft`, c.bonusMonat, 'plus'));
+    if (c.bonusTriple) zeilen.push(zeile('Alle drei Monate des Jahres', c.bonusTriple, 'plus'));
   }
   for (const o of d.orgasmen) {
     const wartezeit = isFinite(o.abstandTage) ? `nach ${fmtNum(o.abstandTage, 1)} T` : 'erster erfasster';

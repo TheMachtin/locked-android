@@ -54,6 +54,18 @@ Die Form klingt mit 3 % pro Tag ab, läuft gegen einen Grenzwert und bleibt
 dadurch über Jahre vergleichbar: ein Ausrutscher dellt sie, zerstört sie nicht,
 und zwei ruhige Wochen bauen sie spürbar ab.
 
+**LOCKtober, NOvember, DENIALcember bringen einen Bonus.** Wer einen dieser
+Monate ganz ohne Orgasmus schafft, bekommt am Monatsletzten einmalig 300
+Punkte, für alle drei in einem Jahr am 31. Dezember noch einmal 500. Gemeint
+ist *orgasmusfrei*, nicht ungeöffnet: gezählt wird dasselbe `orgasmusfrei` je
+Tag wie bei der Strecke, ein Ereignis, das die Strecke nicht bricht, bricht
+also auch den Monat nicht. Antreten darf ein Monat nur, wenn die Historie am
+Ersten schon lief und der Stichtag nicht mitten im Monat liegt. Gebucht wird
+erst, wenn der Monatsletzte vorbei ist, und dann endgültig. Der Bonus steht im
+Konto, aber nicht in der Form: die soll vergleichbar bleiben, und der Monat
+steckt darin ohnehin schon Tag für Tag. Am Ersten des Folgemonats gratuliert die
+App einmal; danach steht der Monat unter **Verlauf → Details → Rekorde**.
+
 Jede Zahl darin steht unter **Einstellungen → Regeln** und liegt in der Datei, nicht im Programm.
 
 ### Was der Ungeöffnet-Zuschlag ersetzt hat
